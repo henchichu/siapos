@@ -1,0 +1,26 @@
+{
+  "name": "siapos",
+  "version": "1.0.0",
+  "description": "---",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henchichu/siapos.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/henchichu/siapos/issues"
+  },
+  "homepage": "https://github.com/henchichu/siapos#readme",
+  "dependencies": {
+    "mssql": "^12.7.2"
+  }
+}

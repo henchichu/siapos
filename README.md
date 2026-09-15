@@ -2,4 +2,4 @@
 
 ---
 
-a Simple Industry Agnostic Point Of Sale System
+a Simple Industry Agnostic Point Of Sale System tests

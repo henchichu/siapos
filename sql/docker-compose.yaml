@@ -1,0 +1,32 @@
+
+services:
+  mysql-db:
+    image: mysql:latest
+    container_name: posdb
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      # MySQL natively supports reading passwords from files via "_FILE" variables
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: miniworld
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD_FILE: /run/secrets/app_user_password
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+      - ./init_scripts:/docker-entrypoint-initdb.d
+    networks:
+      - database_network
+    secrets:
+      - db_root_password
+      - app_user_password
+
+networks:
+  database_network:
+    driver: bridge
+
+secrets:
+  db_root_password:
+    file: ./secrets/root_password.txt
+  app_user_password:
+    file: ./secrets/app_user_password.txt

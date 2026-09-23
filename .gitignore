@@ -1,5 +1,105 @@
-node_modules/
-.env
+#ALL ENCOMPASSING GIT IGNORE
+# ==========================================
+# 1. Operating System System Files
+# ==========================================
+# macOS
 .DS_Store
-coverage/
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs.txt
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==========================================
+# 2. Common IDEs and Editors
+# ==========================================
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (IntelliJ, WebStorm, PyCharm, etc.)
+.idea/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Archive / Backup files
+*.bak
+*.swp
+*.tmp
+
+# ==========================================
+# 3. Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.secret
+secrets/
+
+# ==========================================
+# 4. Common Package Managers & Dependencies
+# ==========================================
+# JavaScript / Node
+node_modules/
+jspm_packages/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# PHP
+vendor/
+
+# Ruby
+.bundle/
+vendor/bundle/
+
+# ==========================================
+# 5. Build, Output, and Log Files
+# ==========================================
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Diagnostic/Coverage reports
+coverage/
+.nyc_output/
+
+# Build and Dist outputs
+dist/
+build/
+out/
+bin/
+obj/
+target/
+
+#Obsidian
+.obsidian/
+

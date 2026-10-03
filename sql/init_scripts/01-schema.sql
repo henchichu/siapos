@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS Vendor (
     ContactEmail VARCHAR(255),
     ContactPhone VARCHAR(30),
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+    
     PRIMARY KEY (VendorID),
 
     INDEX IX_Vendor_BusinessName (BusinessName)
@@ -18,13 +19,13 @@ CREATE TABLE IF NOT EXISTS Location (
     Name VARCHAR(100) NOT NULL,
     Address VARCHAR(255),
     Phone VARCHAR(30),
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     PRIMARY KEY (LocationID),
 
     CONSTRAINT FK_Location_Vendor
         FOREIGN KEY (VendorID)
         REFERENCES Vendor(VendorID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     INDEX IX_Location_VendorID (VendorID)
@@ -53,13 +54,11 @@ CREATE TABLE IF NOT EXISTS Employee (
     CONSTRAINT FK_Employee_Vendor
         FOREIGN KEY (VendorID)
         REFERENCES Vendor(VendorID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
     
     CONSTRAINT FK_Employee_RoleCode
         FOREIGN KEY (RoleCode)
         REFERENCES EmployeeRole(RoleCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
         
     CONSTRAINT UQ_Employee_Vendor_Email
@@ -78,14 +77,12 @@ CREATE TABLE IF NOT EXISTS EmployeeLocation (
     CONSTRAINT FK_EmployeeLocation_Employee
         FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+        ON DELETE RESTRICT,
 
     CONSTRAINT FK_EmployeeLocation_Location
         FOREIGN KEY (LocationID)
         REFERENCES Location(LocationID)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS RegisterStatus (
@@ -104,16 +101,17 @@ CREATE TABLE IF NOT EXISTS Register (
 
     PRIMARY KEY (RegisterID),
 
+    CONSTRAINT UQ_Register_RegisterID_LocationID
+        UNIQUE (RegisterID, LocationID),
+
     CONSTRAINT FK_Register_Location
         FOREIGN KEY (LocationID)
         REFERENCES Location(LocationID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Register_Status
         FOREIGN KEY (RegStatusCode)
         REFERENCES RegisterStatus(RegStatusCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Register_Location_Name
@@ -136,7 +134,6 @@ CREATE TABLE IF NOT EXISTS Product (
     CONSTRAINT FK_Product_Vendor
         FOREIGN KEY (VendorID)
         REFERENCES Vendor(VendorID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Product_Vendor_SKU
@@ -153,13 +150,13 @@ CREATE TABLE IF NOT EXISTS Category (
     CategoryID CHAR(36) NOT NULL,
     VendorID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
-
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+    
     PRIMARY KEY (CategoryID),
 
     CONSTRAINT FK_Category_Vendor
         FOREIGN KEY (VendorID)
         REFERENCES Vendor(VendorID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Category_Vendor_Name
@@ -177,13 +174,11 @@ CREATE TABLE IF NOT EXISTS ProductCategory (
     CONSTRAINT FK_ProductCategory_Product
         FOREIGN KEY (ProductID)
         REFERENCES Product(ProductID)
-        ON UPDATE CASCADE
         ON DELETE CASCADE,
 
     CONSTRAINT FK_ProductCategory_Category
         FOREIGN KEY (CategoryID)
         REFERENCES Category(CategoryID)
-        ON UPDATE CASCADE
         ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -198,13 +193,11 @@ CREATE TABLE IF NOT EXISTS Inventory (
     CONSTRAINT FK_Inventory_Location
         FOREIGN KEY (LocationID)
         REFERENCES Location(LocationID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Inventory_Product
         FOREIGN KEY (ProductID)
         REFERENCES Product(ProductID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Inventory_Location_Product
@@ -224,13 +217,13 @@ CREATE TABLE IF NOT EXISTS Customer (
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255),
     Phone VARCHAR(30),
-
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+    
     PRIMARY KEY (CustomerID),
 
     CONSTRAINT FK_Customer_Vendor
         FOREIGN KEY (VendorID)
         REFERENCES Vendor(VendorID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     INDEX IX_Customer_VendorID (VendorID),
@@ -273,38 +266,38 @@ CREATE TABLE IF NOT EXISTS Orders (
     CONSTRAINT FK_Orders_Location
         FOREIGN KEY (LocationID)
         REFERENCES Location(LocationID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Register
-        FOREIGN KEY (RegisterID)
-        REFERENCES Register(RegisterID)
-        ON UPDATE CASCADE
+        FOREIGN KEY (RegisterID, LocationID)
+        REFERENCES Register(RegisterID, LocationID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Employee
         FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Customer
         FOREIGN KEY (CustomerID)
         REFERENCES Customer(CustomerID)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
+        ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Channel
         FOREIGN KEY (ChannelCode)
         REFERENCES OrderChannel(ChannelCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Status
         FOREIGN KEY (OrderStatusCode)
         REFERENCES OrderStatus(OrderStatusCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
+
+    CONSTRAINT CK_Orders_POS_Register
+        CHECK (
+            ChannelCode <> 1
+            OR RegisterID IS NOT NULL
+        ),
 
     CONSTRAINT CK_Orders_Amounts
         CHECK (
@@ -337,13 +330,11 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     CONSTRAINT FK_OrderItem_Order
         FOREIGN KEY (OrderID)
         REFERENCES Orders(OrderID)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+        ON DELETE RESTRICT,
 
     CONSTRAINT FK_OrderItem_Product
         FOREIGN KEY (ProductID)
         REFERENCES Product(ProductID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_OrderItem_Quantity
@@ -389,19 +380,16 @@ CREATE TABLE IF NOT EXISTS Payment (
     CONSTRAINT FK_Payment_Order
         FOREIGN KEY (OrderID)
         REFERENCES Orders(OrderID)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+        ON DELETE RESTRICT,
 
     CONSTRAINT FK_Payment_Method
         FOREIGN KEY (PaymentMethodCode)
         REFERENCES PaymentMethod(PaymentMethodCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Payment_Status
         FOREIGN KEY (PaymentStatusCode)
         REFERENCES PaymentStatus(PaymentStatusCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_Payment_Amount
@@ -428,7 +416,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     QuantityChange INT NOT NULL,
     TransactionTypeCode TINYINT UNSIGNED NOT NULL,
 
-    ReferenceID CHAR(36),
+    OrderID CHAR(36),
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (InventoryTransactionID),
@@ -436,25 +424,26 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     CONSTRAINT FK_InventoryTransaction_Product
         FOREIGN KEY (ProductID)
         REFERENCES Product(ProductID)
-        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_InventoryTransaction_Order
+        FOREIGN KEY (OrderID)
+        REFERENCES Orders(OrderID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Location
         FOREIGN KEY (LocationID)
         REFERENCES Location(LocationID)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Employee
         FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
+        ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Type
         FOREIGN KEY (TransactionTypeCode)
         REFERENCES InventoryTransactionType(TransactionTypeCode)
-        ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_InventoryTransaction_Quantity
@@ -466,8 +455,8 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     INDEX IX_InventoryTransaction_DateTime
         (TransactionDateTime),
 
-    INDEX IX_InventoryTransaction_ReferenceID
-        (ReferenceID)
+    INDEX IX_InventoryTransaction_OrderID
+        (OrderID)
 ) ENGINE=InnoDB;
 -- Promotions
 CREATE TABLE IF NOT EXISTS Promotion (
@@ -544,4 +533,135 @@ CREATE TABLE IF NOT EXISTS LoyaltyTransaction (
     FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE RESTRICT,
     CHECK (TransactionType IN ('EARN', 'REDEEM', 'ADJUST')),
     CHECK (PointsChange <> 0)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Returns (
+    ReturnID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
+    ApprovedByEmployeeID CHAR(36) NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CreatedBy CHAR(36) NOT NULL,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    UpdatedBy CHAR(36) NULL,
+
+    PRIMARY KEY (ReturnID),
+
+    CONSTRAINT FK_Returns_OrderID
+        FOREIGN KEY (OrderID)
+        REFERENCES Orders(OrderID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Returns_ApprovedByEmployee
+        FOREIGN KEY (ApprovedByEmployeeID)
+        REFERENCES Employee(EmployeeID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Returns_CreatedBy
+        FOREIGN KEY (CreatedBy)
+        REFERENCES Employee(EmployeeID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Returns_UpdatedBy
+        FOREIGN KEY (UpdatedBy)
+        REFERENCES Employee(EmployeeID)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ReturnItem (
+    ReturnItemID CHAR(36) NOT NULL,
+    ReturnID CHAR(36) NOT NULL,
+    OrderItemID CHAR(36) NOT NULL,
+    QuantityReturned INT NOT NULL,
+    QuantityRestocked INT NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (ReturnItemID),
+
+    UNIQUE (ReturnID, OrderItemID),
+
+    CONSTRAINT FK_ReturnItem_Return
+        FOREIGN KEY (ReturnID)
+        REFERENCES Returns(ReturnID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_ReturnItem_OrderItem
+        FOREIGN KEY (OrderItemID)
+        REFERENCES OrderItem(OrderItemID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_ReturnItem_Quantities
+        CHECK (
+            QuantityReturned > 0
+            AND QuantityRestocked >= 0
+            AND QuantityRestocked <= QuantityReturned
+        )
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Refund (
+    RefundID CHAR(36) NOT NULL,
+    PaymentID CHAR(36) NOT NULL,
+    ReturnID CHAR(36) NULL,
+    Amount DECIMAL(10,2) NOT NULL,
+    RefundDateTime DATETIME NULL,
+    Reason VARCHAR(255) NOT NULL,
+    Status VARCHAR(10) NOT NULL DEFAULT 'PENDING',
+    ApprovedByEmployeeID CHAR(36) NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CreatedBy CHAR(36) NOT NULL,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    UpdatedBy CHAR(36) NULL,
+
+    PRIMARY KEY (RefundID),
+
+    CONSTRAINT FK_Refund_Payment
+        FOREIGN KEY (PaymentID)
+        REFERENCES Payment(PaymentID)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Refund_Return
+        FOREIGN KEY (ReturnID)
+        REFERENCES Returns(ReturnID)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Refund_ApprovedBy
+        FOREIGN KEY (ApprovedByEmployeeID)
+        REFERENCES Employee(EmployeeID)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Refund_CreatedBy
+        FOREIGN KEY (CreatedBy)
+        REFERENCES Employee(EmployeeID)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Refund_UpdatedBy
+        FOREIGN KEY (UpdatedBy)
+        REFERENCES Employee(EmployeeID)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_Refund_Amount
+        CHECK (Amount > 0),
+
+    CONSTRAINT CK_Refund_Status
+        CHECK (Status IN ('PENDING', 'COMPLETED', 'FAILED')),
+
+    CONSTRAINT CK_Refund_Completed
+        CHECK (
+            Status <> 'COMPLETED'
+            OR (
+                RefundDateTime IS NOT NULL
+                AND ApprovedByEmployeeID IS NOT NULL
+            )
+        ),
+
+    INDEX IX_Refund_PaymentID (PaymentID),
+    INDEX IX_Refund_ReturnID (ReturnID),
+    INDEX IX_Refund_DateTime (RefundDateTime)
 ) ENGINE=InnoDB;

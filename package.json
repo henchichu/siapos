@@ -21,6 +21,6 @@
   },
   "homepage": "https://github.com/henchichu/siapos#readme",
   "dependencies": {
-    "mssql": "^12.7.2"
+    "mysql2": "^3.24.5"
   }
 }

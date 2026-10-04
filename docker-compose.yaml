@@ -12,6 +12,7 @@ services:
       MYSQL_DATABASE: miniworld
       MYSQL_USER: app_user
       MYSQL_PASSWORD_FILE: /run/secrets/app_user_password
+    command: --default-time-zone="+00:00"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/init_scripts:/docker-entrypoint-initdb.d:ro

@@ -1,0 +1,51 @@
+name: siapos
+
+services:
+  mysql-db:
+    image: mysql:8.4            # pick a pinned version
+    container_name: posdb
+    restart: unless-stopped
+    ports:
+      - "3306:3306"             # optional; keep it for DB tools on your host
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: miniworld
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD_FILE: /run/secrets/app_user_password
+    command: --default-time-zone="+00:00"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init_scripts:/docker-entrypoint-initdb.d:ro
+    secrets:
+      - db_root_password
+      - app_user_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 20
+
+  pos-app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: mysql-db
+      DB_PORT: 3306
+      DB_NAME: miniworld
+      DB_USER: app_user
+      DB_PASSWORD_FILE: /run/secrets/app_user_password
+    secrets:
+      - app_user_password
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+
+secrets:
+  db_root_password:
+    file: ./sql/secrets/root_password.txt
+  app_user_password:
+    file: ./sql/secrets/app_user_password.txt

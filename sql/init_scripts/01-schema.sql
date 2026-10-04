@@ -1,34 +1,47 @@
 USE miniworld;
 
-CREATE TABLE IF NOT EXISTS Vendor (
-    VendorID CHAR(36) NOT NULL,
-    BusinessName VARCHAR(100) NOT NULL,
+CREATE TABLE IF NOT EXISTS Business (
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(100) NOT NULL,
     ContactEmail VARCHAR(255),
     ContactPhone VARCHAR(30),
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     
-    PRIMARY KEY (VendorID),
+    PRIMARY KEY (BusinessID),
 
-    INDEX IX_Vendor_BusinessName (BusinessName)
+    INDEX IX_Business_Name (Name)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Location (
     LocationID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
     Address VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
-    PRIMARY KEY (LocationID),
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
 
-    CONSTRAINT FK_Location_Vendor
-        FOREIGN KEY (VendorID)
-        REFERENCES Vendor(VendorID)
+    TimeZone VARCHAR(64) NOT NULL DEFAULT 'America/Chicago',
+    TaxRate DECIMAL(7,6) NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (LocationID),
+    
+    CONSTRAINT UQ_Location_ID_Business
+        UNIQUE (LocationID, BusinessID),
+
+    CONSTRAINT CK_Location_TaxRate
+        CHECK (TaxRate >= 0 AND TaxRate <= 1),
+
+    CONSTRAINT FK_Location_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
 
-    INDEX IX_Location_VendorID (VendorID)
+    INDEX IX_Location_BusinessID (BusinessID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS EmployeeRole (
@@ -41,19 +54,26 @@ CREATE TABLE IF NOT EXISTS EmployeeRole (
 
 CREATE TABLE IF NOT EXISTS Employee (
     EmployeeID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     FirstName VARCHAR(50) NOT NULL,
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255) NOT NULL,
     RoleCode TINYINT UNSIGNED NOT NULL,
-    PasswordHash VARCHAR(255) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
-    PRIMARY KEY (EmployeeID),
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
 
-    CONSTRAINT FK_Employee_Vendor
-        FOREIGN KEY (VendorID)
-        REFERENCES Vendor(VendorID)
+    PRIMARY KEY (EmployeeID),
+    
+    CONSTRAINT UQ_Employee_ID_Business
+        UNIQUE (EmployeeID, BusinessID),
+        
+ 
+    CONSTRAINT FK_Employee_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
     
     CONSTRAINT FK_Employee_RoleCode
@@ -61,27 +81,43 @@ CREATE TABLE IF NOT EXISTS Employee (
         REFERENCES EmployeeRole(RoleCode)
         ON DELETE RESTRICT,
         
-    CONSTRAINT UQ_Employee_Vendor_Email
-        UNIQUE (VendorID, Email),
+    CONSTRAINT UQ_Employee_Business_Email
+        UNIQUE (BusinessID, Email),
 
-    INDEX IX_Employee_VendorID (VendorID)
+    INDEX IX_Employee_BusinessID (BusinessID)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS EmployeeCredential (
+    EmployeeID CHAR(36) NOT NULL,
+    PasswordHash VARCHAR(255) NOT NULL,
+    
+    PasswordUpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
+    ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (EmployeeID),
+    
+    CONSTRAINT FK_EmployeeCredential_Employee
+        FOREIGN KEY (EmployeeID)
+        REFERENCES Employee(EmployeeID)
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 
 CREATE TABLE IF NOT EXISTS EmployeeLocation (
     EmployeeID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
 
     PRIMARY KEY (EmployeeID, LocationID),
 
     CONSTRAINT FK_EmployeeLocation_Employee
-        FOREIGN KEY (EmployeeID)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_EmployeeLocation_Location
-        FOREIGN KEY (LocationID)
-        REFERENCES Location(LocationID)
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
@@ -122,63 +158,136 @@ CREATE TABLE IF NOT EXISTS Register (
 
 CREATE TABLE IF NOT EXISTS Product (
     ProductID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     SKU VARCHAR(100) NOT NULL,
     Name VARCHAR(150) NOT NULL,
     Description TEXT,
     CurrentPrice DECIMAL(10,2) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
     PRIMARY KEY (ProductID),
 
-    CONSTRAINT FK_Product_Vendor
-        FOREIGN KEY (VendorID)
-        REFERENCES Vendor(VendorID)
+    CONSTRAINT FK_Product_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT UQ_Product_Vendor_SKU
-        UNIQUE (VendorID, SKU),
+    CONSTRAINT UQ_Product_Business_SKU
+        UNIQUE (BusinessID, SKU),
 
     CONSTRAINT CK_Product_CurrentPrice
         CHECK (CurrentPrice >= 0),
 
-    INDEX IX_Product_VendorID (VendorID),
+    CONSTRAINT UQ_Product_Business
+        UNIQUE (ProductID, BusinessID),
+
+    INDEX IX_Product_BusinessID (BusinessID),
     INDEX IX_Product_Name (Name)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Supplier (
+    SupplierID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(100) NOT NULL,
+    ContactEmail VARCHAR(255),
+    ContactPhone VARCHAR(30),
+    AccountNumber VARCHAR(50),
+    LeadTimeDays INT,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (SupplierID),
+
+    CONSTRAINT UQ_Supplier_ID_Business
+        UNIQUE (SupplierID, BusinessID),
+
+    CONSTRAINT UQ_Supplier_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    CONSTRAINT FK_Supplier_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_Supplier_LeadTimeDays
+        CHECK (LeadTimeDays IS NULL OR LeadTimeDays >= 0)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ProductSupplier (
+    ProductID CHAR(36) NOT NULL,
+    SupplierID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    SupplierSKU VARCHAR(100),
+    UnitCost DECIMAL(10,2),
+    MinOrderQty INT NOT NULL DEFAULT 1,
+    IsPreferred BOOLEAN NOT NULL DEFAULT FALSE,
+
+    PRIMARY KEY (ProductID, SupplierID),
+
+    CONSTRAINT FK_ProductSupplier_Product
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT FK_ProductSupplier_Supplier
+        FOREIGN KEY (SupplierID, BusinessID)
+        REFERENCES Supplier(SupplierID, BusinessID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT CK_ProductSupplier_UnitCost
+        CHECK (UnitCost IS NULL OR UnitCost >= 0),
+
+    CONSTRAINT CK_ProductSupplier_MinOrderQty
+        CHECK (MinOrderQty > 0),
+
+    INDEX IX_ProductSupplier_SupplierID (SupplierID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Category (
     CategoryID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     
     PRIMARY KEY (CategoryID),
 
-    CONSTRAINT FK_Category_Vendor
-        FOREIGN KEY (VendorID)
-        REFERENCES Vendor(VendorID)
+    CONSTRAINT FK_Category_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT UQ_Category_Vendor_Name
-        UNIQUE (VendorID, Name),
+    CONSTRAINT UQ_Category_Business_Name
+        UNIQUE (BusinessID, Name),
+    
+       CONSTRAINT UQ_Category_Business
+        UNIQUE (CategoryID, BusinessID),
+    
 
-    INDEX IX_Category_VendorID (VendorID)
+    INDEX IX_Category_BusinessID (BusinessID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS ProductCategory (
     ProductID CHAR(36) NOT NULL,
     CategoryID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
 
     PRIMARY KEY (ProductID, CategoryID),
 
     CONSTRAINT FK_ProductCategory_Product
-        FOREIGN KEY (ProductID)
-        REFERENCES Product(ProductID)
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
         ON DELETE CASCADE,
 
     CONSTRAINT FK_ProductCategory_Category
-        FOREIGN KEY (CategoryID)
-        REFERENCES Category(CategoryID)
+        FOREIGN KEY (CategoryID, BusinessID)
+        REFERENCES Category(CategoryID, BusinessID)
         ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -186,18 +295,24 @@ CREATE TABLE IF NOT EXISTS Inventory (
     InventoryID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Quantity INT NOT NULL DEFAULT 0,
+    ReorderThreshold INT NOT NULL DEFAULT 0,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (InventoryID),
 
     CONSTRAINT FK_Inventory_Location
-        FOREIGN KEY (LocationID)
-        REFERENCES Location(LocationID)
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Inventory_Product
-        FOREIGN KEY (ProductID)
-        REFERENCES Product(ProductID)
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Inventory_Location_Product
@@ -205,6 +320,9 @@ CREATE TABLE IF NOT EXISTS Inventory (
 
     CONSTRAINT CK_Inventory_Quantity
         CHECK (Quantity >= 0),
+    
+    CONSTRAINT CK_Inventory_ReorderThreshold
+        CHECK (ReorderThreshold >= 0),
 
     INDEX IX_Inventory_ProductID (ProductID),
     INDEX IX_Inventory_LocationID (LocationID)
@@ -212,22 +330,29 @@ CREATE TABLE IF NOT EXISTS Inventory (
 
 CREATE TABLE IF NOT EXISTS Customer (
     CustomerID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     FirstName VARCHAR(50) NOT NULL,
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
     PRIMARY KEY (CustomerID),
 
-    CONSTRAINT FK_Customer_Vendor
-        FOREIGN KEY (VendorID)
-        REFERENCES Vendor(VendorID)
+    CONSTRAINT UQ_Customer_ID_Business
+        UNIQUE(CustomerID, BusinessID),
+
+    CONSTRAINT FK_Customer_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
 
-    INDEX IX_Customer_VendorID (VendorID),
-    INDEX IX_Customer_Email (VendorID, Email)
+    INDEX IX_Customer_BusinessID (BusinessID),
+    INDEX IX_Customer_Email (BusinessID, Email)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatus (
@@ -248,12 +373,16 @@ CREATE TABLE IF NOT EXISTS OrderChannel (
 CREATE TABLE IF NOT EXISTS Orders (
     OrderID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     RegisterID CHAR(36),
     EmployeeID CHAR(36),
     CustomerID CHAR(36),
 
     ChannelCode TINYINT UNSIGNED NOT NULL,
     OrderDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    CompletedAt DATETIME NULL,
     OrderStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1, /* 1 should map to pending_payment*/
 
     Subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -263,9 +392,14 @@ CREATE TABLE IF NOT EXISTS Orders (
 
     PRIMARY KEY (OrderID),
 
+    CONSTRAINT FK_Orders_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
     CONSTRAINT FK_Orders_Location
-        FOREIGN KEY (LocationID)
-        REFERENCES Location(LocationID)
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Register
@@ -274,13 +408,13 @@ CREATE TABLE IF NOT EXISTS Orders (
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Employee
-        FOREIGN KEY (EmployeeID)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Customer
-        FOREIGN KEY (CustomerID)
-        REFERENCES Customer(CustomerID)
+        FOREIGN KEY (CustomerID, BusinessID)
+        REFERENCES Customer(CustomerID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Channel
@@ -314,6 +448,34 @@ CREATE TABLE IF NOT EXISTS Orders (
     INDEX IX_Orders_CustomerID (CustomerID),
     INDEX IX_Orders_DateTime (OrderDateTime),
     INDEX IX_Orders_Channel_Status (ChannelCode, OrderStatusCode)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS OrderStatusHistory (
+    OrderStatusHistoryID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
+    OrderStatusCode TINYINT UNSIGNED NOT NULL,
+    ChangedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ChangedByEmployeeID CHAR(36) NULL,
+
+    PRIMARY KEY (OrderStatusHistoryID),
+
+    CONSTRAINT FK_OrderStatusHistory_Order
+        FOREIGN KEY (OrderID)
+        REFERENCES Orders(OrderID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderStatusHistory_Status
+        FOREIGN KEY (OrderStatusCode)
+        REFERENCES OrderStatus(OrderStatusCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderStatusHistory_Employee
+        FOREIGN KEY (ChangedByEmployeeID)
+        REFERENCES Employee(EmployeeID)
+        ON DELETE RESTRICT,
+
+    INDEX IX_OrderStatusHistory_Order_Time
+        (OrderID, ChangedAt)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderItem (
@@ -447,7 +609,10 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_InventoryTransaction_Quantity
-        CHECK (QuantityChange <> 0),
+        CHECK ((TransactionTypeCode = 1 AND QuantityChange > 0)
+                OR (TransactionTypeCode = 2 AND QuantityChange < 0)     
+                OR (TransactionTypeCode = 3 AND QuantityChange > 0)
+                OR (TransactionTypeCode = 4 AND QuantityChange <> 0)),
 
     INDEX IX_InventoryTransaction_ProductLocation
         (ProductID, LocationID),
@@ -461,7 +626,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
 -- Promotions
 CREATE TABLE IF NOT EXISTS Promotion (
     PromotionID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
     DiscountType VARCHAR(10) NOT NULL,
     DiscountValue DECIMAL(10,2) NOT NULL,
@@ -469,7 +634,9 @@ CREATE TABLE IF NOT EXISTS Promotion (
     EndsAt DATETIME NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PRIMARY KEY (PromotionID),
-    FOREIGN KEY (VendorID) REFERENCES Vendor(VendorID) ON DELETE RESTRICT,
+    FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT UQ_Promotion_Business
+        UNIQUE (PromotionID, BusinessID),
     CHECK (DiscountType IN ('PERCENT', 'FIXED')),
     CHECK (DiscountValue > 0),
     CHECK (DiscountType <> 'PERCENT' OR DiscountValue <= 100),
@@ -479,9 +646,10 @@ CREATE TABLE IF NOT EXISTS Promotion (
 CREATE TABLE IF NOT EXISTS PromotionProduct (
     PromotionID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     PRIMARY KEY (PromotionID, ProductID),
-    FOREIGN KEY (PromotionID) REFERENCES Promotion(PromotionID) ON DELETE RESTRICT,
-    FOREIGN KEY (ProductID) REFERENCES Product(ProductID) ON DELETE RESTRICT
+    FOREIGN KEY (PromotionID, BusinessID) REFERENCES Promotion(PromotionID, BusinessID) ON DELETE RESTRICT,
+    FOREIGN KEY (ProductID, BusinessID) REFERENCES Product(ProductID, BusinessID) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS PromotionRedemption (
@@ -500,12 +668,12 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
 -- Membership and rewards
 CREATE TABLE IF NOT EXISTS MembershipTier (
     TierID CHAR(36) NOT NULL,
-    VendorID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
     MinimumPoints INT NOT NULL DEFAULT 0,
     PRIMARY KEY (TierID),
-    UNIQUE (VendorID, Name),
-    FOREIGN KEY (VendorID) REFERENCES Vendor(VendorID) ON DELETE RESTRICT,
+    UNIQUE (BusinessID, Name),
+    FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
     CHECK (MinimumPoints >= 0)
 ) ENGINE=InnoDB;
 

@@ -482,6 +482,7 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     OrderItemID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
 
     Quantity INT NOT NULL,
     UnitPrice DECIMAL(10,2) NOT NULL,
@@ -490,13 +491,13 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     PRIMARY KEY (OrderItemID),
 
     CONSTRAINT FK_OrderItem_Order
-        FOREIGN KEY (OrderID)
-        REFERENCES Orders(OrderID)
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_OrderItem_Product
-        FOREIGN KEY (ProductID)
-        REFERENCES Product(ProductID)
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_OrderItem_Quantity

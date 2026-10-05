@@ -337,8 +337,8 @@ CREATE TABLE IF NOT EXISTS Inventory (
 CREATE TABLE IF NOT EXISTS Customer (
     CustomerID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    FirstName VARCHAR(50) NOT NULL,
-    LastName VARCHAR(50) NOT NULL,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
     Email VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,

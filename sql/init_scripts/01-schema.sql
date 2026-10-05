@@ -331,8 +331,8 @@ CREATE TABLE IF NOT EXISTS Inventory (
 CREATE TABLE IF NOT EXISTS Customer (
     CustomerID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    FirstName VARCHAR(50) NOT NULL,
-    LastName VARCHAR(50) NOT NULL,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
     Email VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -350,6 +350,12 @@ CREATE TABLE IF NOT EXISTS Customer (
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
+    
+    CONSTRAINT CK_Customer_Contactable
+        CHECK (
+            Email IS NOT NULL
+            OR Phone IS NOT NULL
+        ),
 
     INDEX IX_Customer_BusinessID (BusinessID),
     INDEX IX_Customer_Email (BusinessID, Email)
@@ -392,6 +398,15 @@ CREATE TABLE IF NOT EXISTS Orders (
 
     PRIMARY KEY (OrderID),
 
+    CONSTRAINT UQ_Orders_ID_Business
+        UNIQUE (OrderID, BusinessID),
+    
+    CONSTRAINT UQ_Orders_ID_Customer
+        UNIQUE (OrderID, CustomerID),
+    
+    CONSTRAINT UQ_Orders_ID_Location
+        UNIQUE (OrderID, LocationID),
+    
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)
@@ -453,25 +468,26 @@ CREATE TABLE IF NOT EXISTS Orders (
 CREATE TABLE IF NOT EXISTS OrderStatusHistory (
     OrderStatusHistoryID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     OrderStatusCode TINYINT UNSIGNED NOT NULL,
     ChangedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ChangedByEmployeeID CHAR(36) NULL,
 
     PRIMARY KEY (OrderStatusHistoryID),
-
+ 
     CONSTRAINT FK_OrderStatusHistory_Order
-        FOREIGN KEY (OrderID)
-        REFERENCES Orders(OrderID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_OrderStatusHistory_Status
-        FOREIGN KEY (OrderStatusCode)
-        REFERENCES OrderStatus(OrderStatusCode)
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_OrderStatusHistory_Employee
-        FOREIGN KEY (ChangedByEmployeeID)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (ChangedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+    
+    CONSTRAINT FK_OrderStatusHistory_Status
+        FOREIGN KEY (OrderStatusCode)
+        REFERENCES OrderStatus(OrderStatusCode)
         ON DELETE RESTRICT,
 
     INDEX IX_OrderStatusHistory_Order_Time
@@ -482,21 +498,24 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     OrderItemID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
-
+    BusinessID CHAR(36) NOT NULL,
     Quantity INT NOT NULL,
     UnitPrice DECIMAL(10,2) NOT NULL,
     LineTotal DECIMAL(10,2) NOT NULL,
 
     PRIMARY KEY (OrderItemID),
 
+    CONSTRAINT UQ_OrderItem_ID_Order
+        UNIQUE (OrderItemID, OrderID),
+
     CONSTRAINT FK_OrderItem_Order
-        FOREIGN KEY (OrderID)
-        REFERENCES Orders(OrderID)
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_OrderItem_Product
-        FOREIGN KEY (ProductID)
-        REFERENCES Product(ProductID)
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_OrderItem_Quantity
@@ -539,6 +558,9 @@ CREATE TABLE IF NOT EXISTS Payment (
 
     PRIMARY KEY (PaymentID),
 
+    CONSTRAINT UQ_Payment_ID_Order
+        UNIQUE (PaymentID, OrderID),
+
     CONSTRAINT FK_Payment_Order
         FOREIGN KEY (OrderID)
         REFERENCES Orders(OrderID)
@@ -570,7 +592,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransactionType (
 
 CREATE TABLE IF NOT EXISTS InventoryTransaction (
     InventoryTransactionID CHAR(36) NOT NULL,
-
+    BusinessID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
     EmployeeID CHAR(36),
@@ -584,28 +606,33 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     PRIMARY KEY (InventoryTransactionID),
 
     CONSTRAINT FK_InventoryTransaction_Product
-        FOREIGN KEY (ProductID)
-        REFERENCES Product(ProductID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_InventoryTransaction_Order
-        FOREIGN KEY (OrderID)
-        REFERENCES Orders(OrderID)
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Location
-        FOREIGN KEY (LocationID)
-        REFERENCES Location(LocationID)
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Employee
-        FOREIGN KEY (EmployeeID)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_InventoryTransaction_Order
+        FOREIGN KEY (OrderID, LocationID)
+        REFERENCES Orders(OrderID, LocationID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Type
         FOREIGN KEY (TransactionTypeCode)
         REFERENCES InventoryTransactionType(TransactionTypeCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_InventoryTransaction_Inventory
+        FOREIGN KEY (LocationID, ProductID)
+        REFERENCES Inventory(LocationID, ProductID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_InventoryTransaction_Quantity
@@ -614,8 +641,8 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
                 OR (TransactionTypeCode = 3 AND QuantityChange > 0)
                 OR (TransactionTypeCode = 4 AND QuantityChange <> 0)),
 
-    INDEX IX_InventoryTransaction_ProductLocation
-        (ProductID, LocationID),
+    INDEX IX_InventoryTransaction_LocationProduct
+        (LocationID, ProductID),
 
     INDEX IX_InventoryTransaction_DateTime
         (TransactionDateTime),
@@ -653,15 +680,27 @@ CREATE TABLE IF NOT EXISTS PromotionProduct (
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS PromotionRedemption (
+    BusinessID CHAR(36) NOT NULL,
     RedemptionID CHAR(36) NOT NULL,
     PromotionID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
     DiscountAmount DECIMAL(10,2) NOT NULL,
     RedeemedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (RedemptionID),
-    UNIQUE (PromotionID, OrderID),
-    FOREIGN KEY (PromotionID) REFERENCES Promotion(PromotionID) ON DELETE RESTRICT,
-    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE RESTRICT,
+    
+    CONSTRAINT UQ_PromotionRedemption_Promotion_Order
+        UNIQUE (PromotionID, OrderID),
+
+    CONSTRAINT FK_PromotionRedemption_Promotion
+        FOREIGN KEY (PromotionID, BusinessID)
+        REFERENCES Promotion(PromotionID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_PromotionRedemption_Order
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
+        ON DELETE RESTRICT,
+
     CHECK (DiscountAmount > 0)
 ) ENGINE=InnoDB;
 
@@ -672,8 +711,16 @@ CREATE TABLE IF NOT EXISTS MembershipTier (
     Name VARCHAR(100) NOT NULL,
     MinimumPoints INT NOT NULL DEFAULT 0,
     PRIMARY KEY (TierID),
-    UNIQUE (BusinessID, Name),
-    FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
+    
+    CONSTRAINT UQ_MembershipTier_ID_Business
+        UNIQUE (TierID, BusinessID),
+    
+    CONSTRAINT UQ_MembershipTier_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    CONSTRAINT FK_PromotionRedemption_Business
+        FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
+    
     CHECK (MinimumPoints >= 0)
 ) ENGINE=InnoDB;
 
@@ -681,31 +728,59 @@ CREATE TABLE IF NOT EXISTS LoyaltyAccount (
     LoyaltyAccountID CHAR(36) NOT NULL,
     CustomerID CHAR(36) NOT NULL,
     TierID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     EnrolledAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
+    
     PRIMARY KEY (LoyaltyAccountID),
-    UNIQUE (CustomerID),
-    FOREIGN KEY (CustomerID) REFERENCES Customer(CustomerID) ON DELETE RESTRICT,
-    FOREIGN KEY (TierID) REFERENCES MembershipTier(TierID) ON DELETE RESTRICT
+    
+    CONSTRAINT UQ_LoyaltyAccount_Customer
+        UNIQUE (CustomerID),
+
+    CONSTRAINT UQ_LoyaltyAccount_ID_Customer
+        UNIQUE (LoyaltyAccountID, CustomerID),
+
+    CONSTRAINT FK_LoyaltyAccount_Customer
+        FOREIGN KEY (CustomerID, BusinessID)
+        REFERENCES Customer(CustomerID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_LoyaltyAccount_Tier
+        FOREIGN KEY (TierID, BusinessID)
+        REFERENCES MembershipTier(TierID, BusinessID)
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS LoyaltyTransaction (
     LoyaltyTransactionID CHAR(36) NOT NULL,
     LoyaltyAccountID CHAR(36) NOT NULL,
     OrderID CHAR(36),
+    CustomerID CHAR(36) NOT NULL,
     TransactionType VARCHAR(10) NOT NULL,
     PointsChange INT NOT NULL,
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
     PRIMARY KEY (LoyaltyTransactionID),
-    FOREIGN KEY (LoyaltyAccountID) REFERENCES LoyaltyAccount(LoyaltyAccountID) ON DELETE RESTRICT,
-    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE RESTRICT,
+    
+    CONSTRAINT FK_LoyaltyTransaction_Account
+        FOREIGN KEY (LoyaltyAccountID, CustomerID)
+        REFERENCES LoyaltyAccount(LoyaltyAccountID, CustomerID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_LoyaltyTransaction_Order
+        FOREIGN KEY (OrderID, CustomerID)
+        REFERENCES Orders(OrderID, CustomerID)
+        ON DELETE RESTRICT,
+    
     CHECK (TransactionType IN ('EARN', 'REDEEM', 'ADJUST')),
+    
     CHECK (PointsChange <> 0)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Returns (
     ReturnID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     ApprovedByEmployeeID CHAR(36) NULL,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -715,47 +790,52 @@ CREATE TABLE IF NOT EXISTS Returns (
     UpdatedBy CHAR(36) NULL,
 
     PRIMARY KEY (ReturnID),
-
+    
+    CONSTRAINT UQ_Returns_ID_Order
+        UNIQUE (ReturnID, OrderID),
+    
     CONSTRAINT FK_Returns_OrderID
-        FOREIGN KEY (OrderID)
-        REFERENCES Orders(OrderID)
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Returns_ApprovedByEmployee
-        FOREIGN KEY (ApprovedByEmployeeID)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (ApprovedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Returns_CreatedBy
-        FOREIGN KEY (CreatedBy)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (CreatedBy, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Returns_UpdatedBy
-        FOREIGN KEY (UpdatedBy)
-        REFERENCES Employee(EmployeeID)
+        FOREIGN KEY (UpdatedBy, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS ReturnItem (
     ReturnItemID CHAR(36) NOT NULL,
     ReturnID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
     OrderItemID CHAR(36) NOT NULL,
     QuantityReturned INT NOT NULL,
     QuantityRestocked INT NOT NULL DEFAULT 0,
 
     PRIMARY KEY (ReturnItemID),
 
-    UNIQUE (ReturnID, OrderItemID),
+    CONSTRAINT UQ_ReturnItem_Return_OrderItem
+        UNIQUE (ReturnID, OrderItemID),
 
     CONSTRAINT FK_ReturnItem_Return
-        FOREIGN KEY (ReturnID)
-        REFERENCES Returns(ReturnID)
+        FOREIGN KEY (ReturnID, OrderID)
+        REFERENCES Returns(ReturnID, OrderID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_ReturnItem_OrderItem
-        FOREIGN KEY (OrderItemID)
-        REFERENCES OrderItem(OrderItemID)
+        FOREIGN KEY (OrderItemID, OrderID)
+        REFERENCES OrderItem(OrderItemID, OrderID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_ReturnItem_Quantities
@@ -770,6 +850,8 @@ CREATE TABLE IF NOT EXISTS Refund (
     RefundID CHAR(36) NOT NULL,
     PaymentID CHAR(36) NOT NULL,
     ReturnID CHAR(36) NULL,
+    OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
     Amount DECIMAL(10,2) NOT NULL,
     RefundDateTime DATETIME NULL,
     Reason VARCHAR(255) NOT NULL,
@@ -784,34 +866,34 @@ CREATE TABLE IF NOT EXISTS Refund (
 
     PRIMARY KEY (RefundID),
 
+    CONSTRAINT FK_Refund_Order
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
+        ON DELETE RESTRICT,
+
     CONSTRAINT FK_Refund_Payment
-        FOREIGN KEY (PaymentID)
-        REFERENCES Payment(PaymentID)
-        ON UPDATE RESTRICT
+        FOREIGN KEY (PaymentID, OrderID)
+        REFERENCES Payment(PaymentID, OrderID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Refund_Return
-        FOREIGN KEY (ReturnID)
-        REFERENCES Returns(ReturnID)
-        ON UPDATE RESTRICT
+        FOREIGN KEY (ReturnID, OrderID)
+        REFERENCES Returns(ReturnID, OrderID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Refund_ApprovedBy
-        FOREIGN KEY (ApprovedByEmployeeID)
-        REFERENCES Employee(EmployeeID)
-        ON UPDATE RESTRICT
+        FOREIGN KEY (ApprovedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Refund_CreatedBy
-        FOREIGN KEY (CreatedBy)
-        REFERENCES Employee(EmployeeID)
-        ON UPDATE RESTRICT
+        FOREIGN KEY (CreatedBy, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Refund_UpdatedBy
-        FOREIGN KEY (UpdatedBy)
-        REFERENCES Employee(EmployeeID)
-        ON UPDATE RESTRICT
+        FOREIGN KEY (UpdatedBy, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_Refund_Amount

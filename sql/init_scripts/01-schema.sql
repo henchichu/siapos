@@ -164,8 +164,11 @@ CREATE TABLE IF NOT EXISTS Product (
     SKU VARCHAR(100) NOT NULL,
     Name VARCHAR(150) NOT NULL,
     Description TEXT,
-    CurrentPrice DECIMAL(10,2) NOT NULL,
+    StockUnit VARCHAR(10) NOT NULL DEFAULT 'each',
+    CurrentPrice DECIMAL(10,2), -- allow null for when the product is an ingredient that isnt for sale
     Active BOOLEAN NOT NULL DEFAULT TRUE,
+    IsSellable BOOLEAN NOT NULL DEFAULT TRUE,
+    IsRecipeBased BOOLEAN NOT NULL DEFAULT FALSE, -- Will help decide if the Cost will be based on ingredients or just its own cost.
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -182,13 +185,48 @@ CREATE TABLE IF NOT EXISTS Product (
         UNIQUE (BusinessID, SKU),
 
     CONSTRAINT CK_Product_CurrentPrice
-        CHECK (CurrentPrice >= 0),
+        CHECK (CurrentPrice IS NULL OR CurrentPrice >= 0),
 
     CONSTRAINT UQ_Product_Business
         UNIQUE (ProductID, BusinessID),
 
+    CONSTRAINT CK_Product_StockUnit
+        CHECK (StockUnit IN ('g','ml','each')),
+
+    CONSTRAINT CK_Product_SellablePrice
+        CHECK (IsSellable = FALSE OR CurrentPrice IS NOT NULL),
+
     INDEX IX_Product_BusinessID (BusinessID),
     INDEX IX_Product_Name (Name)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ProductRecipe (
+    ProductID CHAR(36) NOT NULL,
+    IngredientID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    QuantityPerUnit INT NOT NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (ProductID, IngredientID),
+
+    CONSTRAINT FK_ProductRecipe_Product
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_ProductRecipe_Ingredient
+        FOREIGN KEY (IngredientID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_ProductRecipe_Quantity
+        CHECK (QuantityPerUnit > 0),
+
+    CONSTRAINT CK_ProductRecipe_DifferentProducts
+        CHECK (ProductID <> IngredientID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Supplier (
@@ -304,6 +342,7 @@ CREATE TABLE IF NOT EXISTS Inventory (
     BusinessID CHAR(36) NOT NULL,
     Quantity INT NOT NULL DEFAULT 0,
     ReorderThreshold INT NOT NULL DEFAULT 0,
+    AverageUnitCost DECIMAL (18,6) NULL,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -329,6 +368,11 @@ CREATE TABLE IF NOT EXISTS Inventory (
     
     CONSTRAINT CK_Inventory_ReorderThreshold
         CHECK (ReorderThreshold >= 0),
+
+    CONSTRAINT CK_Inventory_AverageUnitCost
+        CHECK (
+            AverageUnitCost IS NULL
+            OR AverageUnitCost >= 0 ),
 
     INDEX IX_Inventory_ProductID (ProductID),
     INDEX IX_Inventory_LocationID (LocationID)
@@ -507,7 +551,9 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     BusinessID CHAR(36) NOT NULL,
     Quantity INT NOT NULL,
     UnitPrice DECIMAL(10,2) NOT NULL,
-    LineTotal DECIMAL(10,2) NOT NULL,
+    UnitCost DECIMAL(18,6),
+    LineCost DECIMAL(18,6),    -- Total cost of the OrderItem row, useful for when Quantity > 1
+    LineTotal DECIMAL(10,2) NOT NULL, -- Total Price of the row, we may choose to include tax.
 
     PRIMARY KEY (OrderItemID),
 
@@ -533,8 +579,52 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     CONSTRAINT CK_OrderItem_LineTotal
         CHECK (LineTotal = Quantity * UnitPrice),
 
+    CONSTRAINT CK_OrderItem_UnitCost
+        CHECK (
+            UnitCost IS NULL
+            OR UnitCost >= 0),
+
+    CONSTRAINT UQ_OrderItem_ID_Business
+        UNIQUE (OrderItemID, BusinessID),
+
+    CONSTRAINT CK_OrderItem_LineCost
+        CHECK (LineCost IS NULL OR  LineCost >= 0)
+
     INDEX IX_OrderItem_OrderID (OrderID),
     INDEX IX_OrderItem_ProductID (ProductID)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS OrderItemIngredient (
+    OrderItemID CHAR(36) NOT NULL,
+    IngredientID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+
+    QuantityUsed INT NOT NULL,
+    StockUnit VARCHAR(10) NOT NULL, -- Primarily for preserving the unit in case it is later changed.
+    UnitCost DECIMAL(18,6) NOT NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (OrderItemID, IngredientID),
+
+    CONSTRAINT FK_OrderItemIngredient_OrderItem
+        FOREIGN KEY (OrderItemID, BusinessID)
+        REFERENCES OrderItem(OrderItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderItemIngredient_Ingredient
+        FOREIGN KEY (IngredientID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_OrderItemIngredient_Quantity
+        CHECK (QuantityUsed > 0),
+
+    CONSTRAINT CK_OrderItemIngredient_UnitCost
+        CHECK (UnitCost >= 0),
+
+    CONSTRAINT CK_OrderItemIngredient_StockUnit
+        CHECK (StockUnit IN ('g', 'ml', 'each'))
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS PaymentMethod (
@@ -606,6 +696,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     EmployeeID CHAR(36),
 
     QuantityChange INT NOT NULL,
+    UnitCost DECIMAL(18,6),
     TransactionTypeCode TINYINT UNSIGNED NOT NULL,
 
     OrderID CHAR(36),
@@ -648,6 +739,11 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
                 OR (TransactionTypeCode = 2 AND QuantityChange < 0)     
                 OR (TransactionTypeCode = 3 AND QuantityChange > 0)
                 OR (TransactionTypeCode = 4 AND QuantityChange <> 0)),
+
+    CONSTRAINT CK_InventoryTransaction_UnitCost
+        CHECK (
+            UnitCost IS NULL
+            OR UnitCost >= 0),
 
     INDEX IX_InventoryTransaction_LocationProduct
         (LocationID, ProductID),

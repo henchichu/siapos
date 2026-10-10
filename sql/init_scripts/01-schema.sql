@@ -110,6 +110,8 @@ CREATE TABLE IF NOT EXISTS EmployeeLocation (
     LocationID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
 
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
     PRIMARY KEY (EmployeeID, LocationID),
 
     CONSTRAINT FK_EmployeeLocation_Employee
@@ -121,6 +123,142 @@ CREATE TABLE IF NOT EXISTS EmployeeLocation (
         FOREIGN KEY (LocationID, BusinessID)
         REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS TimeEntryStatus (
+    TimeEntryStatusCode TINYINT UNSIGNED NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (TimeEntryStatusCode)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS EmployeePayRate (
+    PayRateID CHAR(36) NOT NULL,
+    EmployeeID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    HourlyRate DECIMAL(10,2) NOT NULL,
+    EffectiveFrom DATETIME NOT NULL,
+    EffectiveTo DATETIME NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (PayRateID),
+
+    CONSTRAINT FK_EmployeePayRate_Employee
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_EmployeePayRate_Employee_EffectiveFrom
+        UNIQUE (EmployeeID, EffectiveFrom),
+
+    CONSTRAINT CK_EmployeePayRate_HourlyRate
+        CHECK (HourlyRate >= 0),
+
+    CONSTRAINT CK_EmployeePayRate_EffectiveDates
+        CHECK (
+            EffectiveTo IS NULL
+            OR EffectiveTo > EffectiveFrom
+        )
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS PayPeriod (
+    PayPeriodID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    StartDate DATE NOT NULL,
+    EndDate DATE NOT NULL,
+    Closed BOOLEAN NOT NULL DEFAULT FALSE,
+
+    PRIMARY KEY (PayPeriodID),
+
+    CONSTRAINT FK_PayPeriod_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_PayPeriod_Business_StartDate
+        UNIQUE (BusinessID, StartDate),
+
+    CONSTRAINT UQ_PayPeriod_ID_Business
+        UNIQUE (PayPeriodID, BusinessID),
+
+    CONSTRAINT CK_PayPeriod_Dates
+        CHECK (EndDate > StartDate)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS TimeEntry (
+    TimeEntryID CHAR(36) NOT NULL,
+    EmployeeID CHAR(36) NOT NULL,
+    LocationID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    PayPeriodID CHAR(36) NOT NULL,
+
+    ClockInAt DATETIME NOT NULL,
+    ClockOutAt DATETIME NULL,
+    UnpaidBreakMinutes INT NOT NULL DEFAULT 0,
+    TimeEntryStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    ApprovedByEmployeeID CHAR(36),
+    Notes TEXT,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (TimeEntryID),
+
+    CONSTRAINT FK_TimeEntry_Employee
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TimeEntry_Location
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TimeEntry_PayPeriod
+        FOREIGN KEY (PayPeriodID, BusinessID)
+        REFERENCES PayPeriod(PayPeriodID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TimeEntry_Approver
+        FOREIGN KEY (ApprovedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TimeEntry_EmployeeLocation
+        FOREIGN KEY (EmployeeID, LocationID)
+        REFERENCES EmployeeLocation(EmployeeID, LocationID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TimeEntry_Status
+        FOREIGN KEY (TimeEntryStatusCode)
+        REFERENCES TimeEntryStatus(TimeEntryStatusCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_TimeEntry_Times
+        CHECK (
+            ClockOutAt IS NULL
+            OR ClockOutAt > ClockInAt
+        ),
+
+    CONSTRAINT CK_TimeEntry_UnpaidBreakMinutes
+        CHECK (UnpaidBreakMinutes >= 0),
+
+    CONSTRAINT CK_TimeEntry_Approved
+        CHECK (
+            TimeEntryStatusCode <> 3
+            OR (
+                ApprovedByEmployeeID IS NOT NULL
+                AND ClockOutAt IS NOT NULL
+            )
+        ),
+
+    INDEX IX_TimeEntry_Employee_ClockInAt
+        (EmployeeID, ClockInAt),
+
+    INDEX IX_TimeEntry_PayPeriodID
+        (PayPeriodID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS RegisterStatus (
@@ -588,7 +726,7 @@ CREATE TABLE IF NOT EXISTS OrderItem (
         UNIQUE (OrderItemID, BusinessID),
 
     CONSTRAINT CK_OrderItem_LineCost
-        CHECK (LineCost IS NULL OR  LineCost >= 0)
+        CHECK (LineCost IS NULL OR  LineCost >= 0),
 
     INDEX IX_OrderItem_OrderID (OrderID),
     INDEX IX_OrderItem_ProductID (ProductID)

@@ -588,7 +588,7 @@ CREATE TABLE IF NOT EXISTS OrderItem (
         UNIQUE (OrderItemID, BusinessID),
 
     CONSTRAINT CK_OrderItem_LineCost
-        CHECK (LineCost IS NULL OR  LineCost >= 0)
+        CHECK (LineCost IS NULL OR  LineCost >= 0),
 
     INDEX IX_OrderItem_OrderID (OrderID),
     INDEX IX_OrderItem_ProductID (ProductID)

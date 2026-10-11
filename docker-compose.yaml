@@ -2,11 +2,11 @@ name: siapos
 
 services:
   mysql-db:
-    image: mysql:8.4            # pick a pinned version
+    image: mysql:8.4.11         # the triggers and sql/tests were verified on this version
     container_name: posdb
     restart: unless-stopped
     ports:
-      - "3306:3306"             # optional; keep it for DB tools on your host
+      - "127.0.0.1:3306:3306"   # host-only, for DB tools on this machine;
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
       MYSQL_DATABASE: miniworld
@@ -20,7 +20,8 @@ services:
       - db_root_password
       - app_user_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # The marker comes from 99-ready.sh, so a restart after a failed init (which skips init) never reports healthy
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 && test -f /var/lib/mysql/.siapos-ready"]
       interval: 5s
       retries: 20
 

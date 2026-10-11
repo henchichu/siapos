@@ -9,10 +9,31 @@ CREATE TABLE IF NOT EXISTS Business (
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
               ON UPDATE CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
     
     PRIMARY KEY (BusinessID),
 
     INDEX IX_Business_Name (Name)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS TaxCategory (
+    TaxCategoryID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(50) NOT NULL,                 -- 'Standard', 'Grocery', 'Exempt'
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (TaxCategoryID),
+
+    CONSTRAINT UQ_TaxCategory_ID_Business
+        UNIQUE (TaxCategoryID, BusinessID),
+
+    CONSTRAINT UQ_TaxCategory_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    CONSTRAINT FK_TaxCategory_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Location (
@@ -27,16 +48,12 @@ CREATE TABLE IF NOT EXISTS Location (
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ON UPDATE CURRENT_TIMESTAMP,
 
-    TimeZone VARCHAR(64) NOT NULL DEFAULT 'America/Chicago',
-    TaxRate DECIMAL(7,6) NOT NULL DEFAULT 0,
+    TimeZone VARCHAR(64) NOT NULL,             -- IANA name, e.g. 'America/Chicago', will reference SQL timezone table, no default should be set per location
 
     PRIMARY KEY (LocationID),
     
     CONSTRAINT UQ_Location_ID_Business
         UNIQUE (LocationID, BusinessID),
-
-    CONSTRAINT CK_Location_TaxRate
-        CHECK (TaxRate >= 0 AND TaxRate <= 1),
 
     CONSTRAINT FK_Location_Business
         FOREIGN KEY (BusinessID)
@@ -44,6 +61,34 @@ CREATE TABLE IF NOT EXISTS Location (
         ON DELETE RESTRICT,
 
     INDEX IX_Location_BusinessID (BusinessID)
+) ENGINE=InnoDB;
+
+-- One row per category a location sells; a missing row blocks the sale (use Rate 0 for exempt)
+CREATE TABLE IF NOT EXISTS LocationTaxRate (
+    LocationID CHAR(36) NOT NULL,
+    TaxCategoryID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Rate DECIMAL(7,6) NOT NULL,                -- 0.082500 = 8.25%, combined state + local
+
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (LocationID, TaxCategoryID),
+
+    CONSTRAINT FK_LocationTaxRate_Location
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT FK_LocationTaxRate_TaxCategory
+        FOREIGN KEY (TaxCategoryID, BusinessID)
+        REFERENCES TaxCategory(TaxCategoryID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_LocationTaxRate_Rate
+        CHECK (Rate >= 0 AND Rate <= 1),
+
+    INDEX IX_LocationTaxRate_TaxCategory (TaxCategoryID, BusinessID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS EmployeeRole (
@@ -296,21 +341,42 @@ CREATE TABLE IF NOT EXISTS Register (
     INDEX IX_Register_LocationID (LocationID)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS UnitOfMeasure (
+    UnitCode TINYINT UNSIGNED NOT NULL,
+    Symbol VARCHAR(10) NOT NULL,               -- 'kg', 'ml', 'each'
+    Description VARCHAR(50) NOT NULL,
+    BaseUnitCode TINYINT UNSIGNED NOT NULL,    -- unit it converts to; itself for base units
+    ToBaseFactor DECIMAL(18,6) NOT NULL,       -- 1 kg = 1000 g
+    AllowsFraction BOOLEAN NOT NULL DEFAULT TRUE,  -- FALSE for 'each'; enforced by the backend
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (UnitCode),
+
+    CONSTRAINT UQ_UnitOfMeasure_Symbol
+        UNIQUE (Symbol),
+
+    CONSTRAINT FK_UnitOfMeasure_BaseUnit
+        FOREIGN KEY (BaseUnitCode)
+        REFERENCES UnitOfMeasure(UnitCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_UnitOfMeasure_Factor
+        CHECK (ToBaseFactor > 0),
+
+    CONSTRAINT CK_UnitOfMeasure_BaseFactor
+        CHECK (UnitCode <> BaseUnitCode OR ToBaseFactor = 1)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Product (
     ProductID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    SKU VARCHAR(100) NOT NULL,
     Name VARCHAR(150) NOT NULL,
     Description TEXT,
-    StockUnit VARCHAR(10) NOT NULL DEFAULT 'each',
-    CurrentPrice DECIMAL(10,2), -- allow null for when the product is an ingredient that isnt for sale
     Active BOOLEAN NOT NULL DEFAULT TRUE,
-    IsSellable BOOLEAN NOT NULL DEFAULT TRUE,
-    IsRecipeBased BOOLEAN NOT NULL DEFAULT FALSE, -- Will help decide if the Cost will be based on ingredients or just its own cost.
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ON UPDATE CURRENT_TIMESTAMP,
+        ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (ProductID),
 
@@ -319,53 +385,246 @@ CREATE TABLE IF NOT EXISTS Product (
         REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT UQ_Product_Business_SKU
-        UNIQUE (BusinessID, SKU),
-
-    CONSTRAINT CK_Product_CurrentPrice
-        CHECK (CurrentPrice IS NULL OR CurrentPrice >= 0),
-
     CONSTRAINT UQ_Product_Business
         UNIQUE (ProductID, BusinessID),
-
-    CONSTRAINT CK_Product_StockUnit
-        CHECK (StockUnit IN ('g','ml','each')),
-
-    CONSTRAINT CK_Product_SellablePrice
-        CHECK (IsSellable = FALSE OR CurrentPrice IS NOT NULL),
 
     INDEX IX_Product_BusinessID (BusinessID),
     INDEX IX_Product_Name (Name)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS ProductRecipe (
+CREATE TABLE IF NOT EXISTS ProductVariant (
+    VariantID CHAR(36) NOT NULL,
     ProductID CHAR(36) NOT NULL,
-    IngredientID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    QuantityPerUnit INT NOT NULL,
+    Name VARCHAR(100) NOT NULL DEFAULT 'Regular',   -- e.g. 'Small', 'Large', 'M / Blue'
+    SKU VARCHAR(100) NOT NULL,
+    Price DECIMAL(10,2) NOT NULL,              -- per SellUnit
+    SellUnitCode TINYINT UNSIGNED NOT NULL DEFAULT 1,  -- 1 = each
+    TaxCategoryID CHAR(36) NOT NULL,
+    RestockOnReturn BOOLEAN NOT NULL DEFAULT FALSE,  -- TRUE for resale goods, FALSE for prepared items
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (ProductID, IngredientID),
+    PRIMARY KEY (VariantID),
 
-    CONSTRAINT FK_ProductRecipe_Product
+    CONSTRAINT FK_ProductVariant_Product
         FOREIGN KEY (ProductID, BusinessID)
         REFERENCES Product(ProductID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT FK_ProductRecipe_Ingredient
-        FOREIGN KEY (IngredientID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT UQ_ProductVariant_ID_Business
+        UNIQUE (VariantID, BusinessID),
+
+    CONSTRAINT UQ_ProductVariant_Business_SKU
+        UNIQUE (BusinessID, SKU),
+
+    CONSTRAINT UQ_ProductVariant_Product_Name
+        UNIQUE (ProductID, Name),
+
+    CONSTRAINT FK_ProductVariant_SellUnit
+        FOREIGN KEY (SellUnitCode)
+        REFERENCES UnitOfMeasure(UnitCode)
         ON DELETE RESTRICT,
 
-    CONSTRAINT CK_ProductRecipe_Quantity
+    CONSTRAINT FK_ProductVariant_TaxCategory
+        FOREIGN KEY (TaxCategoryID, BusinessID)
+        REFERENCES TaxCategory(TaxCategoryID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_ProductVariant_Price
+        CHECK (Price >= 0)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS StockItem (
+    StockItemID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(150) NOT NULL,
+    StockUnitCode TINYINT UNSIGNED NOT NULL DEFAULT 1,  -- 1 = each
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (StockItemID),
+
+    CONSTRAINT FK_StockItem_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_StockItem_ID_Business
+        UNIQUE (StockItemID, BusinessID),
+
+    CONSTRAINT UQ_StockItem_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    CONSTRAINT FK_StockItem_StockUnit
+        FOREIGN KEY (StockUnitCode)
+        REFERENCES UnitOfMeasure(UnitCode)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS VariantRecipe (
+    VariantID CHAR(36) NOT NULL,
+    StockItemID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    QuantityPerUnit DECIMAL(12,3) NOT NULL,    -- StockItem units used per one SellUnit of the variant
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (VariantID, StockItemID),
+
+    CONSTRAINT FK_VariantRecipe_Variant
+        FOREIGN KEY (VariantID, BusinessID)
+        REFERENCES ProductVariant(VariantID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_VariantRecipe_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_VariantRecipe_Quantity
         CHECK (QuantityPerUnit > 0),
 
-    CONSTRAINT CK_ProductRecipe_DifferentProducts
-        CHECK (ProductID <> IngredientID)
+    INDEX IX_VariantRecipe_StockItemID (StockItemID)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ModifierGroup (
+    ModifierGroupID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(100) NOT NULL,                -- e.g. 'Milk', 'Extras'
+    MinSelect TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    MaxSelect TINYINT UNSIGNED NULL,           -- NULL = no limit
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (ModifierGroupID),
+
+    CONSTRAINT FK_ModifierGroup_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_ModifierGroup_ID_Business
+        UNIQUE (ModifierGroupID, BusinessID),
+
+    CONSTRAINT UQ_ModifierGroup_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    CONSTRAINT CK_ModifierGroup_Select
+        CHECK (MaxSelect IS NULL OR (MaxSelect >= 1 AND MaxSelect >= MinSelect))
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Modifier (
+    ModifierID CHAR(36) NOT NULL,
+    ModifierGroupID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(100) NOT NULL,                -- e.g. 'almond milk', 'extra shot'
+    PriceDelta DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- may be negative, e.g. 'no cheese'
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (ModifierID),
+
+    CONSTRAINT FK_Modifier_Group
+        FOREIGN KEY (ModifierGroupID, BusinessID)
+        REFERENCES ModifierGroup(ModifierGroupID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_Modifier_ID_Business
+        UNIQUE (ModifierID, BusinessID),
+
+    CONSTRAINT UQ_Modifier_Group_Name
+        UNIQUE (ModifierGroupID, Name)
+) ENGINE=InnoDB;
+
+-- Modifier adds a fixed amount of stock: 'Extra shot' = +18 g espresso beans
+CREATE TABLE IF NOT EXISTS ModifierAddition (
+    ModifierID CHAR(36) NOT NULL,
+    StockItemID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Quantity DECIMAL(12,3) NOT NULL,
+
+    PRIMARY KEY (ModifierID, StockItemID),
+
+    CONSTRAINT FK_ModifierAddition_Modifier
+        FOREIGN KEY (ModifierID, BusinessID)
+        REFERENCES Modifier(ModifierID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_ModifierAddition_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_ModifierAddition_Quantity
+        CHECK (Quantity > 0)
+) ENGINE=InnoDB;
+
+-- Modifier swaps or removes a recipe line, whatever its size-specific quantity:
+-- 'Oat milk' = dairy milk -> oat milk; 'No ice' = ice -> NULL (removed)
+CREATE TABLE IF NOT EXISTS ModifierSubstitution (
+    ModifierID CHAR(36) NOT NULL,
+    FromStockItemID CHAR(36) NOT NULL,
+    ToStockItemID CHAR(36) NULL,               -- NULL = remove the line
+    BusinessID CHAR(36) NOT NULL,
+
+    PRIMARY KEY (ModifierID, FromStockItemID),
+
+    CONSTRAINT FK_ModifierSubstitution_Modifier
+        FOREIGN KEY (ModifierID, BusinessID)
+        REFERENCES Modifier(ModifierID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_ModifierSubstitution_From
+        FOREIGN KEY (FromStockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_ModifierSubstitution_To
+        FOREIGN KEY (ToStockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_ModifierSubstitution_Different
+        CHECK (ToStockItemID IS NULL OR ToStockItemID <> FromStockItemID)
+) ENGINE=InnoDB;
+
+-- Which modifier groups are offered on which products (all variants of the product)
+CREATE TABLE IF NOT EXISTS ProductModifierGroup (
+    ProductID CHAR(36) NOT NULL,
+    ModifierGroupID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    SortOrder TINYINT UNSIGNED NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (ProductID, ModifierGroupID),
+
+    CONSTRAINT FK_ProductModifierGroup_Product
+        FOREIGN KEY (ProductID, BusinessID)
+        REFERENCES Product(ProductID, BusinessID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT FK_ProductModifierGroup_Group
+        FOREIGN KEY (ModifierGroupID, BusinessID)
+        REFERENCES ModifierGroup(ModifierGroupID, BusinessID)
+        ON DELETE CASCADE,
+
+    INDEX IX_ProductModifierGroup_GroupID (ModifierGroupID)
+) ENGINE=InnoDB;
+
 
 CREATE TABLE IF NOT EXISTS Supplier (
     SupplierID CHAR(36) NOT NULL,
@@ -398,34 +657,38 @@ CREATE TABLE IF NOT EXISTS Supplier (
         CHECK (LeadTimeDays IS NULL OR LeadTimeDays >= 0)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS ProductSupplier (
-    ProductID CHAR(36) NOT NULL,
+CREATE TABLE IF NOT EXISTS StockItemSupplier (
+    StockItemID CHAR(36) NOT NULL,
     SupplierID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     SupplierSKU VARCHAR(100),
-    UnitCost DECIMAL(10,2),
+    UnitCost DECIMAL(18,6),                    -- quoted cost per StockUnit
     MinOrderQty INT NOT NULL DEFAULT 1,
     IsPreferred BOOLEAN NOT NULL DEFAULT FALSE,
 
-    PRIMARY KEY (ProductID, SupplierID),
+    PRIMARY KEY (StockItemID, SupplierID),
 
-    CONSTRAINT FK_ProductSupplier_Product
-        FOREIGN KEY (ProductID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT FK_StockItemSupplier_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
         ON DELETE CASCADE,
 
-    CONSTRAINT FK_ProductSupplier_Supplier
+    CONSTRAINT FK_StockItemSupplier_Supplier
         FOREIGN KEY (SupplierID, BusinessID)
         REFERENCES Supplier(SupplierID, BusinessID)
         ON DELETE CASCADE,
 
-    CONSTRAINT CK_ProductSupplier_UnitCost
+    CONSTRAINT CK_StockItemSupplier_UnitCost
         CHECK (UnitCost IS NULL OR UnitCost >= 0),
 
-    CONSTRAINT CK_ProductSupplier_MinOrderQty
+    CONSTRAINT CK_StockItemSupplier_MinOrderQty
         CHECK (MinOrderQty > 0),
 
-    INDEX IX_ProductSupplier_SupplierID (SupplierID)
+    -- Non-preferred rows index as NULL, which UNIQUE ignores
+    CONSTRAINT UQ_StockItemSupplier_Preferred
+        UNIQUE ((IF(IsPreferred, StockItemID, NULL))),
+
+    INDEX IX_StockItemSupplier_SupplierID (SupplierID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Category (
@@ -476,10 +739,10 @@ CREATE TABLE IF NOT EXISTS ProductCategory (
 CREATE TABLE IF NOT EXISTS Inventory (
     InventoryID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
-    ProductID CHAR(36) NOT NULL,
+    StockItemID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    Quantity INT NOT NULL DEFAULT 0,
-    ReorderThreshold INT NOT NULL DEFAULT 0,
+    Quantity DECIMAL(12,3) NOT NULL DEFAULT 0,
+    ReorderThreshold DECIMAL(12,3) NOT NULL DEFAULT 0,
     AverageUnitCost DECIMAL (18,6) NULL,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -493,17 +756,17 @@ CREATE TABLE IF NOT EXISTS Inventory (
         REFERENCES Location(LocationID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT FK_Inventory_Product
-        FOREIGN KEY (ProductID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT FK_Inventory_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT UQ_Inventory_Location_Product
-        UNIQUE (LocationID, ProductID),
+    CONSTRAINT UQ_Inventory_Location_StockItem
+        UNIQUE (LocationID, StockItemID),
 
     CONSTRAINT CK_Inventory_Quantity
         CHECK (Quantity >= 0),
-    
+
     CONSTRAINT CK_Inventory_ReorderThreshold
         CHECK (ReorderThreshold >= 0),
 
@@ -512,7 +775,7 @@ CREATE TABLE IF NOT EXISTS Inventory (
             AverageUnitCost IS NULL
             OR AverageUnitCost >= 0 ),
 
-    INDEX IX_Inventory_ProductID (ProductID),
+    INDEX IX_Inventory_StockItemID (StockItemID),
     INDEX IX_Inventory_LocationID (LocationID)
 ) ENGINE=InnoDB;
 
@@ -545,8 +808,11 @@ CREATE TABLE IF NOT EXISTS Customer (
             OR Phone IS NOT NULL
         ),
 
+    CONSTRAINT UQ_Customer_Business_Email
+        UNIQUE (BusinessID, Email),            -- NULLs allowed; case-insensitive collation
+
     INDEX IX_Customer_BusinessID (BusinessID),
-    INDEX IX_Customer_Email (BusinessID, Email)
+    INDEX IX_Customer_Phone (BusinessID, Phone)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatus (
@@ -579,10 +845,11 @@ CREATE TABLE IF NOT EXISTS Orders (
     CompletedAt DATETIME NULL,
     OrderStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1, /* 1 should map to pending_payment*/
 
-    Subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    Tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    Subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,        -- sum of OrderItem.LineTotal
+    Tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,             -- sum of OrderItem.TaxAmount; net sales = Total - Tax
+    DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- sum of OrderItem.DiscountAmount
     Total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by TR_Orders_BeforeInsert
 
     PRIMARY KEY (OrderID),
 
@@ -594,6 +861,9 @@ CREATE TABLE IF NOT EXISTS Orders (
     
     CONSTRAINT UQ_Orders_ID_Location
         UNIQUE (OrderID, LocationID),
+
+    CONSTRAINT UQ_Orders_ID_PricesIncludeTax
+        UNIQUE (OrderID, PricesIncludeTax),
     
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)
@@ -613,6 +883,11 @@ CREATE TABLE IF NOT EXISTS Orders (
     CONSTRAINT FK_Orders_Employee
         FOREIGN KEY (EmployeeID, BusinessID)
         REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Orders_EmployeeLocation
+        FOREIGN KEY (EmployeeID, LocationID)
+        REFERENCES EmployeeLocation(EmployeeID, LocationID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_Orders_Customer
@@ -641,9 +916,14 @@ CREATE TABLE IF NOT EXISTS Orders (
             Subtotal >= 0
             AND Tax >= 0
             AND DiscountAmount >= 0
+            AND DiscountAmount <= Subtotal
             AND Total >= 0
-            AND Total = Subtotal + Tax - DiscountAmount
+            AND Tax <= Total
+            AND Total = Subtotal - DiscountAmount + IF(PricesIncludeTax, 0, Tax)
         ),
+
+    CONSTRAINT CK_Orders_Completed
+        CHECK (OrderStatusCode <> 5 OR CompletedAt IS NOT NULL),   -- 5 = COMPLETED
 
     INDEX IX_Orders_LocationID (LocationID),
     INDEX IX_Orders_RegisterID (RegisterID),
@@ -685,13 +965,20 @@ CREATE TABLE IF NOT EXISTS OrderStatusHistory (
 CREATE TABLE IF NOT EXISTS OrderItem (
     OrderItemID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
-    ProductID CHAR(36) NOT NULL,
+    VariantID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    Quantity INT NOT NULL,
-    UnitPrice DECIMAL(10,2) NOT NULL,
+    Quantity DECIMAL(12,3) NOT NULL,           -- in the variant's SellUnit
+    UnitPrice DECIMAL(10,2) NOT NULL,          -- variant price + modifier deltas, at sale time
     UnitCost DECIMAL(18,6),
     LineCost DECIMAL(18,6),    -- Total cost of the OrderItem row, useful for when Quantity > 1
-    LineTotal DECIMAL(10,2) NOT NULL, -- Total Price of the row, we may choose to include tax.
+    LineTotal DECIMAL(10,2) NOT NULL,          -- Quantity x UnitPrice, before discount (tax included if the order's prices include it)
+    DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- this line's share of all discounts
+    TaxCategoryID CHAR(36) NOT NULL,           -- snapshot of the variant's category
+    TaxRate DECIMAL(7,6) NOT NULL,             -- snapshot of LocationTaxRate.Rate
+    TaxAmount DECIMAL(10,2) NOT NULL,          -- tax on (LineTotal - DiscountAmount)
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,  -- copied from the order by TR_OrderItem_BeforeInsert
+    NetAmount DECIMAL(10,2) AS
+        (LineTotal - DiscountAmount - IF(PricesIncludeTax, TaxAmount, 0)) STORED,  -- revenue before tax
 
     PRIMARY KEY (OrderItemID),
 
@@ -703,9 +990,9 @@ CREATE TABLE IF NOT EXISTS OrderItem (
         REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT FK_OrderItem_Product
-        FOREIGN KEY (ProductID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT FK_OrderItem_Variant
+        FOREIGN KEY (VariantID, BusinessID)
+        REFERENCES ProductVariant(VariantID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_OrderItem_Quantity
@@ -715,7 +1002,29 @@ CREATE TABLE IF NOT EXISTS OrderItem (
         CHECK (UnitPrice >= 0),
 
     CONSTRAINT CK_OrderItem_LineTotal
-        CHECK (LineTotal = Quantity * UnitPrice),
+        CHECK (LineTotal = ROUND(Quantity * UnitPrice, 2)),
+
+    CONSTRAINT FK_OrderItem_TaxCategory
+        FOREIGN KEY (TaxCategoryID, BusinessID)
+        REFERENCES TaxCategory(TaxCategoryID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_OrderItem_Discount
+        CHECK (DiscountAmount >= 0 AND DiscountAmount <= LineTotal),
+
+    CONSTRAINT CK_OrderItem_TaxRate
+        CHECK (TaxRate >= 0 AND TaxRate <= 1),
+
+    -- Tax on top: amount x rate. Tax included: backed out as amount x rate / (1 + rate)
+    CONSTRAINT CK_OrderItem_TaxAmount
+        CHECK (TaxAmount = ROUND((LineTotal - DiscountAmount) * TaxRate
+                                 / IF(PricesIncludeTax, 1 + TaxRate, 1), 2)),
+
+    -- No cascade, so this also stops the order's flag changing once it has lines
+    CONSTRAINT FK_OrderItem_OrderPricing
+        FOREIGN KEY (OrderID, PricesIncludeTax)
+        REFERENCES Orders(OrderID, PricesIncludeTax)
+        ON DELETE RESTRICT,
 
     CONSTRAINT CK_OrderItem_UnitCost
         CHECK (
@@ -728,41 +1037,77 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     CONSTRAINT CK_OrderItem_LineCost
         CHECK (LineCost IS NULL OR  LineCost >= 0),
 
+    CONSTRAINT CK_OrderItem_CostPair
+        CHECK (
+            (UnitCost IS NULL AND LineCost IS NULL)
+            OR (UnitCost IS NOT NULL AND LineCost IS NOT NULL
+                AND LineCost = ROUND(Quantity * UnitCost, 6))
+        ),
+
     INDEX IX_OrderItem_OrderID (OrderID),
-    INDEX IX_OrderItem_ProductID (ProductID)
+    INDEX IX_OrderItem_VariantID (VariantID)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS OrderItemIngredient (
+CREATE TABLE IF NOT EXISTS OrderItemModifier (
     OrderItemID CHAR(36) NOT NULL,
-    IngredientID CHAR(36) NOT NULL,
+    ModifierID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
+    Quantity INT NOT NULL DEFAULT 1,           -- e.g. 2 x 'Extra shot'
+    PriceDelta DECIMAL(10,2) NOT NULL,         -- snapshot of Modifier.PriceDelta at sale time
 
-    QuantityUsed INT NOT NULL,
-    StockUnit VARCHAR(10) NOT NULL, -- Primarily for preserving the unit in case it is later changed.
-    UnitCost DECIMAL(18,6) NOT NULL,
+    PRIMARY KEY (OrderItemID, ModifierID),
 
-    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (OrderItemID, IngredientID),
-
-    CONSTRAINT FK_OrderItemIngredient_OrderItem
+    CONSTRAINT FK_OrderItemModifier_OrderItem
         FOREIGN KEY (OrderItemID, BusinessID)
         REFERENCES OrderItem(OrderItemID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT FK_OrderItemIngredient_Ingredient
-        FOREIGN KEY (IngredientID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT FK_OrderItemModifier_Modifier
+        FOREIGN KEY (ModifierID, BusinessID)
+        REFERENCES Modifier(ModifierID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT CK_OrderItemIngredient_Quantity
+    CONSTRAINT CK_OrderItemModifier_Quantity
+        CHECK (Quantity > 0),
+
+    INDEX IX_OrderItemModifier_ModifierID (ModifierID)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS OrderItemComponent (
+    OrderItemID CHAR(36) NOT NULL,
+    StockItemID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+
+    QuantityUsed DECIMAL(12,3) NOT NULL,                 -- after recipe x quantity and modifiers
+    StockUnitCode TINYINT UNSIGNED NOT NULL,   -- snapshot, in case the unit changes later
+    UnitCost DECIMAL(18,6) NOT NULL,           -- Inventory.AverageUnitCost at sale time
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (OrderItemID, StockItemID),
+
+    CONSTRAINT FK_OrderItemComponent_OrderItem
+        FOREIGN KEY (OrderItemID, BusinessID)
+        REFERENCES OrderItem(OrderItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderItemComponent_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_OrderItemComponent_Quantity
         CHECK (QuantityUsed > 0),
 
-    CONSTRAINT CK_OrderItemIngredient_UnitCost
+    CONSTRAINT CK_OrderItemComponent_UnitCost
         CHECK (UnitCost >= 0),
 
-    CONSTRAINT CK_OrderItemIngredient_StockUnit
-        CHECK (StockUnit IN ('g', 'ml', 'each'))
+    CONSTRAINT FK_OrderItemComponent_StockUnit
+        FOREIGN KEY (StockUnitCode)
+        REFERENCES UnitOfMeasure(UnitCode)
+        ON DELETE RESTRICT,
+
+    INDEX IX_OrderItemComponent_StockItemID (StockItemID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS PaymentMethod (
@@ -829,11 +1174,11 @@ CREATE TABLE IF NOT EXISTS InventoryTransactionType (
 CREATE TABLE IF NOT EXISTS InventoryTransaction (
     InventoryTransactionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    ProductID CHAR(36) NOT NULL,
+    StockItemID CHAR(36) NOT NULL,
     LocationID CHAR(36) NOT NULL,
     EmployeeID CHAR(36),
 
-    QuantityChange INT NOT NULL,
+    QuantityChange DECIMAL(12,3) NOT NULL,
     UnitCost DECIMAL(18,6),
     TransactionTypeCode TINYINT UNSIGNED NOT NULL,
 
@@ -842,9 +1187,9 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
 
     PRIMARY KEY (InventoryTransactionID),
 
-    CONSTRAINT FK_InventoryTransaction_Product
-        FOREIGN KEY (ProductID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
+    CONSTRAINT FK_InventoryTransaction_StockItem
+        FOREIGN KEY (StockItemID, BusinessID)
+        REFERENCES StockItem(StockItemID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Location
@@ -868,8 +1213,8 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         ON DELETE RESTRICT,
 
     CONSTRAINT FK_InventoryTransaction_Inventory
-        FOREIGN KEY (LocationID, ProductID)
-        REFERENCES Inventory(LocationID, ProductID)
+        FOREIGN KEY (LocationID, StockItemID)
+        REFERENCES Inventory(LocationID, StockItemID)
         ON DELETE RESTRICT,
 
     CONSTRAINT CK_InventoryTransaction_Quantity
@@ -883,8 +1228,14 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
             UnitCost IS NULL
             OR UnitCost >= 0),
 
-    INDEX IX_InventoryTransaction_LocationProduct
-        (LocationID, ProductID),
+    CONSTRAINT CK_InventoryTransaction_RestockCost
+        CHECK (TransactionTypeCode <> 1 OR UnitCost IS NOT NULL),       -- 1 = RESTOCK
+
+    CONSTRAINT CK_InventoryTransaction_OrderRequired
+        CHECK (TransactionTypeCode NOT IN (2, 3) OR OrderID IS NOT NULL),  -- 2 = SALE, 3 = RETURN
+
+    INDEX IX_InventoryTransaction_LocationStockItem
+        (LocationID, StockItemID),
 
     INDEX IX_InventoryTransaction_DateTime
         (TransactionDateTime),
@@ -893,11 +1244,19 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         (OrderID)
 ) ENGINE=InnoDB;
 -- Promotions
+CREATE TABLE IF NOT EXISTS DiscountType (
+    DiscountTypeCode TINYINT UNSIGNED NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (DiscountTypeCode)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Promotion (
     PromotionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
-    DiscountType VARCHAR(10) NOT NULL,
+    DiscountTypeCode TINYINT UNSIGNED NOT NULL,
     DiscountValue DECIMAL(10,2) NOT NULL,
     StartsAt DATETIME NOT NULL,
     EndsAt DATETIME NOT NULL,
@@ -906,9 +1265,13 @@ CREATE TABLE IF NOT EXISTS Promotion (
     FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
     CONSTRAINT UQ_Promotion_Business
         UNIQUE (PromotionID, BusinessID),
-    CHECK (DiscountType IN ('PERCENT', 'FIXED')),
+    CONSTRAINT FK_Promotion_DiscountType
+        FOREIGN KEY (DiscountTypeCode)
+        REFERENCES DiscountType(DiscountTypeCode)
+        ON DELETE RESTRICT,
     CHECK (DiscountValue > 0),
-    CHECK (DiscountType <> 'PERCENT' OR DiscountValue <= 100),
+    CONSTRAINT CK_Promotion_PercentMax
+        CHECK (DiscountTypeCode <> 1 OR DiscountValue <= 100),   -- 1 = PERCENT
     CHECK (EndsAt > StartsAt)
 ) ENGINE=InnoDB;
 
@@ -993,12 +1356,20 @@ CREATE TABLE IF NOT EXISTS LoyaltyAccount (
         ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS LoyaltyTransactionType (
+    LoyaltyTransactionTypeCode TINYINT UNSIGNED NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (LoyaltyTransactionTypeCode)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS LoyaltyTransaction (
     LoyaltyTransactionID CHAR(36) NOT NULL,
     LoyaltyAccountID CHAR(36) NOT NULL,
     OrderID CHAR(36),
     CustomerID CHAR(36) NOT NULL,
-    TransactionType VARCHAR(10) NOT NULL,
+    LoyaltyTransactionTypeCode TINYINT UNSIGNED NOT NULL,
     PointsChange INT NOT NULL,
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
@@ -1014,9 +1385,15 @@ CREATE TABLE IF NOT EXISTS LoyaltyTransaction (
         REFERENCES Orders(OrderID, CustomerID)
         ON DELETE RESTRICT,
     
-    CHECK (TransactionType IN ('EARN', 'REDEEM', 'ADJUST')),
-    
-    CHECK (PointsChange <> 0)
+    CONSTRAINT FK_LoyaltyTransaction_Type
+        FOREIGN KEY (LoyaltyTransactionTypeCode)
+        REFERENCES LoyaltyTransactionType(LoyaltyTransactionTypeCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_LoyaltyTransaction_Points
+        CHECK ((LoyaltyTransactionTypeCode = 1 AND PointsChange > 0)       -- EARN
+            OR (LoyaltyTransactionTypeCode = 2 AND PointsChange < 0)       -- REDEEM
+            OR (LoyaltyTransactionTypeCode = 3 AND PointsChange <> 0))     -- ADJUST
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Returns (
@@ -1062,8 +1439,8 @@ CREATE TABLE IF NOT EXISTS ReturnItem (
     ReturnID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
     OrderItemID CHAR(36) NOT NULL,
-    QuantityReturned INT NOT NULL,
-    QuantityRestocked INT NOT NULL DEFAULT 0,
+    QuantityReturned DECIMAL(12,3) NOT NULL,
+    QuantityRestocked DECIMAL(12,3) NOT NULL DEFAULT 0,
 
     PRIMARY KEY (ReturnItemID),
 
@@ -1088,16 +1465,25 @@ CREATE TABLE IF NOT EXISTS ReturnItem (
         )
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS RefundStatus (
+    RefundStatusCode TINYINT UNSIGNED NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    PRIMARY KEY (RefundStatusCode)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Refund (
     RefundID CHAR(36) NOT NULL,
     PaymentID CHAR(36) NOT NULL,
     ReturnID CHAR(36) NULL,
     OrderID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,             -- total paid back, tax included
+    TaxAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- the part of Amount that is tax
     RefundDateTime DATETIME NULL,
     Reason VARCHAR(255) NOT NULL,
-    Status VARCHAR(10) NOT NULL DEFAULT 'PENDING',
+    RefundStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,  -- 1 = PENDING
     ApprovedByEmployeeID CHAR(36) NULL,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1141,12 +1527,17 @@ CREATE TABLE IF NOT EXISTS Refund (
     CONSTRAINT CK_Refund_Amount
         CHECK (Amount > 0),
 
-    CONSTRAINT CK_Refund_Status
-        CHECK (Status IN ('PENDING', 'COMPLETED', 'FAILED')),
+    CONSTRAINT CK_Refund_TaxAmount
+        CHECK (TaxAmount >= 0 AND TaxAmount <= Amount),
+
+    CONSTRAINT FK_Refund_Status
+        FOREIGN KEY (RefundStatusCode)
+        REFERENCES RefundStatus(RefundStatusCode)
+        ON DELETE RESTRICT,
 
     CONSTRAINT CK_Refund_Completed
         CHECK (
-            Status <> 'COMPLETED'
+            RefundStatusCode <> 2   -- 2 = COMPLETED
             OR (
                 RefundDateTime IS NOT NULL
                 AND ApprovedByEmployeeID IS NOT NULL

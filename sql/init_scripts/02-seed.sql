@@ -11,7 +11,17 @@ VALUES
 ON DUPLICATE KEY UPDATE
     Description = VALUES(Description),
     Active = VALUES(Active);
-
+    
+INSERT INTO TimeEntryStatus
+    (TimeEntryStatusCode, Description, Active)
+VALUES
+    (1, 'OPEN', TRUE),
+    (2, 'SUBMITTED', TRUE),
+    (3, 'APPROVED', TRUE),
+    (4, 'REJECTED', TRUE)
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description),
+    Active = VALUES(Active);
 
 INSERT INTO RegisterStatus (RegStatusCode, Description, Active) 
 VALUES 

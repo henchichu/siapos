@@ -926,7 +926,8 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
     RedemptionID CHAR(36) NOT NULL,
     PromotionID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
-    DiscountAmount DECIMAL(10,2) NOT NULL,
+    DiscountAmount DECIMAL(10,2) NULL,
+    DiscountRate DECIMAL(7,6) NULL, -- Fraction: 0.25 represents 25% off.
     RedeemedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (RedemptionID),
     
@@ -943,7 +944,20 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
         REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
-    CHECK (DiscountAmount > 0)
+    CONSTRAINT CK_PromotionRedemption_Discount
+        CHECK (
+            (
+                DiscountAmount IS NOT NULL --Orders prevents its own DiscountAmount from exceeding subtotal
+                AND DiscountAmount > 0  -- plus tax. Business logic should ensure that anyways (e.g $5 off 
+                AND DiscountRate IS NULL -- on orders $10 or more)
+            )
+            OR (
+                DiscountRate IS NOT NULL
+                AND DiscountRate > 0
+                AND DiscountRate <= 1
+                AND DiscountAmount IS NULL
+            )
+        )
 ) ENGINE=InnoDB;
 
 -- Membership and rewards

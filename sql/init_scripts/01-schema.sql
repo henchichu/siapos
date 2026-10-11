@@ -786,7 +786,8 @@ CREATE TABLE IF NOT EXISTS Payment (
     OrderID CHAR(36) NOT NULL,
 
     PaymentMethodCode TINYINT UNSIGNED NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL, -- Full amount collected, including the tip.
+    TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     PaymentStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
     PaymentDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -815,8 +816,47 @@ CREATE TABLE IF NOT EXISTS Payment (
     CONSTRAINT CK_Payment_Amount
         CHECK (Amount > 0),
 
+    CONSTRAINT CK_Payment_TipAmount
+        CHECK (TipAmount >= 0 AND TipAmount <= Amount),
+
     INDEX IX_Payment_OrderID (OrderID),
     INDEX IX_Payment_Status (PaymentStatusCode)
+) ENGINE=InnoDB;
+
+-- Application logic must keep total allocations within the available payment tip,
+-- accounting for tip refunds, and allocate only successfully collected tips.
+CREATE TABLE IF NOT EXISTS TipAllocation (
+    PaymentID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    EmployeeID CHAR(36) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (PaymentID, EmployeeID),
+
+    CONSTRAINT FK_TipAllocation_Payment
+        FOREIGN KEY (PaymentID, OrderID)
+        REFERENCES Payment(PaymentID, OrderID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TipAllocation_Order
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TipAllocation_Employee
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_TipAllocation_Amount
+        CHECK (Amount > 0),
+
+    INDEX IX_TipAllocation_EmployeeID (EmployeeID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS InventoryTransactionType (
@@ -926,8 +966,7 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
     RedemptionID CHAR(36) NOT NULL,
     PromotionID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
-    DiscountAmount DECIMAL(10,2) NULL,
-    DiscountRate DECIMAL(7,6) NULL, -- Fraction: 0.25 represents 25% off.
+    DiscountAmount DECIMAL(10,2) NOT NULL,
     RedeemedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (RedemptionID),
     
@@ -944,20 +983,7 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
         REFERENCES Orders(OrderID, BusinessID)
         ON DELETE RESTRICT,
 
-    CONSTRAINT CK_PromotionRedemption_Discount
-        CHECK (
-            (
-                DiscountAmount IS NOT NULL --Orders prevents its own DiscountAmount from exceeding subtotal
-                AND DiscountAmount > 0  -- plus tax. Business logic should ensure that anyways (e.g $5 off 
-                AND DiscountRate IS NULL -- on orders $10 or more)
-            )
-            OR (
-                DiscountRate IS NOT NULL
-                AND DiscountRate > 0
-                AND DiscountRate <= 1
-                AND DiscountAmount IS NULL
-            )
-        )
+    CHECK (DiscountAmount > 0)
 ) ENGINE=InnoDB;
 
 -- Membership and rewards
@@ -1108,7 +1134,8 @@ CREATE TABLE IF NOT EXISTS Refund (
     ReturnID CHAR(36) NULL,
     OrderID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL, -- Full amount refunded, including any refunded tip.
+    TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     RefundDateTime DATETIME NULL,
     Reason VARCHAR(255) NOT NULL,
     Status VARCHAR(10) NOT NULL DEFAULT 'PENDING',
@@ -1154,6 +1181,9 @@ CREATE TABLE IF NOT EXISTS Refund (
 
     CONSTRAINT CK_Refund_Amount
         CHECK (Amount > 0),
+
+    CONSTRAINT CK_Refund_TipAmount
+        CHECK (TipAmount >= 0 AND TipAmount <= Amount),
 
     CONSTRAINT CK_Refund_Status
         CHECK (Status IN ('PENDING', 'COMPLETED', 'FAILED')),

@@ -522,6 +522,12 @@ BEGIN
     IF NEW.OrderStatusCode = 5 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insert the order first, then complete it with an UPDATE';
     END IF;
+
+    -- Checked only when the order is placed: switching a location off leaves its open orders alone
+    IF NEW.ChannelCode = 2 AND NOT EXISTS (SELECT 1 FROM Location WHERE LocationID = NEW.LocationID
+                                              AND Active AND AcceptsOnlineOrders) THEN   -- 2 = ONLINE
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This location is not taking online orders';
+    END IF;
 END$$
 
 -- Completion: every line records what it used, its cost is those components' cost, the SALE

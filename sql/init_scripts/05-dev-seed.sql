@@ -18,10 +18,11 @@ SET @D = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', @tz));    -- today, café lo
 INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
 VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7);
 
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
+-- Both take online orders for the history; Campus switches off at the end
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone, AcceptsOnlineOrders)
 VALUES
-    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz),
-    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz);
+    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz, TRUE),
+    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz, TRUE);
 
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
@@ -520,19 +521,19 @@ UPDATE Orders SET Subtotal = 5.25, Tax = 0.54, Total = 5.79 WHERE OrderID = 'ord
 -- ---------------------------------------------------------------------------
 CREATE TABLE _seed_loss (ID CHAR(36), LocationID CHAR(36), StockItemID CHAR(36), EmployeeID CHAR(36),
                          Qty DECIMAL(12,3), TypeCode TINYINT, DaysAgo INT, AtTime TIME,
-                         UnitCost DECIMAL(18,6));
-INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime)
+                         UnitCost DECIMAL(18,6), Note VARCHAR(255));
+INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime, Note)
 VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
-    ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15'),  -- dropped jug
-    ('itx-loss-02', 'loc-campus',   'stk-beans',     'emp-priya',   -340, 5,  9, '10:40'),  -- split bag
-    ('itx-loss-03', 'loc-downtown', 'stk-croissant', 'emp-sam',       -4, 6, 10, '17:30'),
-    ('itx-loss-04', 'loc-campus',   'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30'),
-    ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30'),
-    ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30'),
-    ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00'),  -- soured
-    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-leo',       -1, 7,  5, '14:00'),
-    ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00'),
-    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00');
+    ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15', 'Dropped jug'),
+    ('itx-loss-02', 'loc-campus',   'stk-beans',     'emp-priya',   -340, 5,  9, '10:40', 'Bag split on the shelf'),
+    ('itx-loss-03', 'loc-downtown', 'stk-croissant', 'emp-sam',       -4, 6, 10, '17:30', NULL),
+    ('itx-loss-04', 'loc-campus',   'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30', NULL),
+    ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30', NULL),
+    ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
+    ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00', 'Soured before its date'),
+    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-leo',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
+    ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00', NULL),
+    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00', NULL);
 
 -- Staged: the ledger trigger updates Inventory, so the INSERT can't read Inventory itself.
 -- Losses don't move the average, so one lookup holds for every row.
@@ -540,9 +541,9 @@ UPDATE _seed_loss s JOIN Inventory i ON i.LocationID = s.LocationID AND i.StockI
    SET s.UnitCost = IF(s.TypeCode IN (5, 6, 7), i.AverageUnitCost, NULL);
 
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
-                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime)
+                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, Note)
 SELECT ID, @biz, StockItemID, LocationID, EmployeeID, Qty, UnitCost, TypeCode,
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL DaysAgo DAY, AtTime), @tz, '+00:00')
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL DaysAgo DAY, AtTime), @tz, '+00:00'), Note
   FROM _seed_loss;
 
 -- ---------------------------------------------------------------------------
@@ -574,5 +575,8 @@ SELECT 'ref-0001', CONCAT('pay-', SUBSTRING(@ret_order, 5)), 'ret-0001', @ret_or
   FROM OrderItem WHERE OrderItemID = @ret_line;
 
 DROP TABLE _seed_loss, _seed_comp, _seed_linemod, _seed_line, _seed_menu, _seed_order, _seed_stock, _seed_shift, _seed_seq;
+
+-- Campus has stopped taking online orders (Settings shows one On, one Off)
+UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus';
 
 COMMIT;

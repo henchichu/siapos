@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS Location (
     Address VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
+    AcceptsOnlineOrders BOOLEAN NOT NULL DEFAULT FALSE,   -- owner switches it on in Settings
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1309,6 +1310,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
 
     OrderID CHAR(36),
     DeliveryID CHAR(36),
+    Note VARCHAR(255) NULL,
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (InventoryTransactionID),
@@ -1317,6 +1319,9 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         FOREIGN KEY (DeliveryID, LocationID)
         REFERENCES Delivery(DeliveryID, LocationID)
         ON DELETE RESTRICT,
+
+    CONSTRAINT CK_InventoryTransaction_Note
+        CHECK (Note IS NULL OR TRIM(Note) <> ''),
 
     CONSTRAINT CK_InventoryTransaction_Delivery
         CHECK (DeliveryID IS NULL OR TransactionTypeCode = 1),         -- 1 = RESTOCK

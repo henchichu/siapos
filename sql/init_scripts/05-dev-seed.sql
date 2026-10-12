@@ -14,8 +14,9 @@ SET @D = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', @tz));    -- today, café lo
 -- ---------------------------------------------------------------------------
 -- Business, locations, tax
 -- ---------------------------------------------------------------------------
-INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone)
-VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100');
+-- Refund rules: a manager signs any refund over $25 or on an order older than 7 days
+INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
+VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7);
 
 INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
 VALUES
@@ -255,13 +256,24 @@ SELECT CONCAT('inv-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTR
   FROM Location l CROSS JOIN _seed_stock s
  WHERE l.BusinessID = @biz;
 
+-- One delivery per supplier, café and round; its RESTOCK rows below are the delivery's lines
+INSERT INTO Delivery (DeliveryID, BusinessID, LocationID, SupplierID, InvoiceNumber, DeliveredOn, ReceivedByEmployeeID)
+SELECT CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(u.SupplierID, 5)),
+       @biz, l.LocationID, u.SupplierID,
+       CONCAT('INV-', UPPER(SUBSTRING(u.SupplierID, 5, 3)), '-', r.n, IF(l.LocationID = 'loc-downtown', '1', '2')),
+       @D - INTERVAL IF(r.n = 1, 20, 6) DAY, 'emp-leo'
+  FROM Location l CROSS JOIN (SELECT DISTINCT SupplierID FROM _seed_stock) u
+  JOIN _seed_seq r ON r.n IN (1, 2)
+ WHERE l.BusinessID = @biz;
+
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
-                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime)
+                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, DeliveryID)
 SELECT CONCAT('itx-rs', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(s.StockItemID, 5)),
        @biz, s.StockItemID, l.LocationID, 'emp-leo',
        IF(r.n = 1, s.Qty1, s.Qty2), IF(r.n = 1, s.Cost1, s.Cost2),
        1,                                                       -- 1 = RESTOCK
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL IF(r.n = 1, 20, 6) DAY, '06:00'), @tz, '+00:00')
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL IF(r.n = 1, 20, 6) DAY, '06:00'), @tz, '+00:00'),
+       CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(s.SupplierID, 5))
   FROM Location l CROSS JOIN _seed_stock s
   JOIN _seed_seq r ON r.n IN (1, 2)
  WHERE l.BusinessID = @biz
@@ -404,12 +416,16 @@ UPDATE _seed_line l
  WHERE l.VariantID IN ('var-croissant', 'var-muffin') AND HOUR(o.LocalAt) < 10;
 
 -- Same steps the backend takes: open the order, add lines, total it, pay, complete
-INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime)
-SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt
+-- Some online orders pick a time (20 min out) or leave a note; the rest are "as soon as possible"
+INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime,
+                    PickupAt, CustomerNote)
+SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt,
+       IF(ChannelCode = 2 AND MOD(h, 3) = 0, UtcAt + INTERVAL 20 MINUTE, NULL),
+       IF(ChannelCode = 2 AND MOD(h, 4) < 2, ELT(MOD(h, 4) + 1, 'Extra hot, please', 'Name on the cup: Sam'), NULL)
   FROM _seed_order
  UNION ALL       -- cancelled below; inserted here so order numbers follow time
 SELECT 'ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00')
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00'), NULL, NULL
  ORDER BY 8, 1;
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, UnitCost, LineCost,

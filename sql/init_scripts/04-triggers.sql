@@ -412,16 +412,39 @@ BEGIN
     END IF;
 END$$
 
+-- Refund rules (Business settings): completing a refund over the amount, or on an order completed
+-- more than the days ago, needs an approver with permission 3 (Sign refund overrides)
+CREATE PROCEDURE CheckRefundOverride(IN pBusinessID CHAR(36), IN pOrderID CHAR(36),
+                                     IN pAmount DECIMAL(10,2), IN pApprovedBy CHAR(36))
+BEGIN
+    IF EXISTS (SELECT 1 FROM Business b JOIN Orders o ON o.OrderID = pOrderID
+                WHERE b.BusinessID = pBusinessID
+                  AND (pAmount > b.RefundOverrideAmount
+                       OR COALESCE(o.CompletedAt, o.OrderDateTime)
+                          < UTC_TIMESTAMP() - INTERVAL b.RefundOverrideDays DAY))
+       AND NOT HasPermission(pApprovedBy, 3) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This refund breaks a refund rule; a manager must sign the override';
+    END IF;
+END$$
+
 CREATE TRIGGER TR_Refund_BeforeInsert BEFORE INSERT ON Refund FOR EACH ROW
 BEGIN
     CALL CheckRefund(NEW.RefundID, NEW.PaymentID, NEW.OrderID, NEW.ReturnID,
                      NEW.Amount, NEW.TaxAmount, NEW.RefundStatusCode);
+    IF NEW.RefundStatusCode = 2 THEN
+        CALL CheckRefundOverride(NEW.BusinessID, NEW.OrderID, NEW.Amount, NEW.ApprovedByEmployeeID);
+    END IF;
 END$$
 
 CREATE TRIGGER TR_Refund_BeforeUpdate BEFORE UPDATE ON Refund FOR EACH ROW
 BEGIN
     CALL CheckRefund(NEW.RefundID, NEW.PaymentID, NEW.OrderID, NEW.ReturnID,
                      NEW.Amount, NEW.TaxAmount, NEW.RefundStatusCode);
+    IF NEW.RefundStatusCode = 2
+       AND (OLD.RefundStatusCode <> 2 OR NEW.Amount <> OLD.Amount
+            OR NOT (NEW.ApprovedByEmployeeID <=> OLD.ApprovedByEmployeeID)) THEN
+        CALL CheckRefundOverride(NEW.BusinessID, NEW.OrderID, NEW.Amount, NEW.ApprovedByEmployeeID);
+    END IF;
 END$$
 
 -- ReturnItem: only from closed orders (their lines are frozen, so the cap below stays true);

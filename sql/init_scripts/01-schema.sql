@@ -11,8 +11,15 @@ CREATE TABLE IF NOT EXISTS Business (
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
     LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by TR_Orders_BeforeInsert
+    -- A refund over this amount, or on an order older than this many days, needs a manager's
+    -- override (CheckRefundOverride); NULL turns the rule off
+    RefundOverrideAmount DECIMAL(10,2) NULL,
+    RefundOverrideDays SMALLINT UNSIGNED NULL,
     
     PRIMARY KEY (BusinessID),
+
+    CONSTRAINT CK_Business_RefundOverrideAmount
+        CHECK (RefundOverrideAmount IS NULL OR RefundOverrideAmount >= 0),
 
     INDEX IX_Business_Name (Name)
 ) ENGINE=InnoDB;
@@ -915,6 +922,8 @@ CREATE TABLE IF NOT EXISTS Orders (
     DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- sum of OrderItem.DiscountAmount
     Total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by TR_Orders_BeforeInsert
+    PickupAt DATETIME NULL,                              -- online only; NULL = as soon as possible
+    CustomerNote VARCHAR(255) NULL,
 
     PRIMARY KEY (OrderID),
 
@@ -932,6 +941,9 @@ CREATE TABLE IF NOT EXISTS Orders (
 
     CONSTRAINT UQ_Orders_Business_OrderNumber
         UNIQUE (BusinessID, OrderNumber),
+
+    CONSTRAINT CK_Orders_PickupAt
+        CHECK (PickupAt IS NULL OR (ChannelCode = 2 AND PickupAt >= OrderDateTime)),   -- 2 = ONLINE
     
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)
@@ -1245,6 +1257,45 @@ CREATE TABLE IF NOT EXISTS InventoryTransactionType (
     PRIMARY KEY (TransactionTypeCode)
 );
 
+-- A supplier delivery received at one location; its lines are the RESTOCK rows that point to it,
+-- so the delivery total and line count are summed from the ledger, never stored
+CREATE TABLE IF NOT EXISTS Delivery (
+    DeliveryID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    LocationID CHAR(36) NOT NULL,
+    SupplierID CHAR(36) NOT NULL,
+    InvoiceNumber VARCHAR(50) NULL,
+    DeliveredOn DATE NOT NULL,                 -- location's local date
+    ReceivedByEmployeeID CHAR(36) NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (DeliveryID),
+
+    CONSTRAINT UQ_Delivery_ID_Location
+        UNIQUE (DeliveryID, LocationID),
+
+    -- the same invoice can't be received twice
+    CONSTRAINT UQ_Delivery_Supplier_Invoice
+        UNIQUE (SupplierID, InvoiceNumber),
+
+    CONSTRAINT FK_Delivery_Location
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Delivery_Supplier
+        FOREIGN KEY (SupplierID, BusinessID)
+        REFERENCES Supplier(SupplierID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Delivery_ReceivedBy
+        FOREIGN KEY (ReceivedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    INDEX IX_Delivery_Location_Date (LocationID, DeliveredOn)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS InventoryTransaction (
     InventoryTransactionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
@@ -1257,9 +1308,18 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
     TransactionTypeCode TINYINT UNSIGNED NOT NULL,
 
     OrderID CHAR(36),
+    DeliveryID CHAR(36),
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (InventoryTransactionID),
+
+    CONSTRAINT FK_InventoryTransaction_Delivery
+        FOREIGN KEY (DeliveryID, LocationID)
+        REFERENCES Delivery(DeliveryID, LocationID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_InventoryTransaction_Delivery
+        CHECK (DeliveryID IS NULL OR TransactionTypeCode = 1),         -- 1 = RESTOCK
 
     CONSTRAINT FK_InventoryTransaction_StockItem
         FOREIGN KEY (StockItemID, BusinessID)

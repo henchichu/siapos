@@ -372,6 +372,7 @@ CREATE TABLE IF NOT EXISTS Product (
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(150) NOT NULL,
     Description TEXT,
+    ImageKey VARCHAR(512),          -- storage path/key of the picture; the backend stores and serves the file
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1131,7 +1132,9 @@ CREATE TABLE IF NOT EXISTS Payment (
     OrderID CHAR(36) NOT NULL,
 
     PaymentMethodCode TINYINT UNSIGNED NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,                  -- this payment's share of Orders.Total
+    TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- on top of Amount; not a sale, so not in Total
+    TipLockedAt DATETIME NULL,                      -- NULL: tip can still be adjusted (restaurant style)
     PaymentStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
     PaymentDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1160,8 +1163,12 @@ CREATE TABLE IF NOT EXISTS Payment (
     CONSTRAINT CK_Payment_Amount
         CHECK (Amount > 0),
 
+    CONSTRAINT CK_Payment_TipAmount
+        CHECK (TipAmount >= 0),
+
     INDEX IX_Payment_OrderID (OrderID),
-    INDEX IX_Payment_Status (PaymentStatusCode)
+    INDEX IX_Payment_Status (PaymentStatusCode),
+    INDEX IX_Payment_TipLockedAt (TipLockedAt)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS InventoryTransactionType (
@@ -1221,7 +1228,9 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         CHECK ((TransactionTypeCode = 1 AND QuantityChange > 0)
                 OR (TransactionTypeCode = 2 AND QuantityChange < 0)     
                 OR (TransactionTypeCode = 3 AND QuantityChange > 0)
-                OR (TransactionTypeCode = 4 AND QuantityChange <> 0)),
+                OR (TransactionTypeCode = 4 AND QuantityChange <> 0)
+                OR (TransactionTypeCode IN (5, 6, 7) AND QuantityChange < 0)   -- 5 DAMAGED, 6 EXPIRED, 7 THEFT
+                OR (TransactionTypeCode = 8 AND QuantityChange <> 0)),         -- 8 COUNT_CORRECTION
 
     CONSTRAINT CK_InventoryTransaction_UnitCost
         CHECK (
@@ -1230,6 +1239,10 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
 
     CONSTRAINT CK_InventoryTransaction_RestockCost
         CHECK (TransactionTypeCode <> 1 OR UnitCost IS NOT NULL),       -- 1 = RESTOCK
+
+    -- Losses carry the average cost at the time, so shrinkage can be reported in money
+    CONSTRAINT CK_InventoryTransaction_LossCost
+        CHECK (TransactionTypeCode NOT IN (5, 6, 7) OR UnitCost IS NOT NULL),
 
     CONSTRAINT CK_InventoryTransaction_OrderRequired
         CHECK (TransactionTypeCode NOT IN (2, 3) OR OrderID IS NOT NULL),  -- 2 = SALE, 3 = RETURN
@@ -1307,6 +1320,37 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
         ON DELETE RESTRICT,
 
     CHECK (DiscountAmount > 0)
+) ENGINE=InnoDB;
+
+-- A one-off discount outside any promotion; a manager or owner approves it (04-triggers.sql)
+CREATE TABLE IF NOT EXISTS OrderDiscount (
+    OrderDiscountID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,
+    Reason VARCHAR(255) NOT NULL,
+    ApprovedByEmployeeID CHAR(36) NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (OrderDiscountID),
+
+    CONSTRAINT FK_OrderDiscount_Order
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderDiscount_ApprovedBy
+        FOREIGN KEY (ApprovedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_OrderDiscount_Amount
+        CHECK (Amount > 0),
+
+    CONSTRAINT CK_OrderDiscount_Reason
+        CHECK (TRIM(Reason) <> ''),
+
+    INDEX IX_OrderDiscount_OrderID (OrderID)
 ) ENGINE=InnoDB;
 
 -- Membership and rewards

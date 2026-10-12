@@ -256,8 +256,21 @@ END$$
 CREATE TRIGGER TR_Payment_BeforeUpdate BEFORE UPDATE ON Payment FOR EACH ROW
 BEGIN
     -- Status may still change on a closed order (e.g. COMPLETED -> REFUNDED); the money may not
-    IF NEW.Amount <> OLD.Amount OR NEW.OrderID <> OLD.OrderID THEN
+    IF NEW.Amount <> OLD.Amount OR NEW.OrderID <> OLD.OrderID OR NEW.PaymentMethodCode <> OLD.PaymentMethodCode THEN
         CALL CheckOrderOpen(OLD.OrderID);
+    END IF;
+
+    -- The tip stays adjustable after the order closes (restaurant style) until it is locked;
+    -- a lock is final, and a refunded order's tips are frozen
+    IF NEW.TipAmount <> OLD.TipAmount OR NOT (NEW.TipLockedAt <=> OLD.TipLockedAt) THEN
+        IF OLD.TipLockedAt IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This payment''s tip is locked';
+        END IF;
+
+        IF NEW.TipAmount <> OLD.TipAmount
+           AND EXISTS (SELECT 1 FROM Orders WHERE OrderID = OLD.OrderID AND OrderStatusCode = 7) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This order is refunded; its tips can no longer change';
+        END IF;
     END IF;
     CALL CheckPayment(NEW.PaymentID, NEW.OrderID, NEW.Amount, NEW.PaymentStatusCode);
 END$$
@@ -266,6 +279,42 @@ CREATE TRIGGER TR_Payment_BeforeDelete BEFORE DELETE ON Payment FOR EACH ROW
 BEGIN
     CALL CheckOrderOpen(OLD.OrderID);
 END$$
+
+-- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
+-- checks they add up to Orders.DiscountAmount); a one-off needs an active manager (2) or owner (1)
+CREATE PROCEDURE CheckOrderDiscount(IN pOrderID CHAR(36), IN pApprovedBy CHAR(36))
+BEGIN
+    CALL CheckOrderOpen(pOrderID);
+
+    IF NOT EXISTS (SELECT 1 FROM Employee
+                    WHERE EmployeeID = pApprovedBy AND Active AND RoleCode IN (1, 2)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A one-off discount must be approved by an active manager or owner';
+    END IF;
+END$$
+
+CREATE TRIGGER TR_OrderDiscount_BeforeInsert BEFORE INSERT ON OrderDiscount FOR EACH ROW
+    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID)$$
+
+CREATE TRIGGER TR_OrderDiscount_BeforeUpdate BEFORE UPDATE ON OrderDiscount FOR EACH ROW
+BEGIN
+    CALL CheckOrderOpen(OLD.OrderID);
+    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID);
+END$$
+
+CREATE TRIGGER TR_OrderDiscount_BeforeDelete BEFORE DELETE ON OrderDiscount FOR EACH ROW
+    CALL CheckOrderOpen(OLD.OrderID)$$
+
+CREATE TRIGGER TR_PromotionRedemption_BeforeInsert BEFORE INSERT ON PromotionRedemption FOR EACH ROW
+    CALL CheckOrderOpen(NEW.OrderID)$$
+
+CREATE TRIGGER TR_PromotionRedemption_BeforeUpdate BEFORE UPDATE ON PromotionRedemption FOR EACH ROW
+BEGIN
+    CALL CheckOrderOpen(OLD.OrderID);
+    CALL CheckOrderOpen(NEW.OrderID);
+END$$
+
+CREATE TRIGGER TR_PromotionRedemption_BeforeDelete BEFORE DELETE ON PromotionRedemption FOR EACH ROW
+    CALL CheckOrderOpen(OLD.OrderID)$$
 
 -- Refund: only completed payments; non-failed refunds can't exceed the payment;
 -- tax refunded can't exceed tax collected, and merchandise refunded can't exceed
@@ -518,6 +567,11 @@ BEGIN
 
         IF vDiscount <> NEW.DiscountAmount THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot complete: DiscountAmount must equal the sum of line discounts';
+        END IF;
+
+        IF NEW.DiscountAmount <> (SELECT COALESCE(SUM(DiscountAmount), 0) FROM PromotionRedemption WHERE OrderID = NEW.OrderID)
+                               + (SELECT COALESCE(SUM(Amount), 0) FROM OrderDiscount WHERE OrderID = NEW.OrderID) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot complete: DiscountAmount must equal promotion redemptions plus one-off discounts';
         END IF;
 
         IF vTax <> NEW.Tax THEN

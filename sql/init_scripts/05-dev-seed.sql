@@ -280,7 +280,7 @@ VALUES ('promo-morning-pastry', 'prd-croissant', @biz), ('promo-morning-pastry',
 CREATE TABLE _seed_order (OrderID CHAR(36) PRIMARY KEY, LocationID CHAR(36), h BIGINT,
                           LocalAt DATETIME, UtcAt DATETIME, ChannelCode TINYINT, RegisterID CHAR(36),
                           EmployeeID CHAR(36), CustomerID CHAR(36), PaymentMethodCode TINYINT,
-                          Total DECIMAL(10,2));
+                          Total DECIMAL(10,2), Tip DECIMAL(10,2));
 INSERT INTO _seed_order
 SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:00'),
        IF(MOD(x.h, 10) = 0, 2, 1),                                            -- 1 = POS, 2 = ONLINE
@@ -289,7 +289,7 @@ SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:
        IF(MOD(x.h, 10) = 0 OR MOD(x.h, 5) = 0,
           ELT(MOD(x.h, 4) + 1, 'cus-ava', 'cus-ben', 'cus-chloe', 'cus-diego'), NULL),
        IF(MOD(x.h, 10) <> 0 AND MOD(x.h, 3) = 0, 1, 2),                       -- 1 = CASH, 2 = CARD
-       NULL
+       NULL, NULL
   FROM (SELECT CONCAT('ord-', lc, '-', LPAD(d.n, 2, '0'), '-', LPAD(s.n, 2, '0')) OrderID,
                l.LocationID, l.lc,
                CRC32(CONCAT(l.lc, d.n, '-', s.n)) h,
@@ -420,10 +420,27 @@ UPDATE Orders o
 -- Copied out first: the payment trigger locks Orders, which the INSERT's own SELECT can't also read
 UPDATE _seed_order s JOIN Orders o ON o.OrderID = s.OrderID SET s.Total = o.Total;
 
-INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, PaymentStatusCode, PaymentDateTime)
-SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, 3,           -- 3 = COMPLETED
-       UtcAt + INTERVAL 2 MINUTE
+-- About half of card payments at the counter tip 10-20%, chosen on the terminal (counter style)
+UPDATE _seed_order
+   SET Tip = IF(ChannelCode = 1 AND PaymentMethodCode = 2 AND MOD(CRC32(CONCAT(OrderID, 'tip')), 2) = 0,
+                ROUND(Total * (10 + MOD(CRC32(CONCAT(OrderID, 'pct')), 11)) / 100, 2), 0);
+
+-- ...and the latest tip is still open, as if entered from a slip, so "unlocked tips" has a row
+SET @open_tip = (SELECT OrderID FROM _seed_order WHERE Tip > 0 ORDER BY UtcAt DESC LIMIT 1);
+
+INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt,
+                     PaymentStatusCode, PaymentDateTime)
+SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, Tip,
+       IF(OrderID = @open_tip, NULL, UtcAt + INTERVAL 2 MINUTE),
+       3, UtcAt + INTERVAL 2 MINUTE                                                   -- 3 = COMPLETED
   FROM _seed_order;
+
+-- Before completion: redemptions freeze with the order, and completion checks they add up
+INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount, RedeemedAt)
+SELECT @biz, CONCAT('red-', SUBSTRING(o.OrderID, 5)), 'promo-morning-pastry', o.OrderID, o.DiscountAmount,
+       s.UtcAt + INTERVAL 3 MINUTE
+  FROM Orders o JOIN _seed_order s ON s.OrderID = o.OrderID
+ WHERE o.DiscountAmount > 0;
 
 UPDATE Orders o
   JOIN _seed_order s ON s.OrderID = o.OrderID
@@ -434,11 +451,6 @@ SELECT CONCAT('osh-', SUBSTRING(s.OrderID, 5), '-1'), s.OrderID, @biz, 1, s.UtcA
 UNION ALL
 SELECT CONCAT('osh-', SUBSTRING(s.OrderID, 5), '-5'), s.OrderID, @biz, 5, s.UtcAt + INTERVAL 3 MINUTE, s.EmployeeID
   FROM _seed_order s;
-
-INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount, RedeemedAt)
-SELECT @biz, CONCAT('red-', SUBSTRING(o.OrderID, 5)), 'promo-morning-pastry', o.OrderID, o.DiscountAmount, o.CompletedAt
-  FROM Orders o
- WHERE o.BusinessID = @biz AND o.DiscountAmount > 0;
 
 -- A point per whole dollar for loyalty members
 INSERT INTO LoyaltyTransaction (LoyaltyTransactionID, LoyaltyAccountID, OrderID, CustomerID,
@@ -469,6 +481,36 @@ UPDATE Orders SET Subtotal = 3.50, Tax = 0.36, Total = 3.86, OrderStatusCode = 6
  WHERE OrderID = 'ord-cp-cancelled';
 
 -- ---------------------------------------------------------------------------
+-- Stock losses and stocktake corrections, losses at the average cost of the day
+-- ---------------------------------------------------------------------------
+CREATE TABLE _seed_loss (ID CHAR(36), LocationID CHAR(36), StockItemID CHAR(36), EmployeeID CHAR(36),
+                         Qty DECIMAL(12,3), TypeCode TINYINT, DaysAgo INT, AtTime TIME,
+                         UnitCost DECIMAL(18,6));
+INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime)
+VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
+    ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15'),  -- dropped jug
+    ('itx-loss-02', 'loc-campus',   'stk-beans',     'emp-priya',   -340, 5,  9, '10:40'),  -- split bag
+    ('itx-loss-03', 'loc-downtown', 'stk-croissant', 'emp-sam',       -4, 6, 10, '17:30'),
+    ('itx-loss-04', 'loc-campus',   'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30'),
+    ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30'),
+    ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30'),
+    ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00'),  -- soured
+    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-leo',       -1, 7,  5, '14:00'),
+    ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00'),
+    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00');
+
+-- Staged: the ledger trigger updates Inventory, so the INSERT can't read Inventory itself.
+-- Losses don't move the average, so one lookup holds for every row.
+UPDATE _seed_loss s JOIN Inventory i ON i.LocationID = s.LocationID AND i.StockItemID = s.StockItemID
+   SET s.UnitCost = IF(s.TypeCode IN (5, 6, 7), i.AverageUnitCost, NULL);
+
+INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
+                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime)
+SELECT ID, @biz, StockItemID, LocationID, EmployeeID, Qty, UnitCost, TypeCode,
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL DaysAgo DAY, AtTime), @tz, '+00:00')
+  FROM _seed_loss;
+
+-- ---------------------------------------------------------------------------
 -- A return: the first bag of beans sold comes back unopened, goes back on the shelf, is refunded
 -- ---------------------------------------------------------------------------
 SET @ret_line = (SELECT l.OrderItemID FROM OrderItem l JOIN Orders o ON o.OrderID = l.OrderID
@@ -496,6 +538,6 @@ SELECT 'ref-0001', CONCAT('pay-', SUBSTRING(@ret_order, 5)), 'ret-0001', @ret_or
        @ret_at, 'Unopened bag returned', 2, 'emp-leo', @ret_at, 'emp-leo'                       -- 2 = COMPLETED
   FROM OrderItem WHERE OrderItemID = @ret_line;
 
-DROP TABLE _seed_comp, _seed_linemod, _seed_line, _seed_menu, _seed_order, _seed_stock, _seed_shift, _seed_seq;
+DROP TABLE _seed_loss, _seed_comp, _seed_linemod, _seed_line, _seed_menu, _seed_order, _seed_stock, _seed_shift, _seed_seq;
 
 COMMIT;

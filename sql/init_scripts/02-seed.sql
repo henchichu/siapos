@@ -83,7 +83,11 @@ VALUES
     (1, 'RESTOCK'),
     (2, 'SALE'),
     (3, 'RETURN'),
-    (4, 'ADJUSTMENT')
+    (4, 'ADJUSTMENT'),
+    (5, 'DAMAGED'),
+    (6, 'EXPIRED'),
+    (7, 'THEFT'),
+    (8, 'COUNT_CORRECTION')
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description);
 

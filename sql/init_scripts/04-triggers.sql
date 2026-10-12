@@ -24,6 +24,30 @@ BEGIN
     CALL CheckLocationTimeZone(NEW.TimeZone);
 END$$
 
+-- Roles: the owner role can't lose its owner status or be deactivated, so a business keeps its owner
+CREATE TRIGGER TR_Role_BeforeUpdate BEFORE UPDATE ON Role FOR EACH ROW
+BEGIN
+    IF NEW.IsOwner <> OLD.IsOwner THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A role''s owner status is fixed when it is created';
+    END IF;
+
+    IF OLD.IsOwner AND NOT NEW.Active THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'The owner role cannot be deactivated';
+    END IF;
+END$$
+
+-- True when the employee and their role are active and the role is the owner's or holds the permission
+CREATE FUNCTION HasPermission(pEmployeeID CHAR(36), pPermissionCode TINYINT UNSIGNED) RETURNS BOOLEAN
+READS SQL DATA
+BEGIN
+    RETURN EXISTS (SELECT 1
+                     FROM Employee e JOIN Role r ON r.RoleID = e.RoleID
+                    WHERE e.EmployeeID = pEmployeeID AND e.Active AND r.Active
+                      AND (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp
+                                                 WHERE rp.RoleID = r.RoleID
+                                                   AND rp.PermissionCode = pPermissionCode)));
+END$$
+
 -- Inventory is driven by its ledger: Quantity and AverageUnitCost change only
 -- when an InventoryTransaction is inserted, and ledger rows are immutable.
 CREATE TRIGGER TR_Inventory_BeforeInsert BEFORE INSERT ON Inventory FOR EACH ROW
@@ -281,14 +305,13 @@ BEGIN
 END$$
 
 -- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
--- checks they add up to Orders.DiscountAmount); a one-off needs an active manager (2) or owner (1)
+-- checks they add up to Orders.DiscountAmount); a one-off needs permission 4 (Approve discounts)
 CREATE PROCEDURE CheckOrderDiscount(IN pOrderID CHAR(36), IN pApprovedBy CHAR(36))
 BEGIN
     CALL CheckOrderOpen(pOrderID);
 
-    IF NOT EXISTS (SELECT 1 FROM Employee
-                    WHERE EmployeeID = pApprovedBy AND Active AND RoleCode IN (1, 2)) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A one-off discount must be approved by an active manager or owner';
+    IF NOT HasPermission(pApprovedBy, 4) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A one-off discount must be approved by someone allowed to approve discounts';
     END IF;
 END$$
 
@@ -468,6 +491,11 @@ BEGIN
     -- Snapshot the business's pricing convention; changing it later leaves old orders alone
     SET NEW.PricesIncludeTax = (SELECT PricesIncludeTax FROM Business WHERE BusinessID = NEW.BusinessID);
 
+    -- Next order number; the row lock serialises registers. UpdatedAt = UpdatedAt keeps it unchanged.
+    UPDATE Business SET LastOrderNumber = LastOrderNumber + 1, UpdatedAt = UpdatedAt
+     WHERE BusinessID = NEW.BusinessID;
+    SET NEW.OrderNumber = (SELECT LastOrderNumber FROM Business WHERE BusinessID = NEW.BusinessID);
+
     IF NEW.OrderStatusCode = 5 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insert the order first, then complete it with an UPDATE';
     END IF;
@@ -529,6 +557,10 @@ BEGIN
 
     IF NEW.PricesIncludeTax <> OLD.PricesIncludeTax THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'An order''s pricing convention is fixed when it is created';
+    END IF;
+
+    IF NEW.OrderNumber <> OLD.OrderNumber THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'An order''s number is fixed when it is created';
     END IF;
 
     IF OLD.OrderStatusCode IN (5, 7) THEN

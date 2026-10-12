@@ -42,13 +42,31 @@ VALUES
 -- ---------------------------------------------------------------------------
 -- Staff, pay, shifts
 -- ---------------------------------------------------------------------------
-INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, RoleCode)
-VALUES      -- 1 OWNER, 2 MANAGER, 3 CASHIER, 4 EMPLOYEE
-    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   1),
-    ('emp-leo',    @biz, 'Leo',    'Brandt', 'leo@brewbean.example.com',    2),
-    ('emp-sam',    @biz, 'Sam',    'Rivera', 'sam@brewbean.example.com',    3),
-    ('emp-priya',  @biz, 'Priya',  'Shah',   'priya@brewbean.example.com',  3),
-    ('emp-jordan', @biz, 'Jordan', 'Lee',    'jordan@brewbean.example.com', 4);
+-- The default roles from the blueprint's access levels screen; the owner holds every permission
+INSERT INTO Role (RoleID, BusinessID, Name, OpensTo, IsOwner)
+VALUES
+    ('role-owner',   @biz, 'Owner',             'REGISTER', TRUE),
+    ('role-manager', @biz, 'Manager',           'REGISTER', FALSE),
+    ('role-asst',    @biz, 'Assistant manager', 'REGISTER', FALSE),
+    ('role-server',  @biz, 'Server',            'REGISTER', FALSE),
+    ('role-barista', @biz, 'Chef / barista',    'KITCHEN',  FALSE);
+
+-- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides) and 18 (approve timecards)
+INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
+SELECT r.RoleID, @biz, p.PermissionCode
+  FROM Role r JOIN Permission p
+    ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
+    OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
+    OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20))
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
+
+INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
+VALUES
+    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-owner'),
+    ('emp-leo',    @biz, 'Leo',    'Brandt', 'leo@brewbean.example.com',    '10420002', 'role-manager'),
+    ('emp-sam',    @biz, 'Sam',    'Rivera', 'sam@brewbean.example.com',    '10420003', 'role-server'),
+    ('emp-priya',  @biz, 'Priya',  'Shah',   'priya@brewbean.example.com',  '10420004', 'role-server'),
+    ('emp-jordan', @biz, 'Jordan', 'Lee',    'jordan@brewbean.example.com', '10420005', 'role-barista');
 
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID)
 VALUES
@@ -388,7 +406,11 @@ UPDATE _seed_line l
 -- Same steps the backend takes: open the order, add lines, total it, pay, complete
 INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime)
 SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt
-  FROM _seed_order;
+  FROM _seed_order
+ UNION ALL       -- cancelled below; inserted here so order numbers follow time
+SELECT 'ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00')
+ ORDER BY 8, 1;
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, UnitCost, LineCost,
                        LineTotal, DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
@@ -462,23 +484,20 @@ SELECT CONCAT('lt-', SUBSTRING(o.OrderID, 5)), CONCAT('loy-', SUBSTRING(o.Custom
  WHERE o.CustomerID IN ('cus-ava', 'cus-chloe') AND o.OrderStatusCode = 5 AND FLOOR(o.Total) > 0;
 
 -- ---------------------------------------------------------------------------
--- An open order at the counter now, and a cancelled one
+-- A cancelled order (row inserted with the history), and an open one at the counter now
 -- ---------------------------------------------------------------------------
+INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
+                       TaxCategoryID, TaxRate, TaxAmount)
+VALUES ('ord-cp-cancelled-0', 'ord-cp-cancelled', 'var-croissant', @biz, 1, 3.50, 3.50, 'tax-prepared', 0.1025, 0.36);
+UPDATE Orders SET Subtotal = 3.50, Tax = 0.36, Total = 3.86, OrderStatusCode = 6        -- 6 = CANCELLED
+ WHERE OrderID = 'ord-cp-cancelled';
+
 INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, ChannelCode)
 VALUES ('ord-dt-now', 'loc-downtown', @biz, 'reg-dt-1', 'emp-sam', 1);
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
                        TaxCategoryID, TaxRate, TaxAmount)
 VALUES ('ord-dt-now-0', 'ord-dt-now', 'var-latte-l', @biz, 1, 5.25, 5.25, 'tax-prepared', 0.1025, 0.54);
 UPDATE Orders SET Subtotal = 5.25, Tax = 0.54, Total = 5.79 WHERE OrderID = 'ord-dt-now';
-
-INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, ChannelCode, OrderDateTime)
-VALUES ('ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 1,
-        CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00'));
-INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
-                       TaxCategoryID, TaxRate, TaxAmount)
-VALUES ('ord-cp-cancelled-0', 'ord-cp-cancelled', 'var-croissant', @biz, 1, 3.50, 3.50, 'tax-prepared', 0.1025, 0.36);
-UPDATE Orders SET Subtotal = 3.50, Tax = 0.36, Total = 3.86, OrderStatusCode = 6        -- 6 = CANCELLED
- WHERE OrderID = 'ord-cp-cancelled';
 
 -- ---------------------------------------------------------------------------
 -- Stock losses and stocktake corrections, losses at the average cost of the day

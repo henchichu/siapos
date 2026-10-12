@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS Business (
               ON UPDATE CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
+    LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by TR_Orders_BeforeInsert
     
     PRIMARY KEY (BusinessID),
 
@@ -91,13 +92,60 @@ CREATE TABLE IF NOT EXISTS LocationTaxRate (
     INDEX IX_LocationTaxRate_TaxCategory (TaxCategoryID, BusinessID)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS EmployeeRole (
-    RoleCode TINYINT UNSIGNED NOT NULL,
-    Description VARCHAR(100) NOT NULL,
+-- Fixed list of the checkboxes on the roles screen; codes are fixed by 02-seed.sql
+CREATE TABLE IF NOT EXISTS Permission (
+    PermissionCode TINYINT UNSIGNED NOT NULL,
+    Name VARCHAR(100) NOT NULL,
+    GroupName VARCHAR(50) NOT NULL,
+
+    PRIMARY KEY (PermissionCode)
+) ENGINE=InnoDB;
+
+-- Each business defines its own roles; the owner role holds every permission implicitly
+CREATE TABLE IF NOT EXISTS Role (
+    RoleID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(50) NOT NULL,
+    OpensTo VARCHAR(30) NOT NULL,              -- page shown after sign-in; the backend validates it
+    IsOwner BOOLEAN NOT NULL DEFAULT FALSE,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
-    PRIMARY KEY (RoleCode)
-);
+    PRIMARY KEY (RoleID),
+
+    CONSTRAINT UQ_Role_ID_Business
+        UNIQUE (RoleID, BusinessID),
+
+    CONSTRAINT UQ_Role_Business_Name
+        UNIQUE (BusinessID, Name),
+
+    -- at most one owner role per business
+    UNIQUE INDEX UQ_Role_Owner ((IF(IsOwner, BusinessID, NULL))),
+
+    CONSTRAINT FK_Role_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS RolePermission (
+    RoleID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    PermissionCode TINYINT UNSIGNED NOT NULL,
+
+    PRIMARY KEY (RoleID, PermissionCode),
+
+    CONSTRAINT FK_RolePermission_Role
+        FOREIGN KEY (RoleID, BusinessID)
+        REFERENCES Role(RoleID, BusinessID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT FK_RolePermission_Permission
+        FOREIGN KEY (PermissionCode)
+        REFERENCES Permission(PermissionCode)
+        ON DELETE RESTRICT,
+
+    INDEX IX_RolePermission_Permission (PermissionCode)
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Employee (
     EmployeeID CHAR(36) NOT NULL,
@@ -105,7 +153,8 @@ CREATE TABLE IF NOT EXISTS Employee (
     FirstName VARCHAR(50) NOT NULL,
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255) NOT NULL,
-    RoleCode TINYINT UNSIGNED NOT NULL,
+    EmployeeNumber CHAR(8) NOT NULL,           -- typed at sign-in, so unique across businesses
+    RoleID CHAR(36) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -123,25 +172,39 @@ CREATE TABLE IF NOT EXISTS Employee (
         REFERENCES Business(BusinessID)
         ON DELETE RESTRICT,
     
-    CONSTRAINT FK_Employee_RoleCode
-        FOREIGN KEY (RoleCode)
-        REFERENCES EmployeeRole(RoleCode)
+    CONSTRAINT FK_Employee_Role
+        FOREIGN KEY (RoleID, BusinessID)
+        REFERENCES Role(RoleID, BusinessID)
         ON DELETE RESTRICT,
         
     CONSTRAINT UQ_Employee_Business_Email
         UNIQUE (BusinessID, Email),
+
+    CONSTRAINT UQ_Employee_EmployeeNumber
+        UNIQUE (EmployeeNumber),
+
+    CONSTRAINT CK_Employee_EmployeeNumber
+        CHECK (EmployeeNumber REGEXP '^[0-9]{8}$'),
+
+    INDEX IX_Employee_Role (RoleID, BusinessID),
 
     INDEX IX_Employee_BusinessID (BusinessID)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS EmployeeCredential (
     EmployeeID CHAR(36) NOT NULL,
-    PasswordHash VARCHAR(255) NOT NULL,
-    
-    PasswordUpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
+    PasswordHash VARCHAR(255),
+    PinHash VARCHAR(255),                      -- 6-digit PIN; the backend checks length before hashing
+    FailedPinAttempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    LockedUntil DATETIME NULL,
+
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
     ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (EmployeeID),
+
+    CONSTRAINT CK_EmployeeCredential_Secret
+        CHECK (PasswordHash IS NOT NULL OR PinHash IS NOT NULL),
     
     CONSTRAINT FK_EmployeeCredential_Employee
         FOREIGN KEY (EmployeeID)
@@ -839,6 +902,7 @@ CREATE TABLE IF NOT EXISTS Orders (
     EmployeeID CHAR(36),
     CustomerID CHAR(36),
 
+    OrderNumber INT UNSIGNED NOT NULL DEFAULT 0,  -- set by TR_Orders_BeforeInsert
     ChannelCode TINYINT UNSIGNED NOT NULL,
     OrderDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -865,6 +929,9 @@ CREATE TABLE IF NOT EXISTS Orders (
 
     CONSTRAINT UQ_Orders_ID_PricesIncludeTax
         UNIQUE (OrderID, PricesIncludeTax),
+
+    CONSTRAINT UQ_Orders_Business_OrderNumber
+        UNIQUE (BusinessID, OrderNumber),
     
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)

@@ -2,15 +2,33 @@ USE miniworld;
 
 START TRANSACTION;
 
-INSERT INTO EmployeeRole (RoleCode, Description, Active) 
-VALUES 
-    (1, 'OWNER', TRUE),
-    (2, 'MANAGER', TRUE),
-    (3, 'CASHIER', TRUE),
-    (4, 'EMPLOYEE', TRUE)
+INSERT INTO Permission (PermissionCode, Name, GroupName)
+VALUES
+    (1,  'Use the register', 'Selling'),
+    (2,  'Refund an order', 'Selling'),
+    (3,  'Sign refund overrides', 'Selling'),
+    (4,  'Approve discounts', 'Selling'),
+    (5,  'See the kitchen display', 'Kitchen'),
+    (6,  'Start and finish tickets', 'Kitchen'),
+    (7,  'Mark orders picked up', 'Kitchen'),
+    (8,  'Report a stock loss', 'Kitchen'),
+    (9,  'Look up and enroll members', 'Rewards'),
+    (10, 'Edit and deactivate members', 'Rewards'),
+    (11, 'See products and prices', 'Products'),
+    (12, 'Edit products, prices and options', 'Products'),
+    (13, 'See costs and margins', 'Products'),
+    (14, 'See inventory', 'Stock and orders'),
+    (15, 'Restock and adjust stock', 'Stock and orders'),
+    (16, 'Search orders', 'Stock and orders'),
+    (17, 'See team timecards', 'People'),
+    (18, 'Approve timecards', 'People'),
+    (19, 'Manage employees and pay rates', 'People'),
+    (20, 'See reports', 'Business'),
+    (21, 'Change settings', 'Business'),
+    (22, 'Manage roles', 'Business')
 ON DUPLICATE KEY UPDATE
-    Description = VALUES(Description),
-    Active = VALUES(Active);
+    Name = VALUES(Name),
+    GroupName = VALUES(GroupName);
     
 INSERT INTO TimeEntryStatus
     (TimeEntryStatusCode, Description, Active)

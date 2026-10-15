@@ -119,12 +119,20 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Inventory transactions are immutable; post an ADJUSTMENT instead';
 END$$
 
--- OrderItem: the variant must have a recipe, and whole-unit variants sell in whole numbers
+CREATE FUNCTION IsGiftCardVariant(pVariantID CHAR(36)) RETURNS BOOLEAN
+READS SQL DATA
+BEGIN
+    RETURN EXISTS (SELECT 1 FROM ProductVariant v JOIN Product p ON p.ProductID = v.ProductID
+                    WHERE v.VariantID = pVariantID AND p.IsGiftCard);
+END$$
+
+-- OrderItem: the variant must have a recipe (gift cards have none), and whole-unit variants sell in whole numbers
 CREATE PROCEDURE CheckOrderItem(IN pVariantID CHAR(36), IN pQuantity DECIMAL(12,3))
 BEGIN
     DECLARE vAllowsFraction BOOLEAN;
 
-    IF NOT EXISTS (SELECT 1 FROM VariantRecipe WHERE VariantID = pVariantID) THEN
+    IF NOT EXISTS (SELECT 1 FROM VariantRecipe WHERE VariantID = pVariantID)
+       AND NOT IsGiftCardVariant(pVariantID) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This variant has no recipe, so it cannot be sold';
     END IF;
 
@@ -166,6 +174,37 @@ BEGIN
     END IF;
 END$$
 
+-- A gift card line sells one card for an amount inside the business's limits, untaxed and undiscounted
+CREATE PROCEDURE CheckGiftCardLine(IN pOrderID CHAR(36), IN pVariantID CHAR(36), IN pQuantity DECIMAL(12,3),
+                                   IN pUnitPrice DECIMAL(10,2), IN pDiscount DECIMAL(10,2),
+                                   IN pTaxRate DECIMAL(7,6), IN pTaxAmount DECIMAL(10,2))
+BEGIN
+    IF IsGiftCardVariant(pVariantID) THEN
+        IF pQuantity <> 1 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card line sells exactly one card';
+        END IF;
+
+        IF pDiscount <> 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift cards can''t be discounted';
+        END IF;
+
+        IF pTaxRate <> 0 OR pTaxAmount <> 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift cards carry no tax';
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM Orders o JOIN Business b ON b.BusinessID = o.BusinessID
+                        WHERE o.OrderID = pOrderID
+                          AND pUnitPrice BETWEEN b.GiftCardMinAmount AND b.GiftCardMaxAmount) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift card amount is outside this business''s limits';
+        END IF;
+
+        IF EXISTS (SELECT 1 FROM Payment WHERE OrderID = pOrderID AND GiftCardID IS NOT NULL
+                      AND PaymentStatusCode <> 4) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card can''t pay for another gift card';
+        END IF;
+    END IF;
+END$$
+
 -- Completed (5) and refunded (7) orders are closed: their lines and payments are frozen
 CREATE PROCEDURE CheckOrderOpen(IN pOrderID CHAR(36))
 BEGIN
@@ -180,6 +219,8 @@ BEGIN
     SET NEW.PricesIncludeTax = (SELECT PricesIncludeTax FROM Orders WHERE OrderID = NEW.OrderID);
     CALL CheckOrderItem(NEW.VariantID, NEW.Quantity);
     CALL CheckOrderItemTax(NEW.OrderID, NEW.VariantID, NEW.TaxCategoryID, NEW.TaxRate);
+    CALL CheckGiftCardLine(NEW.OrderID, NEW.VariantID, NEW.Quantity, NEW.UnitPrice,
+                           NEW.DiscountAmount, NEW.TaxRate, NEW.TaxAmount);
 END$$
 
 CREATE TRIGGER TR_OrderItem_BeforeDelete BEFORE DELETE ON OrderItem FOR EACH ROW
@@ -197,6 +238,8 @@ BEGIN
        OR NEW.TaxCategoryID <> OLD.TaxCategoryID OR NEW.TaxRate <> OLD.TaxRate THEN
         CALL CheckOrderItemTax(NEW.OrderID, NEW.VariantID, NEW.TaxCategoryID, NEW.TaxRate);
     END IF;
+    CALL CheckGiftCardLine(NEW.OrderID, NEW.VariantID, NEW.Quantity, NEW.UnitPrice,
+                           NEW.DiscountAmount, NEW.TaxRate, NEW.TaxAmount);
 END$$
 
 -- A line's modifiers and components (its cost of goods) freeze with the order
@@ -272,13 +315,77 @@ BEGIN
     END IF;
 END$$
 
+-- A gift card pays only for its own business's orders, while active, and never for another gift card
+CREATE PROCEDURE CheckGiftCardPayment(IN pOrderID CHAR(36), IN pGiftCardID CHAR(36))
+BEGIN
+    IF pGiftCardID IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM GiftCard g JOIN Orders o ON o.BusinessID = g.BusinessID
+                        WHERE g.GiftCardID = pGiftCardID AND o.OrderID = pOrderID AND g.Active) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This gift card is not active at this business';
+        END IF;
+
+        IF EXISTS (SELECT 1 FROM OrderItem WHERE OrderID = pOrderID AND IsGiftCardVariant(VariantID)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card can''t pay for another gift card';
+        END IF;
+    END IF;
+END$$
+
+-- Writes one trigger-owned gift card ledger row
+-- (VALUES, not INSERT ... SELECT FROM GiftCard: the ledger trigger locks GiftCard, error 1442)
+CREATE PROCEDURE AddGiftCardEntry(IN pGiftCardID CHAR(36), IN pType TINYINT UNSIGNED, IN pAmount DECIMAL(10,2),
+                                  IN pPaymentID CHAR(36), IN pRefundID CHAR(36), IN pReturnItemID CHAR(36),
+                                  IN pAt DATETIME)
+BEGIN
+    DECLARE vBusinessID CHAR(36);
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @siapos_giftcard_write = NULL;
+        RESIGNAL;
+    END;
+
+    SET vBusinessID = (SELECT BusinessID FROM GiftCard WHERE GiftCardID = pGiftCardID);
+    SET @siapos_giftcard_write = 1;
+    INSERT INTO GiftCardTransaction (GiftCardTransactionID, GiftCardID, BusinessID, GiftCardTransactionTypeCode,
+                                     Amount, PaymentID, RefundID, ReturnItemID, CreatedAt)
+    VALUES (UUID(), pGiftCardID, vBusinessID, pType, pAmount, pPaymentID, pRefundID, pReturnItemID,
+            COALESCE(pAt, UTC_TIMESTAMP()));
+    SET @siapos_giftcard_write = NULL;
+END$$
+
 CREATE TRIGGER TR_Payment_BeforeInsert BEFORE INSERT ON Payment FOR EACH ROW
 BEGIN
     CALL CheckPayment(NEW.PaymentID, NEW.OrderID, NEW.Amount, NEW.PaymentStatusCode);
+    CALL CheckGiftCardPayment(NEW.OrderID, NEW.GiftCardID);
+END$$
+
+-- A completed gift card payment takes its amount off the card
+CREATE TRIGGER TR_Payment_AfterInsert AFTER INSERT ON Payment FOR EACH ROW
+BEGIN
+    IF NEW.GiftCardID IS NOT NULL AND NEW.PaymentStatusCode = 3 THEN
+        CALL AddGiftCardEntry(NEW.GiftCardID, 2, -NEW.Amount, NEW.PaymentID, NULL, NULL, NEW.PaymentDateTime);   -- 2 = REDEEM
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Payment_AfterUpdate AFTER UPDATE ON Payment FOR EACH ROW
+BEGIN
+    IF NEW.GiftCardID IS NOT NULL AND NEW.PaymentStatusCode = 3 AND OLD.PaymentStatusCode NOT IN (3, 5) THEN
+        CALL AddGiftCardEntry(NEW.GiftCardID, 2, -NEW.Amount, NEW.PaymentID, NULL, NULL, NEW.PaymentDateTime);
+    END IF;
 END$$
 
 CREATE TRIGGER TR_Payment_BeforeUpdate BEFORE UPDATE ON Payment FOR EACH ROW
 BEGIN
+    -- Once a gift card payment is taken, the card's ledger holds it; only a refund gives it back
+    IF OLD.GiftCardID IS NOT NULL AND OLD.PaymentStatusCode IN (3, 5)
+       AND (NEW.Amount <> OLD.Amount OR NEW.OrderID <> OLD.OrderID OR NOT (NEW.GiftCardID <=> OLD.GiftCardID)
+            OR NEW.PaymentStatusCode NOT IN (3, 5)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card payment can''t change once taken; refund it instead';
+    END IF;
+
+    IF NOT (NEW.GiftCardID <=> OLD.GiftCardID) OR NEW.OrderID <> OLD.OrderID THEN
+        CALL CheckGiftCardPayment(NEW.OrderID, NEW.GiftCardID);
+    END IF;
+
     -- Status may still change on a closed order (e.g. COMPLETED -> REFUNDED); the money may not
     IF NEW.Amount <> OLD.Amount OR NEW.OrderID <> OLD.OrderID OR NEW.PaymentMethodCode <> OLD.PaymentMethodCode THEN
         CALL CheckOrderOpen(OLD.OrderID);
@@ -302,6 +409,9 @@ END$$
 CREATE TRIGGER TR_Payment_BeforeDelete BEFORE DELETE ON Payment FOR EACH ROW
 BEGIN
     CALL CheckOrderOpen(OLD.OrderID);
+    IF OLD.GiftCardID IS NOT NULL AND OLD.PaymentStatusCode IN (3, 5) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card payment can''t change once taken; refund it instead';
+    END IF;
 END$$
 
 -- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
@@ -427,8 +537,18 @@ BEGIN
     END IF;
 END$$
 
+-- Money back on an order that sold a gift card goes through a return, so the card is cancelled with it
+CREATE PROCEDURE CheckGiftCardOrderRefund(IN pOrderID CHAR(36), IN pReturnID CHAR(36))
+BEGIN
+    IF pReturnID IS NULL
+       AND EXISTS (SELECT 1 FROM OrderItem WHERE OrderID = pOrderID AND IsGiftCardVariant(VariantID)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This order sold a gift card; refund it through a return';
+    END IF;
+END$$
+
 CREATE TRIGGER TR_Refund_BeforeInsert BEFORE INSERT ON Refund FOR EACH ROW
 BEGIN
+    CALL CheckGiftCardOrderRefund(NEW.OrderID, NEW.ReturnID);
     CALL CheckRefund(NEW.RefundID, NEW.PaymentID, NEW.OrderID, NEW.ReturnID,
                      NEW.Amount, NEW.TaxAmount, NEW.RefundStatusCode);
     IF NEW.RefundStatusCode = 2 THEN
@@ -438,12 +558,43 @@ END$$
 
 CREATE TRIGGER TR_Refund_BeforeUpdate BEFORE UPDATE ON Refund FOR EACH ROW
 BEGIN
+    IF OLD.RefundStatusCode = 2 AND (NEW.RefundStatusCode <> 2 OR NEW.Amount <> OLD.Amount
+                                     OR NEW.PaymentID <> OLD.PaymentID)
+       AND EXISTS (SELECT 1 FROM Payment WHERE PaymentID = OLD.PaymentID AND GiftCardID IS NOT NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A completed refund to a gift card can''t change';
+    END IF;
+    CALL CheckGiftCardOrderRefund(NEW.OrderID, NEW.ReturnID);
     CALL CheckRefund(NEW.RefundID, NEW.PaymentID, NEW.OrderID, NEW.ReturnID,
                      NEW.Amount, NEW.TaxAmount, NEW.RefundStatusCode);
     IF NEW.RefundStatusCode = 2
        AND (OLD.RefundStatusCode <> 2 OR NEW.Amount <> OLD.Amount
             OR NOT (NEW.ApprovedByEmployeeID <=> OLD.ApprovedByEmployeeID)) THEN
         CALL CheckRefundOverride(NEW.BusinessID, NEW.OrderID, NEW.Amount, NEW.ApprovedByEmployeeID);
+    END IF;
+END$$
+
+-- A completed refund of a gift card payment goes back onto the card
+CREATE PROCEDURE RefundToGiftCard(IN pRefundID CHAR(36), IN pPaymentID CHAR(36), IN pAmount DECIMAL(10,2),
+                                  IN pAt DATETIME)
+BEGIN
+    DECLARE vCard CHAR(36);
+    SET vCard = (SELECT GiftCardID FROM Payment WHERE PaymentID = pPaymentID);
+    IF vCard IS NOT NULL THEN
+        CALL AddGiftCardEntry(vCard, 3, pAmount, NULL, pRefundID, NULL, pAt);                -- 3 = REFUND
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Refund_AfterInsert AFTER INSERT ON Refund FOR EACH ROW
+BEGIN
+    IF NEW.RefundStatusCode = 2 THEN
+        CALL RefundToGiftCard(NEW.RefundID, NEW.PaymentID, NEW.Amount, NEW.RefundDateTime);
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Refund_AfterUpdate AFTER UPDATE ON Refund FOR EACH ROW
+BEGIN
+    IF NEW.RefundStatusCode = 2 AND OLD.RefundStatusCode <> 2 THEN
+        CALL RefundToGiftCard(NEW.RefundID, NEW.PaymentID, NEW.Amount, NEW.RefundDateTime);
     END IF;
 END$$
 
@@ -483,9 +634,45 @@ BEGIN
     END IF;
 END$$
 
+-- A returned gift card must be unused (its ledger holds only the ISSUE); returning it cancels it
+CREATE PROCEDURE CheckGiftCardReturn(IN pOrderItemID CHAR(36))
+BEGIN
+    DECLARE vCard CHAR(36);
+    DECLARE vActive BOOLEAN;
+
+    SELECT GiftCardID, Active INTO vCard, vActive FROM GiftCard WHERE OrderItemID = pOrderItemID FOR UPDATE;
+
+    IF vCard IS NOT NULL
+       AND (NOT vActive OR EXISTS (SELECT 1 FROM GiftCardTransaction
+                                    WHERE GiftCardID = vCard AND GiftCardTransactionTypeCode <> 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This gift card has been used or deactivated; it can''t be returned';
+    END IF;
+END$$
+
+CREATE PROCEDURE CheckNotGiftCardReturn(IN pOrderItemID CHAR(36))
+BEGIN
+    IF EXISTS (SELECT 1 FROM GiftCard WHERE OrderItemID = pOrderItemID) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A returned gift card stays cancelled';
+    END IF;
+END$$
+
 CREATE TRIGGER TR_ReturnItem_BeforeInsert BEFORE INSERT ON ReturnItem FOR EACH ROW
 BEGIN
     CALL CheckReturnItem(NEW.ReturnItemID, NEW.OrderItemID, NEW.QuantityReturned, NEW.QuantityRestocked);
+    CALL CheckGiftCardReturn(NEW.OrderItemID);
+END$$
+
+CREATE TRIGGER TR_ReturnItem_AfterInsert AFTER INSERT ON ReturnItem FOR EACH ROW
+BEGIN
+    DECLARE vCard CHAR(36);
+    DECLARE vAmount DECIMAL(10,2);
+
+    SELECT GiftCardID INTO vCard FROM GiftCard WHERE OrderItemID = NEW.OrderItemID;
+    IF vCard IS NOT NULL THEN
+        SET vAmount = (SELECT SUM(Amount) FROM GiftCardTransaction WHERE GiftCardID = vCard);
+        CALL AddGiftCardEntry(vCard, 4, -vAmount, NULL, NULL, NEW.ReturnItemID, NULL);         -- 4 = CANCEL
+        UPDATE GiftCard SET Active = FALSE WHERE GiftCardID = vCard;
+    END IF;
 END$$
 
 -- Once money has gone back for a return, its items are frozen (CheckRefund priced them)
@@ -498,12 +685,15 @@ END$$
 
 CREATE TRIGGER TR_ReturnItem_BeforeUpdate BEFORE UPDATE ON ReturnItem FOR EACH ROW
 BEGIN
+    CALL CheckNotGiftCardReturn(OLD.OrderItemID);
+    CALL CheckNotGiftCardReturn(NEW.OrderItemID);
     CALL CheckReturnNotRefunded(OLD.ReturnID);
     CALL CheckReturnItem(NEW.ReturnItemID, NEW.OrderItemID, NEW.QuantityReturned, NEW.QuantityRestocked);
 END$$
 
 CREATE TRIGGER TR_ReturnItem_BeforeDelete BEFORE DELETE ON ReturnItem FOR EACH ROW
 BEGIN
+    CALL CheckNotGiftCardReturn(OLD.OrderItemID);
     CALL CheckReturnNotRefunded(OLD.ReturnID);
 END$$
 
@@ -535,9 +725,15 @@ END$$
 CREATE PROCEDURE CheckOrderLines(IN pOrderID CHAR(36))
 BEGIN
     IF EXISTS (SELECT 1 FROM OrderItem oi
-                WHERE oi.OrderID = pOrderID
+                WHERE oi.OrderID = pOrderID AND NOT IsGiftCardVariant(oi.VariantID)
                   AND NOT EXISTS (SELECT 1 FROM OrderItemComponent c WHERE c.OrderItemID = oi.OrderItemID)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot complete: every line needs its components recorded';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM OrderItem oi
+                WHERE oi.OrderID = pOrderID AND IsGiftCardVariant(oi.VariantID)
+                  AND NOT EXISTS (SELECT 1 FROM GiftCard g WHERE g.OrderItemID = oi.OrderItemID)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot complete: every gift card line needs its card';
     END IF;
 
     IF EXISTS (SELECT 1 FROM OrderItem oi
@@ -647,6 +843,31 @@ BEGIN
         END IF;
 
         CALL CheckOrderLines(NEW.OrderID);
+    END IF;
+END$$
+
+-- Completion loads each card sold with its line's amount
+CREATE TRIGGER TR_Orders_AfterUpdate AFTER UPDATE ON Orders FOR EACH ROW
+BEGIN
+    DECLARE vDone BOOLEAN DEFAULT FALSE;
+    DECLARE vCard CHAR(36);
+    DECLARE vAmount DECIMAL(10,2);
+    DECLARE cCards CURSOR FOR
+        SELECT g.GiftCardID, oi.LineTotal
+          FROM OrderItem oi JOIN GiftCard g ON g.OrderItemID = oi.OrderItemID
+         WHERE oi.OrderID = NEW.OrderID;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET vDone = TRUE;
+
+    IF NEW.OrderStatusCode = 5 AND OLD.OrderStatusCode <> 5 THEN
+        OPEN cCards;
+        issue: LOOP
+            FETCH cCards INTO vCard, vAmount;
+            IF vDone THEN
+                LEAVE issue;
+            END IF;
+            CALL AddGiftCardEntry(vCard, 1, vAmount, NULL, NULL, NULL, NEW.CompletedAt);                 -- 1 = ISSUE
+        END LOOP;
+        CLOSE cCards;
     END IF;
 END$$
 
@@ -797,6 +1018,103 @@ END$$
 CREATE TRIGGER TR_TimeEntry_BeforeDelete BEFORE DELETE ON TimeEntry FOR EACH ROW
 BEGIN
     CALL CheckPayPeriodOpen(OLD.PayPeriodID);
+END$$
+
+-- ---------------------------------------------------------------------------
+-- Gift cards
+-- ---------------------------------------------------------------------------
+
+-- A gift card product has no recipe or options, and a product can't become or stop being one
+CREATE PROCEDURE CheckNotGiftCardProduct(IN pProductID CHAR(36))
+BEGIN
+    IF EXISTS (SELECT 1 FROM Product WHERE ProductID = pProductID AND IsGiftCard) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card has no recipe or options';
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Product_BeforeUpdate BEFORE UPDATE ON Product FOR EACH ROW
+BEGIN
+    IF NEW.IsGiftCard <> OLD.IsGiftCard THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A product''s gift card status is fixed when it is created';
+    END IF;
+END$$
+
+CREATE TRIGGER TR_VariantRecipe_BeforeInsert BEFORE INSERT ON VariantRecipe FOR EACH ROW
+    CALL CheckNotGiftCardProduct((SELECT ProductID FROM ProductVariant WHERE VariantID = NEW.VariantID))$$
+
+CREATE TRIGGER TR_VariantRecipe_BeforeUpdate BEFORE UPDATE ON VariantRecipe FOR EACH ROW
+    CALL CheckNotGiftCardProduct((SELECT ProductID FROM ProductVariant WHERE VariantID = NEW.VariantID))$$
+
+CREATE TRIGGER TR_ProductModifierGroup_BeforeInsert BEFORE INSERT ON ProductModifierGroup FOR EACH ROW
+    CALL CheckNotGiftCardProduct(NEW.ProductID)$$
+
+CREATE TRIGGER TR_ProductModifierGroup_BeforeUpdate BEFORE UPDATE ON ProductModifierGroup FOR EACH ROW
+    CALL CheckNotGiftCardProduct(NEW.ProductID)$$
+
+-- A card is attached to an open gift card line of its own business; afterwards only Active changes,
+-- and a card cancelled by a return stays off
+CREATE TRIGGER TR_GiftCard_BeforeInsert BEFORE INSERT ON GiftCard FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM OrderItem WHERE OrderItemID = NEW.OrderItemID
+                      AND BusinessID = NEW.BusinessID AND IsGiftCardVariant(VariantID)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card must belong to a gift card line of its business';
+    END IF;
+    CALL CheckOrderItemOpen(NEW.OrderItemID);
+END$$
+
+CREATE TRIGGER TR_GiftCard_BeforeUpdate BEFORE UPDATE ON GiftCard FOR EACH ROW
+BEGIN
+    IF NEW.CodeHash <> OLD.CodeHash OR NEW.Last4 <> OLD.Last4
+       OR NEW.OrderItemID <> OLD.OrderItemID OR NEW.BusinessID <> OLD.BusinessID THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A gift card''s code and sale are fixed; only Active can change';
+    END IF;
+
+    IF NEW.Active AND NOT OLD.Active
+       AND EXISTS (SELECT 1 FROM GiftCardTransaction WHERE GiftCardID = OLD.GiftCardID
+                      AND GiftCardTransactionTypeCode = 4) THEN                         -- 4 = CANCEL
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A returned gift card stays cancelled';
+    END IF;
+END$$
+
+CREATE TRIGGER TR_GiftCard_BeforeDelete BEFORE DELETE ON GiftCard FOR EACH ROW
+    CALL CheckOrderItemOpen(OLD.OrderItemID)$$
+
+-- Ledger: only ADJUST is written by hand, by someone with permission 23 (Manage gift cards);
+-- a card never goes below zero, and only an active card can be spent
+CREATE TRIGGER TR_GiftCardTransaction_BeforeInsert BEFORE INSERT ON GiftCardTransaction FOR EACH ROW
+BEGIN
+    DECLARE vActive BOOLEAN;
+    DECLARE vBalance DECIMAL(12,2);
+
+    IF NEW.GiftCardTransactionTypeCode <> 5 AND @siapos_giftcard_write IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift card balances change through sales, payments, refunds and returns; post an ADJUST otherwise';
+    END IF;
+
+    IF NEW.GiftCardTransactionTypeCode = 5 AND NOT HasPermission(NEW.EmployeeID, 23) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only someone allowed to manage gift cards can adjust a balance';
+    END IF;
+
+    SELECT Active INTO vActive FROM GiftCard WHERE GiftCardID = NEW.GiftCardID FOR UPDATE;
+
+    IF NEW.GiftCardTransactionTypeCode = 2 AND NOT vActive THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This gift card is not active at this business';
+    END IF;
+
+    SELECT COALESCE(SUM(Amount), 0) INTO vBalance FROM GiftCardTransaction WHERE GiftCardID = NEW.GiftCardID;
+
+    IF vBalance + NEW.Amount < 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Not enough balance on this gift card';
+    END IF;
+END$$
+
+CREATE TRIGGER TR_GiftCardTransaction_BeforeUpdate BEFORE UPDATE ON GiftCardTransaction FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift card transactions are immutable; post an ADJUST instead';
+END$$
+
+CREATE TRIGGER TR_GiftCardTransaction_BeforeDelete BEFORE DELETE ON GiftCardTransaction FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gift card transactions are immutable; post an ADJUST instead';
 END$$
 
 DELIMITER ;

@@ -27,11 +27,13 @@ VALUES
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
     ('tax-prepared', @biz, 'Prepared food and drink'),
-    ('tax-packaged', @biz, 'Packaged food');
+    ('tax-packaged', @biz, 'Packaged food'),
+    ('tax-none',     @biz, 'Not taxable');
 
 -- Illustrative rates, not tax advice
 INSERT INTO LocationTaxRate (LocationID, TaxCategoryID, BusinessID, Rate)
-SELECT l.LocationID, t.TaxCategoryID, @biz, IF(t.TaxCategoryID = 'tax-prepared', 0.102500, 0.022500)
+SELECT l.LocationID, t.TaxCategoryID, @biz,
+       CASE t.TaxCategoryID WHEN 'tax-prepared' THEN 0.102500 WHEN 'tax-packaged' THEN 0.022500 ELSE 0 END
   FROM Location l CROSS JOIN TaxCategory t
  WHERE l.BusinessID = @biz AND t.BusinessID = @biz;
 
@@ -60,7 +62,7 @@ SELECT r.RoleID, @biz, p.PermissionCode
     ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
     OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
     OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20))
-    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 23));
 
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES
@@ -164,6 +166,10 @@ VALUES
     ('prd-muffin',    @biz, 'cat-bakery', 'Blueberry muffin', NULL),
     ('prd-bag',       @biz, 'cat-retail', 'House blend, whole bean', '12 oz bag to brew at home');
 
+-- Not a sale: no category, recipe or tax; the amount is typed at the register
+INSERT INTO Product (ProductID, BusinessID, Name, Description, IsGiftCard)
+VALUES ('prd-giftcard', @biz, 'Gift card', 'Amount set at checkout', TRUE);
+
 INSERT INTO ProductVariant (VariantID, ProductID, BusinessID, Name, SKU, Price, TaxCategoryID, RestockOnReturn)
 VALUES
     ('var-latte-s',   'prd-latte',     @biz, 'Small 12 oz', 'LAT-12',  4.25, 'tax-prepared', FALSE),
@@ -173,7 +179,8 @@ VALUES
     ('var-chai',      'prd-chai',      @biz, 'Regular',     'CHAI-16', 4.75, 'tax-prepared', FALSE),
     ('var-croissant', 'prd-croissant', @biz, 'Regular',     'BAK-CRO', 3.50, 'tax-prepared', FALSE),
     ('var-muffin',    'prd-muffin',    @biz, 'Regular',     'BAK-MUF', 3.25, 'tax-prepared', FALSE),
-    ('var-bag',       'prd-bag',       @biz, 'Regular',     'RET-HB12', 16.00, 'tax-packaged', TRUE);
+    ('var-bag',       'prd-bag',       @biz, 'Regular',     'RET-HB12', 16.00, 'tax-packaged', TRUE),
+    ('var-giftcard',  'prd-giftcard',  @biz, 'Regular',     'GIFT',      0.00, 'tax-none',     FALSE);
 
 INSERT INTO VariantRecipe (VariantID, StockItemID, BusinessID, QuantityPerUnit)
 VALUES
@@ -307,7 +314,7 @@ VALUES ('promo-morning-pastry', 'prd-croissant', @biz), ('promo-morning-pastry',
 CREATE TABLE _seed_order (OrderID CHAR(36) PRIMARY KEY, LocationID CHAR(36), h BIGINT,
                           LocalAt DATETIME, UtcAt DATETIME, ChannelCode TINYINT, RegisterID CHAR(36),
                           EmployeeID CHAR(36), CustomerID CHAR(36), PaymentMethodCode TINYINT,
-                          Total DECIMAL(10,2), Tip DECIMAL(10,2));
+                          Total DECIMAL(10,2), Tip DECIMAL(10,2), GiftCardID CHAR(36));
 INSERT INTO _seed_order
 SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:00'),
        IF(MOD(x.h, 10) = 0, 2, 1),                                            -- 1 = POS, 2 = ONLINE
@@ -316,7 +323,7 @@ SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:
        IF(MOD(x.h, 10) = 0 OR MOD(x.h, 5) = 0,
           ELT(MOD(x.h, 4) + 1, 'cus-ava', 'cus-ben', 'cus-chloe', 'cus-diego'), NULL),
        IF(MOD(x.h, 10) <> 0 AND MOD(x.h, 3) = 0, 1, 2),                       -- 1 = CASH, 2 = CARD
-       NULL, NULL
+       NULL, NULL, NULL
   FROM (SELECT CONCAT('ord-', lc, '-', LPAD(d.n, 2, '0'), '-', LPAD(s.n, 2, '0')) OrderID,
                l.LocationID, l.lc,
                CRC32(CONCAT(l.lc, d.n, '-', s.n)) h,
@@ -350,6 +357,17 @@ SELECT CONCAT(o.OrderID, '-', k.n), o.OrderID, o.LocationID, m.VariantID,
   FROM _seed_order o
   JOIN _seed_seq k ON k.n < 1 + (MOD(o.h, 3) > 0) + (MOD(o.h, 4) = 0)
   JOIN _seed_menu m ON m.idx = MOD(CRC32(CONCAT(o.OrderID, k.n)), 17);
+
+-- A $25 gift card sold at Downtown, and later most of a latte paid with it (3 = GIFT_CARD)
+INSERT INTO _seed_order (OrderID, LocationID, h, LocalAt, UtcAt, ChannelCode, RegisterID, EmployeeID,
+                         PaymentMethodCode, GiftCardID)
+SELECT OrderID, 'loc-downtown', 0, LocalAt, CONVERT_TZ(LocalAt, @tz, '+00:00'), 1, 'reg-dt-1', 'emp-sam', Method, Card
+  FROM (SELECT 'ord-dt-gift-sale' OrderID, TIMESTAMP(@D - INTERVAL 5 DAY, '09:32') LocalAt, 1 Method, NULL Card
+        UNION ALL
+        SELECT 'ord-dt-gift-use', TIMESTAMP(@D - INTERVAL 2 DAY, '11:05'), 3, 'gc-0001') g;
+INSERT INTO _seed_line (OrderItemID, OrderID, LocationID, VariantID, Quantity, hl)
+VALUES ('ord-dt-gift-sale-0', 'ord-dt-gift-sale', 'loc-downtown', 'var-giftcard', 1, 1),
+       ('ord-dt-gift-use-0',  'ord-dt-gift-use',  'loc-downtown', 'var-latte-l',  1, 1);
 
 CREATE TABLE _seed_linemod (OrderItemID CHAR(36), ModifierID CHAR(36));
 INSERT INTO _seed_linemod
@@ -404,6 +422,7 @@ UPDATE _seed_line l
        l.TaxCategoryID = v.TaxCategoryID,
        l.TaxRate = r.Rate;
 
+UPDATE _seed_line SET UnitPrice = 25.00 WHERE VariantID = 'var-giftcard';
 UPDATE _seed_line SET LineTotal = ROUND(Quantity * UnitPrice, 2);
 
 -- Morning pastry promotion
@@ -430,6 +449,11 @@ INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, Un
 SELECT OrderItemID, OrderID, VariantID, @biz, Quantity, UnitPrice, UnitCost, ROUND(Quantity * UnitCost, 6),
        LineTotal, DiscountAmount, TaxCategoryID, TaxRate, ROUND((LineTotal - DiscountAmount) * TaxRate, 2)
   FROM _seed_line;
+
+-- The card handed over: the backend stores an HMAC of the code; this dev hash is a plain SHA-256
+INSERT INTO GiftCard (GiftCardID, BusinessID, CodeHash, Last4, OrderItemID, CreatedAt)
+SELECT 'gc-0001', @biz, UNHEX(SHA2('dev-seed-card-0001', 256)), '4821', 'ord-dt-gift-sale-0', UtcAt
+  FROM _seed_order WHERE OrderID = 'ord-dt-gift-sale';
 
 INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta)
 SELECT lm.OrderItemID, lm.ModifierID, @biz, m.PriceDelta
@@ -463,12 +487,14 @@ UPDATE _seed_order
 -- ...and the latest tip is still open, as if entered from a slip, so "unlocked tips" has a row
 SET @open_tip = (SELECT OrderID FROM _seed_order WHERE Tip > 0 ORDER BY UtcAt DESC LIMIT 1);
 
+-- Gift card payments wait until the card is issued, when its sale completes below
 INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt,
                      PaymentStatusCode, PaymentDateTime)
 SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, Tip,
        IF(OrderID = @open_tip, NULL, UtcAt + INTERVAL 2 MINUTE),
        3, UtcAt + INTERVAL 2 MINUTE                                                   -- 3 = COMPLETED
-  FROM _seed_order;
+  FROM _seed_order
+ WHERE GiftCardID IS NULL;
 
 -- Before completion: redemptions freeze with the order, and completion checks they add up
 INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount, RedeemedAt)
@@ -479,7 +505,19 @@ SELECT @biz, CONCAT('red-', SUBSTRING(o.OrderID, 5)), 'promo-morning-pastry', o.
 
 UPDATE Orders o
   JOIN _seed_order s ON s.OrderID = o.OrderID
-   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE;              -- 5 = COMPLETED
+   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE              -- 5 = COMPLETED
+ WHERE s.GiftCardID IS NULL;
+
+INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, PaymentStatusCode, PaymentDateTime, GiftCardID)
+SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, 3, UtcAt + INTERVAL 2 MINUTE,
+       GiftCardID
+  FROM _seed_order
+ WHERE GiftCardID IS NOT NULL;
+
+UPDATE Orders o
+  JOIN _seed_order s ON s.OrderID = o.OrderID
+   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE
+ WHERE s.GiftCardID IS NOT NULL;
 
 INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt, ChangedByEmployeeID)
 SELECT CONCAT('osh-', SUBSTRING(s.OrderID, 5), '-1'), s.OrderID, @biz, 1, s.UtcAt, s.EmployeeID FROM _seed_order s

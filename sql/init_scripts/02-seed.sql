@@ -25,7 +25,8 @@ VALUES
     (19, 'Manage employees and pay rates', 'People'),
     (20, 'See reports', 'Business'),
     (21, 'Change settings', 'Business'),
-    (22, 'Manage roles', 'Business')
+    (22, 'Manage roles', 'Business'),
+    (23, 'Manage gift cards', 'Selling')
 ON DUPLICATE KEY UPDATE
     Name = VALUES(Name),
     GroupName = VALUES(GroupName);
@@ -135,6 +136,16 @@ VALUES
 ON DUPLICATE KEY UPDATE
     Description = VALUES(Description),
     Active = VALUES(Active);
+
+INSERT INTO GiftCardTransactionType (GiftCardTransactionTypeCode, Description)
+VALUES
+    (1, 'ISSUE'),
+    (2, 'REDEEM'),
+    (3, 'REFUND'),
+    (4, 'CANCEL'),
+    (5, 'ADJUST')
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description);
 
 INSERT INTO LoyaltyTransactionType (LoyaltyTransactionTypeCode, Description, Active)
 VALUES

@@ -11,15 +11,18 @@ CREATE TABLE IF NOT EXISTS Business (
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
     LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by TR_Orders_BeforeInsert
-    -- A refund over this amount, or on an order older than this many days, needs a manager's
-    -- override (CheckRefundOverride); NULL turns the rule off
     RefundOverrideAmount DECIMAL(10,2) NULL,
     RefundOverrideDays SMALLINT UNSIGNED NULL,
+    GiftCardMinAmount DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+    GiftCardMaxAmount DECIMAL(10,2) NOT NULL DEFAULT 500.00,
     
     PRIMARY KEY (BusinessID),
 
     CONSTRAINT CK_Business_RefundOverrideAmount
         CHECK (RefundOverrideAmount IS NULL OR RefundOverrideAmount >= 0),
+
+    CONSTRAINT CK_Business_GiftCardAmounts
+        CHECK (GiftCardMinAmount > 0 AND GiftCardMaxAmount >= GiftCardMinAmount),
 
     INDEX IX_Business_Name (Name)
 ) ENGINE=InnoDB;
@@ -472,6 +475,7 @@ CREATE TABLE IF NOT EXISTS Product (
     Description TEXT,
     ImageKey VARCHAR(512),          -- storage path/key of the picture; the backend stores and serves the file
     CategoryID CHAR(36) NULL,       -- one category per product; NULL = uncategorised
+    IsGiftCard BOOLEAN NOT NULL DEFAULT FALSE,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1215,6 +1219,7 @@ CREATE TABLE IF NOT EXISTS Payment (
     TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- on top of Amount; not a sale, so not in Total
     TipLockedAt DATETIME NULL,                      -- NULL: tip can still be adjusted (restaurant style)
     PaymentStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    GiftCardID CHAR(36) NULL,                       -- the card paid with; FK added after GiftCard
     PaymentDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
               ON UPDATE CURRENT_TIMESTAMP,
@@ -1244,6 +1249,9 @@ CREATE TABLE IF NOT EXISTS Payment (
 
     CONSTRAINT CK_Payment_TipAmount
         CHECK (TipAmount >= 0),
+
+    CONSTRAINT CK_Payment_GiftCard
+        CHECK ((PaymentMethodCode = 3) = (GiftCardID IS NOT NULL)),   -- 3 = GIFT_CARD
 
     INDEX IX_Payment_OrderID (OrderID),
     INDEX IX_Payment_Status (PaymentStatusCode),
@@ -1773,4 +1781,121 @@ CREATE TABLE IF NOT EXISTS Refund (
     INDEX IX_Refund_PaymentID (PaymentID),
     INDEX IX_Refund_ReturnID (ReturnID),
     INDEX IX_Refund_DateTime (RefundDateTime)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS GiftCardTransactionType (
+    GiftCardTransactionTypeCode TINYINT UNSIGNED NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+
+    PRIMARY KEY (GiftCardTransactionTypeCode)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS GiftCard (
+    GiftCardID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    CodeHash BINARY(32) NOT NULL,
+    Last4 CHAR(4) NOT NULL,                    -- shown as 'Card ••1234'
+    OrderItemID CHAR(36) NOT NULL,             -- the line that sold it
+    Active BOOLEAN NOT NULL DEFAULT TRUE,      -- FALSE: lost, stolen or cancelled
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+              ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (GiftCardID),
+
+    CONSTRAINT UQ_GiftCard_ID_Business
+        UNIQUE (GiftCardID, BusinessID),
+
+    CONSTRAINT UQ_GiftCard_Business_Code
+        UNIQUE (BusinessID, CodeHash),
+
+    CONSTRAINT UQ_GiftCard_OrderItem
+        UNIQUE (OrderItemID),
+
+    CONSTRAINT FK_GiftCard_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCard_OrderItem
+        FOREIGN KEY (OrderItemID)
+        REFERENCES OrderItem(OrderItemID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_GiftCard_Last4
+        CHECK (REGEXP_LIKE(Last4, '^[0-9A-Z]{4}$', 'c')),
+
+    INDEX IX_GiftCard_Last4 (BusinessID, Last4)
+) ENGINE=InnoDB;
+
+ALTER TABLE Payment
+    ADD CONSTRAINT FK_Payment_GiftCard
+        FOREIGN KEY (GiftCardID)
+        REFERENCES GiftCard(GiftCardID)
+        ON DELETE RESTRICT;
+
+CREATE TABLE IF NOT EXISTS GiftCardTransaction (
+    GiftCardTransactionID CHAR(36) NOT NULL,
+    GiftCardID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    GiftCardTransactionTypeCode TINYINT UNSIGNED NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,             -- + adds to the balance, - spends it
+    PaymentID CHAR(36) NULL,                   -- REDEEM
+    RefundID CHAR(36) NULL,                    -- REFUND back onto the card
+    ReturnItemID CHAR(36) NULL,                -- CANCEL, when the card itself is returned
+    EmployeeID CHAR(36) NULL,                  -- ADJUST
+    Reason VARCHAR(255) NULL,                  -- ADJUST
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (GiftCardTransactionID),
+
+    CONSTRAINT FK_GiftCardTransaction_Card
+        FOREIGN KEY (GiftCardID, BusinessID)
+        REFERENCES GiftCard(GiftCardID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCardTransaction_Type
+        FOREIGN KEY (GiftCardTransactionTypeCode)
+        REFERENCES GiftCardTransactionType(GiftCardTransactionTypeCode)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCardTransaction_Payment
+        FOREIGN KEY (PaymentID)
+        REFERENCES Payment(PaymentID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCardTransaction_Refund
+        FOREIGN KEY (RefundID)
+        REFERENCES Refund(RefundID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCardTransaction_ReturnItem
+        FOREIGN KEY (ReturnItemID)
+        REFERENCES ReturnItem(ReturnItemID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_GiftCardTransaction_Employee
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_GiftCardTransaction_Payment
+        UNIQUE (PaymentID),
+
+    CONSTRAINT UQ_GiftCardTransaction_Refund
+        UNIQUE (RefundID),
+
+    CONSTRAINT UQ_GiftCardTransaction_ReturnItem
+        UNIQUE (ReturnItemID),
+
+    -- 1 ISSUE, 2 REDEEM, 3 REFUND, 4 CANCEL, 5 ADJUST
+    CONSTRAINT CK_GiftCardTransaction_Type
+        CHECK ((GiftCardTransactionTypeCode = 1 AND Amount > 0)
+            OR (GiftCardTransactionTypeCode = 2 AND Amount < 0 AND PaymentID IS NOT NULL)
+            OR (GiftCardTransactionTypeCode = 3 AND Amount > 0 AND RefundID IS NOT NULL)
+            OR (GiftCardTransactionTypeCode = 4 AND Amount < 0 AND ReturnItemID IS NOT NULL)
+            OR (GiftCardTransactionTypeCode = 5 AND Amount <> 0 AND EmployeeID IS NOT NULL
+                AND Reason IS NOT NULL AND TRIM(Reason) <> '')),
+
+    INDEX IX_GiftCardTransaction_Card (GiftCardID, CreatedAt)
 ) ENGINE=InnoDB;

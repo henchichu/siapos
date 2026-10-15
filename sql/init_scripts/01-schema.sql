@@ -438,12 +438,40 @@ CREATE TABLE IF NOT EXISTS UnitOfMeasure (
         CHECK (UnitCode <> BaseUnitCode OR ToBaseFactor = 1)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS Category (
+    CategoryID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    Name VARCHAR(100) NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT TRUE,
+    
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+              ON UPDATE CURRENT_TIMESTAMP, 
+
+    PRIMARY KEY (CategoryID),
+
+    CONSTRAINT FK_Category_Business
+        FOREIGN KEY (BusinessID)
+        REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT UQ_Category_Business_Name
+        UNIQUE (BusinessID, Name),
+    
+       CONSTRAINT UQ_Category_Business
+        UNIQUE (CategoryID, BusinessID),
+    
+
+    INDEX IX_Category_BusinessID (BusinessID)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Product (
     ProductID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(150) NOT NULL,
     Description TEXT,
     ImageKey VARCHAR(512),          -- storage path/key of the picture; the backend stores and serves the file
+    CategoryID CHAR(36) NULL,       -- one category per product; NULL = uncategorised
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -455,6 +483,11 @@ CREATE TABLE IF NOT EXISTS Product (
     CONSTRAINT FK_Product_Business
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Product_Category
+        FOREIGN KEY (CategoryID, BusinessID)
+        REFERENCES Category(CategoryID, BusinessID)
         ON DELETE RESTRICT,
 
     CONSTRAINT UQ_Product_Business
@@ -574,6 +607,7 @@ CREATE TABLE IF NOT EXISTS ModifierGroup (
     Name VARCHAR(100) NOT NULL,                -- e.g. 'Milk', 'Extras'
     MinSelect TINYINT UNSIGNED NOT NULL DEFAULT 0,
     MaxSelect TINYINT UNSIGNED NULL,           -- NULL = no limit
+    DefaultModifierID CHAR(36) NULL,           -- preselected option; FK added after Modifier
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -620,8 +654,18 @@ CREATE TABLE IF NOT EXISTS Modifier (
         UNIQUE (ModifierID, BusinessID),
 
     CONSTRAINT UQ_Modifier_Group_Name
-        UNIQUE (ModifierGroupID, Name)
+        UNIQUE (ModifierGroupID, Name),
+
+    CONSTRAINT UQ_Modifier_ID_Group
+        UNIQUE (ModifierID, ModifierGroupID)
 ) ENGINE=InnoDB;
+
+-- The default must be one of the group's own options
+ALTER TABLE ModifierGroup
+    ADD CONSTRAINT FK_ModifierGroup_Default
+        FOREIGN KEY (DefaultModifierID, ModifierGroupID)
+        REFERENCES Modifier(ModifierID, ModifierGroupID)
+        ON DELETE RESTRICT;
 
 -- Modifier adds a fixed amount of stock: 'Extra shot' = +18 g espresso beans
 CREATE TABLE IF NOT EXISTS ModifierAddition (
@@ -761,51 +805,6 @@ CREATE TABLE IF NOT EXISTS StockItemSupplier (
         UNIQUE ((IF(IsPreferred, StockItemID, NULL))),
 
     INDEX IX_StockItemSupplier_SupplierID (SupplierID)
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS Category (
-    CategoryID CHAR(36) NOT NULL,
-    BusinessID CHAR(36) NOT NULL,
-    Name VARCHAR(100) NOT NULL,
-    Active BOOLEAN NOT NULL DEFAULT TRUE,
-    
-    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-              ON UPDATE CURRENT_TIMESTAMP, 
-
-    PRIMARY KEY (CategoryID),
-
-    CONSTRAINT FK_Category_Business
-        FOREIGN KEY (BusinessID)
-        REFERENCES Business(BusinessID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT UQ_Category_Business_Name
-        UNIQUE (BusinessID, Name),
-    
-       CONSTRAINT UQ_Category_Business
-        UNIQUE (CategoryID, BusinessID),
-    
-
-    INDEX IX_Category_BusinessID (BusinessID)
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS ProductCategory (
-    ProductID CHAR(36) NOT NULL,
-    CategoryID CHAR(36) NOT NULL,
-    BusinessID CHAR(36) NOT NULL,
-
-    PRIMARY KEY (ProductID, CategoryID),
-
-    CONSTRAINT FK_ProductCategory_Product
-        FOREIGN KEY (ProductID, BusinessID)
-        REFERENCES Product(ProductID, BusinessID)
-        ON DELETE CASCADE,
-
-    CONSTRAINT FK_ProductCategory_Category
-        FOREIGN KEY (CategoryID, BusinessID)
-        REFERENCES Category(CategoryID, BusinessID)
-        ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS Inventory (
@@ -1297,6 +1296,42 @@ CREATE TABLE IF NOT EXISTS Delivery (
     INDEX IX_Delivery_Location_Date (LocationID, DeliveredOn)
 ) ENGINE=InnoDB;
 
+-- One stocktake at a location; only items that differ get a COUNT_CORRECTION row pointing to it,
+-- so the number of items counted is stored here
+CREATE TABLE IF NOT EXISTS StockCount (
+    StockCountID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    LocationID CHAR(36) NOT NULL,
+    CountedByEmployeeID CHAR(36) NOT NULL,
+    CountedAt DATETIME NOT NULL,
+    ItemsCounted SMALLINT UNSIGNED NOT NULL,
+    Note VARCHAR(255) NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (StockCountID),
+
+    CONSTRAINT UQ_StockCount_ID_Location
+        UNIQUE (StockCountID, LocationID),
+
+    CONSTRAINT FK_StockCount_Location
+        FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_StockCount_CountedBy
+        FOREIGN KEY (CountedByEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_StockCount_ItemsCounted
+        CHECK (ItemsCounted > 0),
+
+    CONSTRAINT CK_StockCount_Note
+        CHECK (Note IS NULL OR TRIM(Note) <> ''),
+
+    INDEX IX_StockCount_Location_CountedAt (LocationID, CountedAt)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS InventoryTransaction (
     InventoryTransactionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
@@ -1310,6 +1345,7 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
 
     OrderID CHAR(36),
     DeliveryID CHAR(36),
+    StockCountID CHAR(36),
     Note VARCHAR(255) NULL,
     TransactionDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1319,6 +1355,14 @@ CREATE TABLE IF NOT EXISTS InventoryTransaction (
         FOREIGN KEY (DeliveryID, LocationID)
         REFERENCES Delivery(DeliveryID, LocationID)
         ON DELETE RESTRICT,
+
+    CONSTRAINT FK_InventoryTransaction_StockCount
+        FOREIGN KEY (StockCountID, LocationID)
+        REFERENCES StockCount(StockCountID, LocationID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_InventoryTransaction_StockCount
+        CHECK (StockCountID IS NULL OR TransactionTypeCode = 8),       -- 8 = COUNT_CORRECTION
 
     CONSTRAINT CK_InventoryTransaction_Note
         CHECK (Note IS NULL OR TRIM(Note) <> ''),
@@ -1401,6 +1445,7 @@ CREATE TABLE IF NOT EXISTS Promotion (
     PromotionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(100) NOT NULL,
+    Code VARCHAR(30) NULL,                     -- what a customer types; NULL = picked by staff only
     DiscountTypeCode TINYINT UNSIGNED NOT NULL,
     DiscountValue DECIMAL(10,2) NOT NULL,
     StartsAt DATETIME NOT NULL,
@@ -1410,6 +1455,11 @@ CREATE TABLE IF NOT EXISTS Promotion (
     FOREIGN KEY (BusinessID) REFERENCES Business(BusinessID) ON DELETE RESTRICT,
     CONSTRAINT UQ_Promotion_Business
         UNIQUE (PromotionID, BusinessID),
+    CONSTRAINT UQ_Promotion_Business_Code
+        UNIQUE (BusinessID, Code),
+    -- stored upper-case with no spaces; the backend normalises what was typed ('c' = case-sensitive)
+    CONSTRAINT CK_Promotion_Code
+        CHECK (Code IS NULL OR REGEXP_LIKE(Code, '^[A-Z0-9-]{3,30}$', 'c')),
     CONSTRAINT FK_Promotion_DiscountType
         FOREIGN KEY (DiscountTypeCode)
         REFERENCES DiscountType(DiscountTypeCode)

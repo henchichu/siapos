@@ -155,21 +155,14 @@ VALUES      -- 1 each, 2 g, 6 ml
     ('stk-muffin',    @biz, 'Blueberry muffin',      1),
     ('stk-bag',       @biz, 'House blend 12 oz bag', 1);
 
-INSERT INTO Product (ProductID, BusinessID, Name, Description)
+INSERT INTO Product (ProductID, BusinessID, CategoryID, Name, Description)
 VALUES
-    ('prd-latte',     @biz, 'Latte',            'Double shot with steamed milk'),
-    ('prd-americano', @biz, 'Americano',        'Espresso and hot water'),
-    ('prd-chai',      @biz, 'Chai latte',       'Spiced black tea with steamed milk'),
-    ('prd-croissant', @biz, 'Butter croissant', NULL),
-    ('prd-muffin',    @biz, 'Blueberry muffin', NULL),
-    ('prd-bag',       @biz, 'House blend, whole bean', '12 oz bag to brew at home');
-
-INSERT INTO ProductCategory (ProductID, CategoryID, BusinessID)
-VALUES
-    ('prd-latte', 'cat-coffee', @biz), ('prd-americano', 'cat-coffee', @biz),
-    ('prd-chai', 'cat-tea', @biz),
-    ('prd-croissant', 'cat-bakery', @biz), ('prd-muffin', 'cat-bakery', @biz),
-    ('prd-bag', 'cat-retail', @biz), ('prd-bag', 'cat-coffee', @biz);
+    ('prd-latte',     @biz, 'cat-coffee', 'Latte',            'Double shot with steamed milk'),
+    ('prd-americano', @biz, 'cat-coffee', 'Americano',        'Espresso and hot water'),
+    ('prd-chai',      @biz, 'cat-tea',    'Chai latte',       'Spiced black tea with steamed milk'),
+    ('prd-croissant', @biz, 'cat-bakery', 'Butter croissant', NULL),
+    ('prd-muffin',    @biz, 'cat-bakery', 'Blueberry muffin', NULL),
+    ('prd-bag',       @biz, 'cat-retail', 'House blend, whole bean', '12 oz bag to brew at home');
 
 INSERT INTO ProductVariant (VariantID, ProductID, BusinessID, Name, SKU, Price, TaxCategoryID, RestockOnReturn)
 VALUES
@@ -201,10 +194,13 @@ VALUES
 
 INSERT INTO Modifier (ModifierID, ModifierGroupID, BusinessID, Name, PriceDelta)
 VALUES
+    ('mod-whole',      'mg-milk',    @biz, 'Whole milk', 0.00),   -- already in the recipe, so no stock rows
     ('mod-oat',        'mg-milk',    @biz, 'Oat milk',   0.75),
     ('mod-vanilla',    'mg-flavour', @biz, 'Vanilla',    0.60),
     ('mod-caramel',    'mg-flavour', @biz, 'Caramel',    0.60),
     ('mod-extra-shot', 'mg-extras',  @biz, 'Extra shot', 1.00);
+
+UPDATE ModifierGroup SET DefaultModifierID = 'mod-whole' WHERE ModifierGroupID = 'mg-milk';
 
 INSERT INTO ModifierSubstitution (ModifierID, FromStockItemID, ToStockItemID, BusinessID)
 VALUES ('mod-oat', 'stk-milk', 'stk-oat', @biz);
@@ -298,8 +294,8 @@ VALUES
     ('loy-ava',   'cus-ava',   'tier-gold', @biz, UTC_TIMESTAMP() - INTERVAL 200 DAY),
     ('loy-chloe', 'cus-chloe', 'tier-bean', @biz, UTC_TIMESTAMP() - INTERVAL 40 DAY);
 
-INSERT INTO Promotion (PromotionID, BusinessID, Name, DiscountTypeCode, DiscountValue, StartsAt, EndsAt)
-VALUES ('promo-morning-pastry', @biz, 'Morning pastry: 20% off before 10am', 1, 20,   -- 1 = PERCENT
+INSERT INTO Promotion (PromotionID, BusinessID, Name, Code, DiscountTypeCode, DiscountValue, StartsAt, EndsAt)
+VALUES ('promo-morning-pastry', @biz, 'Morning pastry: 20% off before 10am', 'PASTRY20', 1, 20,   -- 1 = PERCENT
         TIMESTAMP(@D - INTERVAL 30 DAY), TIMESTAMP(@D + INTERVAL 60 DAY));
 
 INSERT INTO PromotionProduct (PromotionID, ProductID, BusinessID)
@@ -521,7 +517,7 @@ UPDATE Orders SET Subtotal = 5.25, Tax = 0.54, Total = 5.79 WHERE OrderID = 'ord
 -- ---------------------------------------------------------------------------
 CREATE TABLE _seed_loss (ID CHAR(36), LocationID CHAR(36), StockItemID CHAR(36), EmployeeID CHAR(36),
                          Qty DECIMAL(12,3), TypeCode TINYINT, DaysAgo INT, AtTime TIME,
-                         UnitCost DECIMAL(18,6), Note VARCHAR(255));
+                         UnitCost DECIMAL(18,6), Note VARCHAR(255), StockCountID CHAR(36));
 INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime, Note)
 VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
     ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15', 'Dropped jug'),
@@ -535,15 +531,25 @@ VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
     ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00', NULL),
     ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00', NULL);
 
+-- Yesterday's closing count at each café: every stock item counted, one difference each
+INSERT INTO StockCount (StockCountID, BusinessID, LocationID, CountedByEmployeeID, CountedAt, ItemsCounted, Note)
+SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, 'emp-leo',
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 1 DAY, '18:00'), @tz, '+00:00'),
+       (SELECT COUNT(*) FROM StockItem WHERE BusinessID = @biz),
+       IF(l.LocationID = 'loc-downtown', 'Sleeve of 16 oz cups crushed in the back', 'Found a spare sleeve of 12 oz cups')
+  FROM Location l WHERE l.LocationID IN ('loc-downtown', 'loc-campus');
+UPDATE _seed_loss SET StockCountID = CONCAT('cnt-', SUBSTRING(LocationID, 5)) WHERE TypeCode = 8;
+
 -- Staged: the ledger trigger updates Inventory, so the INSERT can't read Inventory itself.
 -- Losses don't move the average, so one lookup holds for every row.
 UPDATE _seed_loss s JOIN Inventory i ON i.LocationID = s.LocationID AND i.StockItemID = s.StockItemID
    SET s.UnitCost = IF(s.TypeCode IN (5, 6, 7), i.AverageUnitCost, NULL);
 
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
-                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, Note)
+                                  QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, Note,
+                                  StockCountID)
 SELECT ID, @biz, StockItemID, LocationID, EmployeeID, Qty, UnitCost, TypeCode,
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL DaysAgo DAY, AtTime), @tz, '+00:00'), Note
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL DaysAgo DAY, AtTime), @tz, '+00:00'), Note, StockCountID
   FROM _seed_loss;
 
 -- ---------------------------------------------------------------------------

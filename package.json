@@ -4,9 +4,10 @@
   "description": "---",
   "main": "index.js",
   "scripts": {
-    "test": "sql/tests/run.sh",
+    "test": "sql/tests/run.sh && node --test tests/unit/*.test.js",
     "start": "node server/server.js",
-    "dev": "node --watch server/server.js"
+    "dev": "node --watch server/server.js",
+    "test:live": "node --test tests/live/api.test.js && node tests/live/click-through.js"
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,13 @@
   },
   "homepage": "https://github.com/henchichu/siapos#readme",
   "dependencies": {
-    "mysql2": "^3.24.5"
+    "express": "^5.3.0",
+    "htm": "3.1.1",
+    "mysql2": "^3.24.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }

@@ -1,0 +1,10 @@
+# Development only: adds the demo shop and the known dev PINs to a fresh database.
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+name: siapos
+
+services:
+  mysql-db:
+    environment:
+      SIAPOS_DEV: "1"
+    volumes:
+      - ./sql/dev:/sql-dev:ro

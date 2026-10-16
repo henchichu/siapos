@@ -450,9 +450,10 @@ SELECT OrderItemID, OrderID, VariantID, @biz, Quantity, UnitPrice, UnitCost, ROU
        LineTotal, DiscountAmount, TaxCategoryID, TaxRate, ROUND((LineTotal - DiscountAmount) * TaxRate, 2)
   FROM _seed_line;
 
--- The card handed over: the backend stores an HMAC of the code; this dev hash is a plain SHA-256
+-- The card handed over: the backend stores HMAC-SHA256(giftcard secret, code). This is that value for the code
+-- 'dev-seed-card-0001' under the dev secret 'dev-giftcard-secret' (sql/secrets/giftcard_secret.txt)
 INSERT INTO GiftCard (GiftCardID, BusinessID, CodeHash, Last4, OrderItemID, CreatedAt)
-SELECT 'gc-0001', @biz, UNHEX(SHA2('dev-seed-card-0001', 256)), '4821', 'ord-dt-gift-sale-0', UtcAt
+SELECT 'gc-0001', @biz, UNHEX('f0e400c15bab32c415c2ad9f54c6ba078d9341f2c26ff70810e6e45890258756'), '4821', 'ord-dt-gift-sale-0', UtcAt
   FROM _seed_order WHERE OrderID = 'ord-dt-gift-sale';
 
 INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta)

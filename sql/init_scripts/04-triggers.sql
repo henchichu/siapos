@@ -415,23 +415,47 @@ BEGIN
 END$$
 
 -- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
--- checks they add up to Orders.DiscountAmount); a one-off needs permission 4 (Approve discounts)
-CREATE PROCEDURE CheckOrderDiscount(IN pOrderID CHAR(36), IN pApprovedBy CHAR(36))
+-- checks they add up to Orders.DiscountAmount). A one-off is signed by someone with permission 4
+-- (Approve discounts). A staff discount (StaffEmployeeID) needs no signature unless the business
+-- turns that on, and must be for an active employee.
+CREATE PROCEDURE CheckOrderDiscount(IN pOrderID CHAR(36), IN pApprovedBy CHAR(36), IN pStaff CHAR(36),
+                                    IN pAmount DECIMAL(10,2))
 BEGIN
     CALL CheckOrderOpen(pOrderID);
 
-    IF NOT HasPermission(pApprovedBy, 4) THEN
+    IF pApprovedBy IS NOT NULL AND NOT HasPermission(pApprovedBy, 4) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A one-off discount must be approved by someone allowed to approve discounts';
+    END IF;
+
+    IF pStaff IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE EmployeeID = pStaff AND Active) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A staff discount is only for an active employee';
+        END IF;
+
+        IF pApprovedBy IS NULL
+           AND EXISTS (SELECT 1 FROM Business b JOIN Orders o ON o.BusinessID = b.BusinessID
+                        WHERE o.OrderID = pOrderID AND b.StaffDiscountsNeedApproval) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This business needs a manager to approve staff discounts';
+        END IF;
+
+        -- unsigned staff discounts stay under the business's cap, measured on the order's lines
+        IF pApprovedBy IS NULL
+           AND EXISTS (SELECT 1 FROM Business b JOIN Orders o ON o.BusinessID = b.BusinessID
+                        WHERE o.OrderID = pOrderID
+                          AND pAmount * 100 > b.StaffDiscountMaxPercent
+                                              * (SELECT COALESCE(SUM(LineTotal), 0) FROM OrderItem WHERE OrderID = pOrderID)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A staff discount over the business limit needs a manager to approve it';
+        END IF;
     END IF;
 END$$
 
 CREATE TRIGGER TR_OrderDiscount_BeforeInsert BEFORE INSERT ON OrderDiscount FOR EACH ROW
-    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID)$$
+    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID, NEW.StaffEmployeeID, NEW.Amount)$$
 
 CREATE TRIGGER TR_OrderDiscount_BeforeUpdate BEFORE UPDATE ON OrderDiscount FOR EACH ROW
 BEGIN
     CALL CheckOrderOpen(OLD.OrderID);
-    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID);
+    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID, NEW.StaffEmployeeID, NEW.Amount);
 END$$
 
 CREATE TRIGGER TR_OrderDiscount_BeforeDelete BEFORE DELETE ON OrderDiscount FOR EACH ROW

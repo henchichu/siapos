@@ -1,94 +1,39 @@
-const http = require("http");
-const fs = require("fs/promises");
 const path = require("path");
+const express = require("express");
+const router = require("./router");
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
-const publicDirectory = path.resolve(__dirname, "../public");
 
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
+const app = express();
+
+app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
+
+const VENDOR = {
+  "react.js": "react/umd/react.production.min.js",
+  "react-dom.js": "react-dom/umd/react-dom.production.min.js",
+  "htm.js": "htm/dist/htm.umd.js",
 };
+app.get("/vendor/:file", (req, res, next) => {
+  const file = VENDOR[req.params.file];
+  if (!file) return next();
+  res.sendFile(path.join(__dirname, "../node_modules", file), { maxAge: "1d" });
+});
 
-async function handleRequest(request, response) {
-  const requestUrl = new URL(
-    request.url,
-    `http://${request.headers.host || "localhost"}`
-  );
+app.use("/api", express.json(), router);
+app.use(express.static(path.resolve(__dirname, "../public")));
 
-  // Docker and deployment health check
-  if (request.method === "GET" && requestUrl.pathname === "/health") {
-    response.writeHead(200, {
-      "Content-Type": "application/json; charset=utf-8",
-    });
+app.use((req, res) => res.status(404).type("text").send("Page not found"));
+app.use((err, req, res, next) => {
+  if (err.status) return res.status(err.status).json({ error: err.message });
+  // a rule the database enforces itself (SQLSTATE 45000): its message is written for people
+  if (err.sqlState === "45000") return res.status(409).json({ error: err.sqlMessage });
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
-    response.end(
-      JSON.stringify({
-        status: "ok",
-        application: "SIAPOS",
-      })
-    );
-
-    return;
-  }
-
-  if (request.method !== "GET") {
-    response.writeHead(405, {
-      "Content-Type": "application/json; charset=utf-8",
-    });
-
-    response.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
-  }
-
-  const requestedPage =
-    requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
-
-  const relativePath = decodeURIComponent(requestedPage).replace(/^\/+/, "");
-  const filePath = path.resolve(publicDirectory, relativePath);
-
-  // Prevent requests from accessing files outside public/
-  if (
-    filePath !== publicDirectory &&
-    !filePath.startsWith(`${publicDirectory}${path.sep}`)
-  ) {
-    response.writeHead(403);
-    response.end("Forbidden");
-    return;
-  }
-
-  try {
-    const file = await fs.readFile(filePath);
-    const extension = path.extname(filePath).toLowerCase();
-
-    response.writeHead(200, {
-      "Content-Type":
-        contentTypes[extension] || "application/octet-stream",
-    });
-
-    response.end(file);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      response.writeHead(404, {
-        "Content-Type": "text/plain; charset=utf-8",
-      });
-      response.end("Page not found");
-      return;
-    }
-
-    console.error(error);
-    response.writeHead(500, {
-      "Content-Type": "text/plain; charset=utf-8",
-    });
-    response.end("Internal server error");
-  }
+if (require.main === module) {
+  app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
 }
 
-const server = http.createServer(handleRequest);
-
-server.listen(PORT, HOST, () => {
-  console.log(`SIAPOS is running at http://localhost:${PORT}`);
-});
+module.exports = app;

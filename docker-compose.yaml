@@ -36,8 +36,10 @@ services:
       DB_NAME: miniworld
       DB_USER: app_user
       DB_PASSWORD_FILE: /run/secrets/app_user_password
+      GIFTCARD_SECRET_FILE: /run/secrets/giftcard_secret
     secrets:
       - app_user_password
+      - giftcard_secret
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -50,3 +52,5 @@ secrets:
     file: ./sql/secrets/root_password.txt
   app_user_password:
     file: ./sql/secrets/app_user_password.txt
+  giftcard_secret:
+    file: ./sql/secrets/giftcard_secret.txt

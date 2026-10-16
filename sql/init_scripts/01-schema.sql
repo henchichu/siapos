@@ -15,11 +15,16 @@ CREATE TABLE IF NOT EXISTS Business (
     RefundOverrideDays SMALLINT UNSIGNED NULL,
     GiftCardMinAmount DECIMAL(10,2) NOT NULL DEFAULT 5.00,
     GiftCardMaxAmount DECIMAL(10,2) NOT NULL DEFAULT 500.00,
+    StaffDiscountsNeedApproval BOOLEAN NOT NULL DEFAULT FALSE,   -- FALSE: staff discounts need no manager
+    StaffDiscountMaxPercent DECIMAL(5,2) NOT NULL DEFAULT 20.00, -- a bigger staff discount needs a manager's signature
     
     PRIMARY KEY (BusinessID),
 
     CONSTRAINT CK_Business_RefundOverrideAmount
         CHECK (RefundOverrideAmount IS NULL OR RefundOverrideAmount >= 0),
+
+    CONSTRAINT CK_Business_StaffDiscountMaxPercent
+        CHECK (StaffDiscountMaxPercent BETWEEN 0 AND 100),
 
     CONSTRAINT CK_Business_GiftCardAmounts
         CHECK (GiftCardMinAmount > 0 AND GiftCardMaxAmount >= GiftCardMinAmount),
@@ -1519,7 +1524,8 @@ CREATE TABLE IF NOT EXISTS OrderDiscount (
     BusinessID CHAR(36) NOT NULL,
     Amount DECIMAL(10,2) NOT NULL,
     Reason VARCHAR(255) NOT NULL,
-    ApprovedByEmployeeID CHAR(36) NOT NULL,
+    ApprovedByEmployeeID CHAR(36) NULL,        -- the manager who signed; NULL for a staff discount nobody had to sign
+    StaffEmployeeID CHAR(36) NULL,             -- set when the discount is the employee's own staff discount
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (OrderDiscountID),
@@ -1533,6 +1539,14 @@ CREATE TABLE IF NOT EXISTS OrderDiscount (
         FOREIGN KEY (ApprovedByEmployeeID, BusinessID)
         REFERENCES Employee(EmployeeID, BusinessID)
         ON DELETE RESTRICT,
+
+    CONSTRAINT FK_OrderDiscount_Staff
+        FOREIGN KEY (StaffEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_OrderDiscount_Signed
+        CHECK (ApprovedByEmployeeID IS NOT NULL OR StaffEmployeeID IS NOT NULL),
 
     CONSTRAINT CK_OrderDiscount_Amount
         CHECK (Amount > 0),

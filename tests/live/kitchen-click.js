@@ -1,4 +1,4 @@
-// Drives the real kitchen page in jsdom: three queues, the Report a loss transition, My shift, sign-out.
+// Drives the real kitchen page in jsdom: three queues, the Report a loss transition, the barista's menu.
 // jsdom has no layout, so the scroll rules are checked as CSS text, not as pixels.
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +13,10 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
 
 (async () => {
   const { server, base } = await start();
+  // its own ticket: a member's order with options, so the screen has something to show whatever else has been done to the demo tickets
+  const sellerLogin = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420004", pin: "444444" }) });
+  await fetch(base + "/api/register/orders", { method: "POST", headers: { "content-type": "application/json", cookie: sellerLogin.headers.get("set-cookie").split(";")[0] },
+    body: JSON.stringify({ items: [{ key: "a", variantId: "var-latte-l", quantity: 2, modifierIds: ["mod-oat", "mod-extra-shot"] }], customerId: "cus-ava", payment: { method: "cash" } }) });
   const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ employeeNumber: "10420005", pin: "555555" }) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
@@ -24,7 +28,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   w.eval(lib("htm/dist/htm.umd.js"));
   const errors = [];
   w.console.error = (...a) => errors.push(a.join(" ").slice(0, 300));
-  w.eval(fs.readFileSync(path.join(root, "public/js/api.js"), "utf8") + "\n" + fs.readFileSync(path.join(root, "public/js/kitchen.js"), "utf8"));
+  w.eval(["api", "shell", "kitchen"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n"));
 
   const $ = (sel) => w.document.querySelector(sel);
   const $$ = (sel) => [...w.document.querySelectorAll(sel)];
@@ -38,15 +42,13 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const counts = $$(".queue .badge").map((b) => Number(b.textContent));
   check("badges match the cards", $$(".queue").every((q, i) => q.querySelectorAll(".ticket").length === counts[i]));
   check("a ticket shows order, customer, item and a Start button", /Order \d+/.test(text()) && /Ava/.test(text()) && /2 × Latte/.test(text()) && !!byText(".queue .kbtn", "Start"));
-  check("options and note show", /Large 16 oz · Extra shot, Oat milk/.test(text()) && /Note: Extra hot, please/.test(text()));
+  check("size and options show", /Large 16 oz · Extra shot, Oat milk/.test(text()));
 
   const css = fs.readFileSync(path.join(root, "public/css/kitchen.css"), "utf8");
   check("each queue scrolls on its own", /\.queue \{[^}]*overflow-y: auto/.test(css) && /\.queues \{[^}]*min-height: 0/.test(css));
 
-  await click(byText("button", "My shift"));
-  check("My shift shows the success panel", /Success: My shift view initialized successfully\./.test(text()) && w.location.hash === "#my%20shift");
-  await click(byText("button", "Kitchen"));
-  check("Kitchen link returns to the queues", $$(".queue").length === 3);
+  const links = $$(".nav a.link").map((a) => a.textContent);
+  check("a barista's menu lists only Kitchen and My shift", links.join("|") === "Kitchen|My shift", links.join("|"));
 
   await click(byText("button", "Report a loss"), 500);
   check("Report a loss opens screen 2, #loss", /What was lost\?/.test(text()) && /Reported today at Brewbean Campus/.test(text()) && w.location.hash === "#loss");

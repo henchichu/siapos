@@ -16,6 +16,9 @@ setInterval(() => {
 const tokenOf = (req) => /(?:^|;\s*)session=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
 
 function create(res, data) {
+  Object.freeze(data.info.nav);
+  Object.freeze(data.info.tiles);
+  Object.freeze(data.info); // the role and what it may open can't change until the next sign-in
   const token = crypto.randomBytes(32).toString("hex");
   sessions.set(token, { ...data, approvals: new Map(), expires: Date.now() + SESSION_MS });
   // set COOKIE_SECURE=1 once the app is served over HTTPS
@@ -27,11 +30,16 @@ function destroy(req, res) {
   res.clearCookie("session");
 }
 
-function requireSession(req, res, next) {
+function fromRequest(req) {
   const token = tokenOf(req);
   const s = sessions.get(token);
   if (s && s.expires < Date.now()) sessions.delete(token);
-  if (!s || s.expires < Date.now()) return res.status(401).json({ error: "Not signed in." });
+  return s && s.expires >= Date.now() ? s : null;
+}
+
+function requireSession(req, res, next) {
+  const s = fromRequest(req);
+  if (!s) return res.status(401).json({ error: "Not signed in." });
   req.session = s;
   next();
 }
@@ -71,6 +79,6 @@ function giftFailed(s) {
 const giftOk = (s) => { s.giftFails = null; };
 
 module.exports = {
-  create, destroy, requireSession, requirePermission,
+  create, destroy, fromRequest, requireSession, requirePermission,
   grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk,
 };

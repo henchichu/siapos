@@ -8,7 +8,7 @@ const findEmployee = (db, employeeNumber, lock = "") =>
   db
     .query(
       `SELECT e.EmployeeID, e.BusinessID, e.FirstName, e.LastName, b.Name AS BusinessName,
-              r.Name AS RoleName, r.OpensTo,
+              r.Name AS RoleName, r.OpensTo, r.IsOwner,
               c.PinHash, c.FailedPinAttempts, c.LockedUntil,
               c.LockedUntil > NOW() AS IsLocked
          FROM Employee e
@@ -54,41 +54,23 @@ async function recordFailure(conn, employeeId) {
 // Sign-in: wrong tries count against that employee. Manager override (payerId = the cashier): wrong tries
 // count against the cashier, so nobody can lock a manager out by guessing at their PIN.
 // status: ok | missing | locked | bad (with retriesLeft)
-async function authenticate(employeeNumber, pin, payerId) {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+const authenticate = (employeeNumber, pin, payerId) =>
+  pool.tx(async (conn) => {
     if (payerId) {
       const [[p]] = await conn.query("SELECT LockedUntil > NOW() AS locked, LockedUntil FROM EmployeeCredential WHERE EmployeeID = ? FOR UPDATE", [payerId]);
-      if (p?.locked) {
-        await conn.rollback();
-        return { status: "locked", lockedUntil: p.LockedUntil };
-      }
+      if (p?.locked) return { status: "locked", lockedUntil: p.LockedUntil };
     }
     // FOR UPDATE serialises concurrent guesses so none escape the attempt counter
     const emp = await findEmployee(conn, String(employeeNumber), "FOR UPDATE");
-    let result;
     if (emp && !emp.IsLocked && emp.PinHash && verifySecret(String(pin), emp.PinHash)) {
       await conn.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [emp.EmployeeID]);
-      result = { status: "ok", emp };
-    } else if (payerId) {
-      result = await recordFailure(conn, payerId);
-    } else if (!emp) {
-      result = { status: "missing" };
-    } else if (emp.IsLocked) {
-      result = { status: "locked", lockedUntil: emp.LockedUntil };
-    } else {
-      result = await recordFailure(conn, emp.EmployeeID);
+      return { status: "ok", emp };
     }
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
-}
+    if (payerId) return recordFailure(conn, payerId);
+    if (!emp) return { status: "missing" };
+    if (emp.IsLocked) return { status: "locked", lockedUntil: emp.LockedUntil };
+    return recordFailure(conn, emp.EmployeeID);
+  });
 
 // Same rule as the DB's HasPermission() (app_user can't execute routines): the owner role holds everything,
 // other roles what RolePermission grants

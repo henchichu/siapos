@@ -153,135 +153,133 @@ router.post("/register/orders", async (req, res) => {
   if (!methodCode) throw new HttpError(400, "Choose a payment method.");
   if (!registerId) throw new HttpError(409, "No register is available at your location.");
 
-  const conn = await pool.getConnection();
+  let receipt;
   try {
-    await conn.beginTransaction();
-    const priced = await priceCart(conn, req.session, req.body);
-    if (req.body.promotionId && !priced.promotion.applies) throw new HttpError(400, "The promotion doesn't apply to this order.");
+    receipt = await pool.tx(async (conn) => {
+      const priced = await priceCart(conn, req.session, req.body);
+      if (req.body.promotionId && !priced.promotion.applies) throw new HttpError(400, "The promotion doesn't apply to this order.");
 
-    let approval = null;
-    if (priced.discount) {
-      approval = checkApproval(req.session, String(req.body.approvalToken), priced.discount);
-      if (!approval) throw new HttpError(403, "The discount approval has expired or no longer matches. Remove it and apply it again.");
-    }
-    if (customerId) {
-      const [[c]] = await conn.query("SELECT 1 AS ok FROM Customer WHERE CustomerID = ? AND BusinessID = ? AND Active", [String(customerId), businessId]);
-      if (!c) throw new HttpError(400, "That rewards member isn't available.");
-    }
-    const tipCents = methodCode === 2 ? Math.round(Number(payment.tip || 0) * 100) : 0;
-    if (!Number.isInteger(tipCents) || tipCents < 0 || tipCents > 1000000) throw new HttpError(400, "Enter a valid tip.");
-    if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
-    let giftCardId = null;
-    if (methodCode === 3) {
-      if (!giftAllowed(req.session)) throw new HttpError(429, "Too many wrong gift card codes. Try again in a few minutes.");
-      const [[g]] = await conn.query("SELECT GiftCardID FROM GiftCard WHERE BusinessID = ? AND CodeHash = ? AND Active",
-        [businessId, codeHash(String(payment.giftCardCode || "").trim())]);
-      if (!g) {
-        giftFailed(req.session);
-        throw new HttpError(400, "Gift card not found.");
+      let approval = null;
+      if (priced.discount) {
+        approval = checkApproval(req.session, String(req.body.approvalToken), priced.discount);
+        if (!approval) throw new HttpError(403, "The discount approval has expired or no longer matches. Remove it and apply it again.");
       }
-      giftCardId = g.GiftCardID;
-      giftOk(req.session);
-    }
+      if (customerId) {
+        const [[c]] = await conn.query("SELECT 1 AS ok FROM Customer WHERE CustomerID = ? AND BusinessID = ? AND Active", [String(customerId), businessId]);
+        if (!c) throw new HttpError(400, "That rewards member isn't available.");
+      }
+      const tipCents = methodCode === 2 ? Math.round(Number(payment.tip || 0) * 100) : 0;
+      if (!Number.isInteger(tipCents) || tipCents < 0 || tipCents > 1000000) throw new HttpError(400, "Enter a valid tip.");
+      if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
+      let giftCardId = null;
+      if (methodCode === 3) {
+        if (!giftAllowed(req.session)) throw new HttpError(429, "Too many wrong gift card codes. Try again in a few minutes.");
+        const [[g]] = await conn.query("SELECT GiftCardID FROM GiftCard WHERE BusinessID = ? AND CodeHash = ? AND Active",
+          [businessId, codeHash(String(payment.giftCardCode || "").trim())]);
+        if (!g) {
+          giftFailed(req.session);
+          throw new HttpError(400, "Gift card not found.");
+        }
+        giftCardId = g.GiftCardID;
+        giftOk(req.session);
+      }
 
-    const orderId = crypto.randomUUID();
-    await conn.query(
-      `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
-      [orderId, locationId, businessId, registerId, employeeId, customerId || null]
-    );
-
-    const sale = new Map(); // stock item -> thousandths used across the whole order
-    for (const l of priced.lines) {
-      const itemId = crypto.randomUUID();
+      const orderId = crypto.randomUUID();
       await conn.query(
-        `INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
-                                DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [itemId, orderId, l.variantId, businessId, l.quantity, dollars(l.unitCents), dollars(l.lineCents),
-         dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents)]
+        `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        [orderId, locationId, businessId, registerId, employeeId, customerId || null]
       );
-      for (const m of l.modifiers)
-        await conn.query("INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta) VALUES (?, ?, ?, ?)",
-          [itemId, m.id, businessId, dollars(m.deltaCents)]);
 
-      const used = await components(conn, l);
-      const [costs] = await conn.query(
-        `SELECT i.StockItemID, i.AverageUnitCost, s.StockUnitCode, s.Name
-           FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID
-          WHERE i.LocationID = ? AND i.StockItemID IN (?)`,
-        [locationId, used.map(([id]) => id)]
-      );
-      for (const [stockItemId, t] of used) {
-        const c = costs.find((x) => x.StockItemID === stockItemId);
-        if (!c || c.AverageUnitCost == null) throw new HttpError(409, `${l.productName} can't be sold: no stock cost is recorded here.`);
+      const sale = new Map(); // stock item -> thousandths used across the whole order
+      for (const l of priced.lines) {
+        const itemId = crypto.randomUUID();
         await conn.query(
-          `INSERT INTO OrderItemComponent (OrderItemID, StockItemID, BusinessID, QuantityUsed, StockUnitCode, UnitCost)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [itemId, stockItemId, businessId, (t / 1000).toFixed(3), c.StockUnitCode, c.AverageUnitCost]
+          `INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
+                                  DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [itemId, orderId, l.variantId, businessId, l.quantity, dollars(l.unitCents), dollars(l.lineCents),
+           dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents)]
         );
-        sale.set(stockItemId, { t: (sale.get(stockItemId)?.t || 0) + t, cost: c.AverageUnitCost });
+        for (const m of l.modifiers)
+          await conn.query("INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta) VALUES (?, ?, ?, ?)",
+            [itemId, m.id, businessId, dollars(m.deltaCents)]);
+
+        const used = await components(conn, l);
+        const [costs] = await conn.query(
+          `SELECT i.StockItemID, i.AverageUnitCost, s.StockUnitCode, s.Name
+             FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID
+            WHERE i.LocationID = ? AND i.StockItemID IN (?)`,
+          [locationId, used.map(([id]) => id)]
+        );
+        for (const [stockItemId, t] of used) {
+          const c = costs.find((x) => x.StockItemID === stockItemId);
+          if (!c || c.AverageUnitCost == null) throw new HttpError(409, `${l.productName} can't be sold: no stock cost is recorded here.`);
+          await conn.query(
+            `INSERT INTO OrderItemComponent (OrderItemID, StockItemID, BusinessID, QuantityUsed, StockUnitCode, UnitCost)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [itemId, stockItemId, businessId, (t / 1000).toFixed(3), c.StockUnitCode, c.AverageUnitCost]
+          );
+          sale.set(stockItemId, { t: (sale.get(stockItemId)?.t || 0) + t, cost: c.AverageUnitCost });
+        }
+        // The DB checks a line's cost equals its components' cost, so it computes both itself
+        await conn.query(
+          `UPDATE OrderItem oi
+              SET oi.UnitCost = (SELECT ROUND(SUM(c.QuantityUsed * c.UnitCost) / oi.Quantity, 6)
+                                   FROM OrderItemComponent c WHERE c.OrderItemID = oi.OrderItemID),
+                  oi.LineCost = ROUND(oi.Quantity * oi.UnitCost, 6)
+            WHERE oi.OrderItemID = ?`,
+          [itemId]
+        );
       }
-      // The DB checks a line's cost equals its components' cost, so it computes both itself
-      await conn.query(
-        `UPDATE OrderItem oi
-            SET oi.UnitCost = (SELECT ROUND(SUM(c.QuantityUsed * c.UnitCost) / oi.Quantity, 6)
-                                 FROM OrderItemComponent c WHERE c.OrderItemID = oi.OrderItemID),
-                oi.LineCost = ROUND(oi.Quantity * oi.UnitCost, 6)
-          WHERE oi.OrderItemID = ?`,
-        [itemId]
-      );
-    }
-    for (const [stockItemId, { t, cost }] of sale)
-      await conn.query(
-        `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
-                                           QuantityChange, UnitCost, TransactionTypeCode, OrderID)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, 2, ?)`,
-        [businessId, stockItemId, locationId, employeeId, (-t / 1000).toFixed(3), cost, orderId]
-      );
+      for (const [stockItemId, { t, cost }] of sale)
+        await conn.query(
+          `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
+                                             QuantityChange, UnitCost, TransactionTypeCode, OrderID)
+           VALUES (UUID(), ?, ?, ?, ?, ?, ?, 2, ?)`,
+          [businessId, stockItemId, locationId, employeeId, (-t / 1000).toFixed(3), cost, orderId]
+        );
 
-    if (priced.promotionCents > 0)
-      await conn.query(
-        "INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount) VALUES (?, UUID(), ?, ?, ?)",
-        [businessId, priced.promotion.id, orderId, dollars(priced.promotionCents)]
-      );
-    if (priced.discountCents > 0) {
-      const d = priced.discount;
-      await conn.query(
-        "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
-        [orderId, businessId, dollars(priced.discountCents), d.note ? `${d.reason}: ${d.note}` : d.reason, approval.approverId, approval.staffId]
-      );
-    }
+      if (priced.promotionCents > 0)
+        await conn.query(
+          "INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount) VALUES (?, UUID(), ?, ?, ?)",
+          [businessId, priced.promotion.id, orderId, dollars(priced.promotionCents)]
+        );
+      if (priced.discountCents > 0) {
+        const d = priced.discount;
+        await conn.query(
+          "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
+          [orderId, businessId, dollars(priced.discountCents), d.note ? `${d.reason}: ${d.note}` : d.reason, approval.approverId, approval.staffId]
+        );
+      }
 
-    await conn.query("UPDATE Orders SET Subtotal = ?, DiscountAmount = ?, Tax = ?, Total = ? WHERE OrderID = ?",
-      [dollars(priced.subtotalCents), dollars(priced.promotionCents + priced.discountCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
-    if (priced.totalCents > 0)
+      await conn.query("UPDATE Orders SET Subtotal = ?, DiscountAmount = ?, Tax = ?, Total = ? WHERE OrderID = ?",
+        [dollars(priced.subtotalCents), dollars(priced.promotionCents + priced.discountCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
+      if (priced.totalCents > 0)
+        await conn.query(
+          `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode, GiftCardID)
+           VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3, ?)`,
+          [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents), giftCardId]
+        );
+      // Paid and confirmed: the kitchen makes it, and it is completed when handed over (server/kitchen.js)
+      await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);
       await conn.query(
-        `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode, GiftCardID)
-         VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3, ?)`,
-        [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents), giftCardId]
+        `INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt, ChangedByEmployeeID)
+         SELECT UUID(), OrderID, BusinessID, 1, OrderDateTime, EmployeeID FROM Orders WHERE OrderID = ?
+         UNION ALL
+         SELECT UUID(), OrderID, BusinessID, 2, UTC_TIMESTAMP(), EmployeeID FROM Orders WHERE OrderID = ?`,
+        [orderId, orderId]
       );
-    // Paid and confirmed: the kitchen makes it, and it is completed when handed over (server/kitchen.js)
-    await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);
-    await conn.query(
-      `INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt, ChangedByEmployeeID)
-       SELECT UUID(), OrderID, BusinessID, 1, OrderDateTime, EmployeeID FROM Orders WHERE OrderID = ?
-       UNION ALL
-       SELECT UUID(), OrderID, BusinessID, 2, UTC_TIMESTAMP(), EmployeeID FROM Orders WHERE OrderID = ?`,
-      [orderId, orderId]
-    );
-    const [[{ OrderNumber }]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
-    await conn.commit();
-    notify(locationId);
-    spendApproval(req.session, String(req.body.approvalToken));
-    res.json({ orderNumber: OrderNumber, totalCents: priced.totalCents, tipCents });
+      const [[{ OrderNumber }]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
+      return { orderNumber: OrderNumber, totalCents: priced.totalCents, tipCents };
+    });
   } catch (err) {
-    await conn.rollback();
     releaseApproval(req.session, String(req.body.approvalToken));
     throw err;
-  } finally {
-    conn.release();
   }
+  notify(locationId);
+  spendApproval(req.session, String(req.body.approvalToken));
+  res.json(receipt);
 });
 
 module.exports = router;

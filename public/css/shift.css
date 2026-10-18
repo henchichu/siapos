@@ -1,0 +1,63 @@
+/* My shift and Team timecards. Spacing and type from the ClockIt wireframes (nodes 150:104 and 167:218) */
+.scrolls { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.tabs { display: flex; gap: 12px; padding: 0 24px; flex: none; }
+.tab { border: 2px solid var(--ink); background: #fff; padding: 12px 20px; font-size: 16px; }
+.tab:hover:not([aria-pressed="true"]) { background: #f4f4f4; }
+.tab[aria-pressed="true"] { background: var(--ink); color: #fff; font-weight: 600; }
+
+.notices { list-style: none; margin: 0; padding: 0 24px; display: flex; flex-direction: column; gap: 8px; flex: none; }
+.notices li { display: flex; justify-content: space-between; gap: 16px; color: var(--ok); }
+.notices li.error { color: var(--error); }
+
+.top { display: flex; gap: 24px; align-items: flex-start; flex: none; flex-wrap: wrap; }
+.clock { width: 430px; flex: none; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 100%; }
+.sales { flex: 1; min-width: 280px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.clock h3, .sales h3 { font-size: 18px; font-weight: 600; }
+.clock .since { font-size: 22px; font-weight: 600; }
+.clock .where { font-size: 14px; color: var(--muted); }
+.stats { display: flex; gap: 12px; flex-wrap: wrap; }
+.stat { border: 1px solid var(--ink); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 119px; }
+.stat span { font-size: 13px; color: var(--muted); }
+.stat b { font-size: 20px; font-weight: 600; }
+.pad { display: grid; grid-template-columns: repeat(2, 147px); gap: 10px; }
+.tbtn { height: 51px; padding: 14px 20px; background: var(--ink); color: #fff; border: 1px solid var(--ink); font-size: 16px; font-weight: 600; }
+.tbtn:hover:not(:disabled) { background: #444; }
+.tbtn:disabled { background: #fff; color: var(--muted); border-color: var(--muted); opacity: 0.55; }
+.clock .msg { min-height: 0; }
+
+.hours, .cards, .filters, .closing { padding: 24px; display: flex; flex-direction: column; gap: 16px; flex: none; }
+.hours header, .cards header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.hours h3, .cards h3 { font-size: 20px; font-weight: 600; }
+.hours header p { display: flex; gap: 10px; }
+.hours header p span:last-child { color: var(--muted); }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.table th { text-align: left; font-weight: 600; padding: 0 8px 16px 0; border-bottom: 2px solid var(--ink); }
+.table td { padding: 8px 8px 8px 0; border-bottom: 1px solid #bbb; height: 40px; overflow-wrap: anywhere; }
+.table td.state { font-weight: 600; }
+.table .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.act { border: 1px solid var(--ink); background: #fff; padding: 10px 12px; font-size: 13px; }
+.act:hover:not(:disabled) { background: #f4f4f4; }
+.pay-line { font-size: 14px; color: var(--muted); display: flex; gap: 24px; flex-wrap: wrap; }
+
+.filters { flex-direction: row; align-items: flex-end; flex-wrap: wrap; }
+.filters label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 500; }
+.filters .wide { flex: 1 1 260px; min-width: 0; }
+.select { border: 1px solid var(--ink); background: #fff url(/img/dropdown.svg) no-repeat right 13px center; padding: 12px 34px 12px 13px; font: inherit; font-size: 14px; font-weight: 400; appearance: none; width: 100%; }
+.filters .loc { width: 200px; } .filters .stat-sel { width: 160px; }
+.batch { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+.batch .btn, .filters .btn, .closing .btn { font-size: 16px; padding: 12px 20px; border-width: 1px; }
+.closing { flex-direction: row; justify-content: space-between; align-items: center; }
+.closing b { font-size: 16px; }
+
+.editform { display: flex; flex-direction: column; gap: 16px; }
+.editform label { display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .scrolls { overflow: visible; padding: 0; }
+  .clock { width: 100%; }
+  .pad { grid-template-columns: repeat(2, 1fr); }
+  .tabs, .notices { padding: 0; }
+  .hours, .cards { overflow-x: auto; }
+  .table { min-width: 640px; }
+  .filters .loc, .filters .stat-sel { width: 100%; }
+}

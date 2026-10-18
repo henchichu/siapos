@@ -1,11 +1,5 @@
 /* Kitchen display. Spacing and type from the ClockIt wireframes (nodes 148:91 and 149:76); tokens come from register.css */
 .kitchen.app { padding: 24px 32px; gap: 24px; }
-.kitchen .nav { width: 240px; padding: 24px; }
-.kitchen .nav h1 { font-size: 22px; margin-bottom: 20px; }
-.kitchen .nav ul { gap: 14px; }
-.kitchen .nav .link { font-size: 16px; }
-.kitchen .nav .rule { width: 50px; height: 2px; background: var(--ink); }
-.kitchen .who { font-size: 14px; }
 
 .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 24px; padding: 0; animation: view-in 0.18s ease-out; }
 @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -58,9 +52,7 @@
 .losses td { padding: 14px 10px 0 0; }
 
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
-  .kitchen.app .nav { width: auto; padding: 0; }
-  .kitchen .nav .rule { display: none; }
-  .main { overflow: visible; flex: none; }
+    .main { overflow: visible; flex: none; }
   .queues, .loss { flex-direction: column; flex: none; }
   .queue { overflow: visible; padding: 0; }
   .queue > header { position: static; padding: 0; margin: 0; }

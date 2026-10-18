@@ -1,7 +1,3 @@
-const html = htm.bind(React.createElement);
-const { useState, useEffect, useRef, useCallback } = React;
-
-const NAV = ["Register", "Kitchen", "Rewards", "Products", "My shift"];
 const REASONS = ["Regular", "Employee", "Complaint", "Damaged"];
 const METHODS = [["cash", "Cash"], ["card", "Card"], ["gift", "Gift card"]];
 
@@ -11,27 +7,14 @@ const share = (cents, qty, bought) => Math.floor((2 * cents * qty + bought) / (2
 const TIPS = [["No tip", 0], ["15%", 15], ["18%", 18], ["20%", 20]];
 const tipOf = (order, priced) =>
   order.tipPct == null ? order.tip : (Math.round(((priced?.totalCents || 0) * order.tipPct) / 100) / 100).toFixed(2);
-const VIEWS = ["register", "rewards", "products", "my shift", "refund"];
+const VIEWS = ["register", "refund"];
 const viewFromHash = () => {
   const h = decodeURIComponent(window.location.hash.slice(1));
   return VIEWS.includes(h) ? h : "register";
 };
+const toItems = (cart) => cart.map((l) => ({ key: l.key, variantId: l.variant.id, quantity: l.qty, modifierIds: l.modifiers.map((m) => m.id) }));
+const NO_TOTALS = { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCents: 0, totalCents: 0, taxRates: [] };
 const sizeLabel = (product, variant) => (product.variants.length > 1 ? `, ${variant.name}` : "");
-
-function Modal({ title, onClose, wide, children }) {
-  const ref = useRef();
-  useEffect(() => ref.current.showModal(), []); // native <dialog>: focus trap and Esc come with it
-  return html`<dialog ref=${ref} className=${wide ? "modal wide" : "modal"} aria-label=${title}
-      onCancel=${(e) => { e.preventDefault(); onClose(); }}>
-    <h2>${title}</h2>${children}
-  </dialog>`;
-}
-
-// No box until there is something to say; the live region stays so screen readers still hear it
-function Message({ msg, dashed }) {
-  if (!msg?.text) return html`<p className="sr" role="status"></p>`;
-  return html`<p className=${`msg ${dashed ? "dashed " : ""}${msg.kind || ""}`} role="status">${msg.text}</p>`;
-}
 
 function ManagerFields({ number, pin, setNumber, setPin }) {
   return html`<div className="two">
@@ -42,23 +25,6 @@ function ManagerFields({ number, pin, setNumber, setPin }) {
       <input className="field" type="password" inputMode="numeric" maxLength="6" autoComplete="off" value=${pin}
         onChange=${(e) => setPin(e.target.value.replace(/\D/g, ""))} /></label>
   </div>`;
-}
-
-function Sidebar({ me, view, onNav, onSignOut }) {
-  return html`<nav className="nav" aria-label="Main">
-    <div>
-      <h1>ClockIt</h1>
-      <ul>${NAV.map((n) => html`<li key=${n}>
-        ${n === "Kitchen" ? html`<a className="link" href="/kitchen.html">Kitchen</a>` : html`<button className="link" aria-current=${view === n.toLowerCase() || (n === "Register" && view === "refund") ? "page" : undefined}
-          onClick=${() => onNav(n)}>${n}</button>`}</li>`)}</ul>
-    </div>
-    <div className="who">
-      <span>${me?.employeeName} ·</span>
-      <span>${me?.roleName} · ${me?.locationName} ·</span>
-      <span>${me?.registerName}</span>
-      <button className="link" onClick=${onSignOut}>Sign out</button>
-    </div>
-  </nav>`;
 }
 
 function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch, category, setCategory, onRefund, showRefund }) {
@@ -185,7 +151,7 @@ function DiscountModal({ lines, priced, staffRules, promotionId, onClose, onAppr
       const discount = { applyTo, type, value: Number(value), reason, note, keys };
       const { approvalToken, terms } = await api("/register/discount/authorize", {
         discount, employeeNumber: staffNumber, managerNumber: number, managerPin: pin, promotionId: promotionId || undefined,
-        items: lines.map((l) => ({ key: l.key, variantId: l.variant.id, quantity: l.qty, modifierIds: l.modifiers.map((m) => m.id) })),
+        items: toItems(lines),
       });
       onApproved({ terms, token: approvalToken });
     } catch (err) {
@@ -195,7 +161,7 @@ function DiscountModal({ lines, priced, staffRules, promotionId, onClose, onAppr
   };
   const seg = (current, set, options) => html`<div className="segs" role="radiogroup">${options.map(([v, label]) =>
     html`<button key=${v} className="seg" role="radio" aria-checked=${current === v} onClick=${() => set(v)}>${label}</button>`)}</div>`;
-  const t = priced || { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCents: 0, totalCents: 0, taxRates: [] };
+  const t = priced || NO_TOTALS;
 
   return html`<${Modal} title="Add discount" onClose=${onClose} wide>
     <div className="split">
@@ -272,7 +238,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
       <button className="btn primary block" onClick=${() => setCheckout(true)}>Checkout</button></aside>`;
   }
 
-  const t = priced || { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCents: 0, totalCents: 0, taxRates: [] };
+  const t = priced || NO_TOTALS;
   const tipCents = order.method === "card" && t.totalCents > 0 ? Math.round(Number(tipOf(order, priced) || 0) * 100) : 0;
   const tipText = order.tipPct == null ? order.tip : order.tipPct ? tipOf(order, priced) : "";
   return html`<aside className="order expanded" aria-label="Current order">
@@ -401,10 +367,7 @@ function RefundView({ onExit }) {
       <div className="sumrow sumtotal"><span>Refund total</span><span>${money(shown.net + shown.tax)}</span></div>
       ${found && html`<p className="sub">Goes back to the original payment: ${result?.method || found.method}${found.tipCents ? ". Tips are never refunded." : ""}</p>`}
       <div className="dashed"><b>Manager override</b>
-        <label>Manager number
-          <input className="field" inputMode="numeric" maxLength="8" autoComplete="off" value=${number} onChange=${(e) => setNumber(e.target.value.replace(/\D/g, ""))} /></label>
-        <label>Manager PIN (6 digits)
-          <input className="field" type="password" inputMode="numeric" maxLength="6" autoComplete="off" value=${pin} onChange=${(e) => setPin(e.target.value.replace(/\D/g, ""))} /></label></div>
+        <${ManagerFields} number=${number} pin=${pin} setNumber=${setNumber} setPin=${setPin} /></div>
       <${Message} msg=${msg} dashed />
       <div className="btns">
         <button className="btn primary" disabled=${busy || !found || !chosen.length || !reason.trim() || chosen.some((l) => qtyOf(l) < 1)} onClick=${complete}>Complete refund</button>
@@ -416,7 +379,7 @@ function RefundView({ onExit }) {
 const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "" };
 
 function App() {
-  const [me, setMe] = useState(null);
+  const me = useMe();
   const [catalog, setCatalog] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState(viewFromHash);
@@ -437,7 +400,6 @@ function App() {
   const loadCatalog = () => api("/register/catalog").then(setCatalog);
 
   useEffect(() => {
-    api("/session").then(setMe).catch(() => {});
     loadCatalog().catch((err) => setLoadError(err.message));
   }, []);
 
@@ -458,7 +420,7 @@ function App() {
     if (!cart.length) { setPriced(null); setPricingError(""); return; }
     let stale = false;
     api("/register/price", {
-      items: cart.map((l) => ({ key: l.key, variantId: l.variant.id, quantity: l.qty, modifierIds: l.modifiers.map((m) => m.id) })),
+      items: toItems(cart),
       promotionId: order.promotionId || undefined,
       discount: order.discount?.terms,
     }).then((p) => { if (!stale) { setPriced(p); setPricingError(""); } })
@@ -493,7 +455,7 @@ function App() {
     setBusy(true);
     try {
       const done = await api("/register/orders", {
-        items: cart.map((l) => ({ key: l.key, variantId: l.variant.id, quantity: l.qty, modifierIds: l.modifiers.map((m) => m.id) })),
+        items: toItems(cart),
         promotionId: order.promotionId || undefined,
         discount: order.discount?.terms,
         approvalToken: order.discount?.token,
@@ -509,25 +471,9 @@ function App() {
     setBusy(false);
   };
 
-  const signOut = async () => { // drop everything held in memory and in the browser, then back to the PIN pad
-    try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
-    try { sessionStorage.clear(); localStorage.clear(); } catch (err) { /* storage can be blocked */ }
-    setCart([]); setOrderState(EMPTY_ORDER); setPriced(null); setMe(null);
-    window.location.replace("/login.html");
-  };
-
-  const nav = (name) => {
-    const v = name.toLowerCase();
-    go(v);
-    setNotice(v === "register" ? "Success: Register view initialized successfully." : "");
-  };
-
   let body;
   if (view === "refund") {
     body = html`<${RefundView} onExit=${() => go("register")} />`;
-  } else if (view !== "register") {
-    const name = NAV.find((n) => n.toLowerCase() === view);
-    body = html`<section className="success" role="status">Success: ${name} view initialized successfully.</section>`;
   } else if (loadError) {
     body = html`<section className="success" role="alert">${loadError}</section>`;
   } else if (!catalog) {
@@ -549,7 +495,7 @@ function App() {
   }
 
   return html`<div className="app">
-    <${Sidebar} me=${me} view=${view} onNav=${nav} onSignOut=${signOut} />
+    <${Sidebar} me=${me} current="Register" />
     ${body}
     ${modal?.type === "customize" && html`<${CustomizeModal} product=${modal.product} onCancel=${() => setModal(null)}
       onAdd=${({ product, variant, modifiers, qty }) => { addLine(product, variant, modifiers, qty); setSelectedId(null); setModal(null); }} />`}

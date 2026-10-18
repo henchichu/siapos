@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const router = require("./router");
+const session = require("./session");
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
@@ -21,6 +22,19 @@ app.get("/vendor/:file", (req, res, next) => {
 });
 
 app.use("/api", express.json(), router);
+
+// Each page opens only for a role that has it in its menu; anyone else goes back to their own home
+const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift" };
+app.use((req, res, next) => {
+  const need = PAGE_NAV[req.path];
+  if (need === undefined) return next();
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (!need || s.info.nav.includes(need)) return next(); // Home needs only a sign-in
+  console.warn(`access violation: ${s.info.employeeName} (${s.info.roleName}) tried ${req.path}`);
+  res.redirect(s.info.home);
+});
+
 app.use(express.static(path.resolve(__dirname, "../public")));
 
 app.use((req, res) => res.status(404).type("text").send("Page not found"));

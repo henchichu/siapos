@@ -25,7 +25,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   w.eval(lib("htm/dist/htm.umd.js"));
   const errors = [];
   w.console.error = (...a) => errors.push(a.join(" ").slice(0, 300));
-  w.eval(fs.readFileSync(path.join(root, "public/js/api.js"), "utf8") + "\n" + fs.readFileSync(path.join(root, "public/js/register.js"), "utf8"));
+  w.eval(["api", "shell", "register"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n"));
 
   const $ = (sel) => w.document.querySelector(sel);
   const $$ = (sel) => [...w.document.querySelectorAll(sel)];
@@ -41,7 +41,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const opt = (name) => $$("dialog input").find((i) => i.parentElement.textContent.startsWith(name));
 
   await sleep(800);
-  check("footer: employee, role/location, register", /Sam Rivera/.test(text()) && /Server · Brewbean Downtown/.test(text()) && /Front counter/.test(text()));
+  check("footer: employee, role/location", /Sam Rivera/.test(text()) && /Server · Brewbean Downtown/.test(text()));
   check("catalog cards load", $$(".card").length === 6, String($$(".card").length));
   check("1A: no order sidebar, no Customize", !$(".order") && !byText("button", "Customize"));
   check("Refund is a red button", /danger/.test(byText("button", "Refund").className));
@@ -121,9 +121,9 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("refund completes; Fully returned", /Refund complete/.test(text()) && /Fully returned/.test(text()));
   w.history.back(); await sleep(150);
   check("browser Back leaves the refund view", $$(".card").length === 6);
-  check("Kitchen link opens the kitchen page", $(".nav a.link")?.getAttribute("href") === "/kitchen.html");
-  await click(byText("button", "Register"));
-  check("Register nav returns to the dashboard", $$(".card").length === 6);
+  const links = $$(".nav a.link");
+  check("a server's menu lists only its five pages", links.map((a) => a.textContent).join("|") === "Register|Kitchen|Rewards|Products|My shift");
+  check("Kitchen and My shift open their own pages", links[1].getAttribute("href") === "/kitchen.html" && links[4].getAttribute("href") === "/shift.html" && links[0].getAttribute("aria-current") === "page");
   w.localStorage.setItem("x", "1");
   await click(byText("button", "Sign out"), 500);
   const after = await fetch(base + "/api/session", { headers: { cookie } });

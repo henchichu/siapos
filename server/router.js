@@ -3,6 +3,7 @@ const pool = require("./database/connection");
 const { findEmployee, workplace, authenticate } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
+const { access } = require("./nav");
 
 const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html" };
 
@@ -35,6 +36,7 @@ router.post("/login/pin", async (req, res) => {
 
   const { emp } = result;
   const place = (await workplace(emp.EmployeeID)) || {};
+  const { nav, tiles, home } = access(emp, DESTINATIONS);
   session.create(res, {
     employeeId: emp.EmployeeID,
     businessId: emp.BusinessID,
@@ -43,11 +45,14 @@ router.post("/login/pin", async (req, res) => {
     info: {
       employeeName: `${emp.FirstName} ${emp.LastName}`,
       roleName: emp.RoleName,
+      nav,
+      tiles,
+      home,
       locationName: place.LocationName,
       registerName: place.RegisterName,
     },
   });
-  res.json({ redirect: DESTINATIONS[emp.OpensTo] || "/index.html" });
+  res.json({ redirect: "/home.html" }); // everyone lands on Home; its tiles come from the role
 });
 
 router.post("/logout", (req, res) => {
@@ -59,8 +64,16 @@ router.use(session.requireSession);
 
 router.get("/session", (req, res) => res.json(req.session.info));
 
+// A page that finds the role may not open it reports it here before redirecting home
+router.post("/access-violation", (req, res) => {
+  const { employeeName, roleName } = req.session.info;
+  console.warn(`access violation: ${employeeName} (${roleName}) tried ${String(req.body.page).slice(0, 40)}`);
+  res.json({ ok: true });
+});
+
 router.use(require("./register"));
 router.use(require("./refunds"));
 router.use(require("./kitchen"));
+router.use(require("./shift"));
 
 module.exports = router;

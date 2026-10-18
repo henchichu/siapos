@@ -14,3 +14,5 @@ async function api(path, body) {
 }
 
 const money = (cents) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toFixed(2)}`;
+// A time of day in the café's own time zone
+const clock = (iso, tz) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz }) : "");

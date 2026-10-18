@@ -96,9 +96,7 @@ router.get("/kitchen/tickets", requirePermission(PERM_SEE_KITCHEN), async (req, 
 // Moves one ticket a step. The WHERE on the old status means two screens can't both move it.
 async function advance(req, res, from, to) {
   const { businessId, locationId, employeeId } = req.session;
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  await pool.tx(async (conn) => {
     const [r] = await conn.query(
       `UPDATE Orders SET OrderStatusCode = ?, CompletedAt = IF(? = ${COMPLETED}, UTC_TIMESTAMP(), CompletedAt)
         WHERE OrderID = ? AND BusinessID = ? AND LocationID = ? AND OrderStatusCode = ?`,
@@ -110,15 +108,9 @@ async function advance(req, res, from, to) {
        VALUES (UUID(), ?, ?, ?, ?)`,
       [req.params.id, businessId, to, employeeId]
     );
-    await conn.commit();
-    notify(locationId);
-    res.json({ ok: true });
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+  });
+  notify(locationId);
+  res.json({ ok: true });
 }
 
 router.post("/kitchen/orders/:id/start", requirePermission(PERM_WORK_TICKETS), (req, res) => advance(req, res, CONFIRMED, PREPARING));

@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS TimeEntry (
     ClockInAt DATETIME NOT NULL,
     ClockOutAt DATETIME NULL,
     UnpaidBreakMinutes INT NOT NULL DEFAULT 0,
+    BreakStartedAt DATETIME NULL,              -- set while a break is running; Break End adds it to UnpaidBreakMinutes
     TimeEntryStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
     ApprovedByEmployeeID CHAR(36),
     Notes TEXT,

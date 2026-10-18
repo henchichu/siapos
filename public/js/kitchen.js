@@ -1,37 +1,11 @@
-const html = htm.bind(React.createElement);
-const { useState, useEffect, useCallback } = React;
-
-const VIEWS = ["kitchen", "my shift", "loss"];
+const VIEWS = ["kitchen", "loss"];
 const viewFromHash = () => {
   const h = decodeURIComponent(window.location.hash.slice(1));
   return VIEWS.includes(h) ? h : "kitchen";
 };
 const REASONS = [["broken", "Broken or spilled"], ["spoiled", "Spoiled or expired"]];
 
-const clock = (iso, tz) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: tz }) : "");
 const minutes = (iso, now) => `${Math.max(0, Math.floor((now - new Date(iso)) / 60000))} min`;
-
-function Sidebar({ me, view, onNav, onSignOut }) {
-  return html`<nav className="nav" aria-label="Main">
-    <div>
-      <h1>ClockIt</h1>
-      <ul>
-        <li><button className="link" style=${{ fontWeight: 600 }} aria-current=${view !== "my shift" ? "page" : undefined} onClick=${() => onNav("kitchen")}>Kitchen</button></li>
-        <li className="rule" aria-hidden="true"></li>
-        <li><button className="link" aria-current=${view === "my shift" ? "page" : undefined} onClick=${() => onNav("my shift")}>My shift</button></li>
-      </ul>
-    </div>
-    <div className="who">
-      <span>${me?.employeeName} ·</span>
-      <span>${me?.roleName} · ${me?.locationName}</span>
-      <button className="link" onClick=${onSignOut}>Sign out</button>
-    </div>
-  </nav>`;
-}
-
-function SuccessPanel({ name }) {
-  return html`<section className="success" role="status">Success: ${name} view initialized successfully.</section>`;
-}
 
 // What the ticket says about its latest step; the time is shown in the café's own time zone
 function whenLine(stage, t, tz, now) {
@@ -166,10 +140,9 @@ function Loss({ onBack }) {
 }
 
 function App() {
-  const [me, setMe] = useState(null);
+  const me = useMe();
   const [view, setView] = useState(viewFromHash);
 
-  useEffect(() => { api("/session").then(setMe).catch(() => {}); }, []);
   useEffect(() => { // Back and Forward move between views
     const onPop = () => setView(viewFromHash());
     window.addEventListener("popstate", onPop);
@@ -180,16 +153,9 @@ function App() {
     setView(v);
     window.history.pushState(null, "", v === "kitchen" ? window.location.pathname : `#${encodeURIComponent(v)}`);
   };
-  const signOut = async () => {
-    try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
-    window.location.replace("/login.html");
-  };
-
   return html`<div className="app kitchen">
-    <${Sidebar} me=${me} view=${view} onNav=${go} onSignOut=${signOut} />
-    ${view === "my shift" ? html`<${SuccessPanel} name="My shift" />`
-      : view === "loss" ? html`<${Loss} onBack=${() => go("kitchen")} />`
-      : html`<${Kitchen} onReport=${() => go("loss")} />`}
+    <${Sidebar} me=${me} current="Kitchen" />
+    ${view === "loss" ? html`<${Loss} onBack=${() => go("kitchen")} />` : html`<${Kitchen} onReport=${() => go("loss")} />`}
   </div>`;
 }
 

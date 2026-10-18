@@ -27,4 +27,7 @@ function client(base) {
 // A wrong-PIN test must not leave an account locked for the next run
 const unlock = (employeeId) => pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
 
-module.exports = { start, client, pool, unlock };
+// Hand-over is the kitchen's last step; refunds need a completed order, so tests that refund finish the order directly
+const pickUp = (orderNumber) => pool.query("UPDATE Orders SET OrderStatusCode = 5, CompletedAt = UTC_TIMESTAMP() WHERE OrderNumber = ? AND OrderStatusCode = 2", [orderNumber]);
+
+module.exports = { start, client, pool, unlock, pickUp };

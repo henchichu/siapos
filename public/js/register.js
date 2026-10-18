@@ -11,7 +11,7 @@ const share = (cents, qty, bought) => Math.floor((2 * cents * qty + bought) / (2
 const TIPS = [["No tip", 0], ["15%", 15], ["18%", 18], ["20%", 20]];
 const tipOf = (order, priced) =>
   order.tipPct == null ? order.tip : (Math.round(((priced?.totalCents || 0) * order.tipPct) / 100) / 100).toFixed(2);
-const VIEWS = ["register", "kitchen", "rewards", "products", "my shift", "refund"];
+const VIEWS = ["register", "rewards", "products", "my shift", "refund"];
 const viewFromHash = () => {
   const h = decodeURIComponent(window.location.hash.slice(1));
   return VIEWS.includes(h) ? h : "register";
@@ -49,8 +49,8 @@ function Sidebar({ me, view, onNav, onSignOut }) {
     <div>
       <h1>ClockIt</h1>
       <ul>${NAV.map((n) => html`<li key=${n}>
-        <button className="link" aria-current=${view === n.toLowerCase() || (n === "Register" && view === "refund") ? "page" : undefined}
-          onClick=${() => onNav(n)}>${n}</button></li>`)}</ul>
+        ${n === "Kitchen" ? html`<a className="link" href="/kitchen.html">Kitchen</a>` : html`<button className="link" aria-current=${view === n.toLowerCase() || (n === "Register" && view === "refund") ? "page" : undefined}
+          onClick=${() => onNav(n)}>${n}</button>`}</li>`)}</ul>
     </div>
     <div className="who">
       <span>${me?.employeeName} ·</span>

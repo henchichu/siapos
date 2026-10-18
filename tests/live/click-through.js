@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool, unlock } = require("./env");
+const { start, client, pool, unlock, pickUp } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -103,6 +103,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const sale = /Sale complete: order (\d+), \$([\d.]+)/.exec(text()) || [];
   check("sale complete: notice, sidebar hidden", !!sale[1] && !$(".order"), text().slice(0, 200));
 
+  await pickUp(sale[1]); // the kitchen's last step; refunds need a completed order
   await click(byText("button", "Refund"));
   check("refund view, #refund", /Find the order/.test(text()) && w.location.hash === "#refund");
   await type($(".find input"), sale[1]);
@@ -120,8 +121,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("refund completes; Fully returned", /Refund complete/.test(text()) && /Fully returned/.test(text()));
   w.history.back(); await sleep(150);
   check("browser Back leaves the refund view", $$(".card").length === 6);
-  await click(byText("button", "Kitchen"));
-  check("Kitchen panel, #kitchen", /Success: Kitchen view initialized successfully\./.test(text()) && w.location.hash === "#kitchen");
+  check("Kitchen link opens the kitchen page", $(".nav a.link")?.getAttribute("href") === "/kitchen.html");
   await click(byText("button", "Register"));
   check("Register nav returns to the dashboard", $$(".card").length === 6);
   w.localStorage.setItem("x", "1");

@@ -61,5 +61,6 @@ router.get("/session", (req, res) => res.json(req.session.info));
 
 router.use(require("./register"));
 router.use(require("./refunds"));
+router.use(require("./kitchen"));
 
 module.exports = router;

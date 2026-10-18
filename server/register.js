@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
+const { notify } = require("./kitchen");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
 const { codeHash } = require("./giftcard");
 const { verifyOverride, findStaff, staffRules } = require("./override");
@@ -260,16 +261,18 @@ router.post("/register/orders", async (req, res) => {
          VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3, ?)`,
         [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents), giftCardId]
       );
-    await conn.query("UPDATE Orders SET OrderStatusCode = 5, CompletedAt = UTC_TIMESTAMP() WHERE OrderID = ?", [orderId]);
+    // Paid and confirmed: the kitchen makes it, and it is completed when handed over (server/kitchen.js)
+    await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);
     await conn.query(
       `INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt, ChangedByEmployeeID)
        SELECT UUID(), OrderID, BusinessID, 1, OrderDateTime, EmployeeID FROM Orders WHERE OrderID = ?
        UNION ALL
-       SELECT UUID(), OrderID, BusinessID, 5, CompletedAt, EmployeeID FROM Orders WHERE OrderID = ?`,
+       SELECT UUID(), OrderID, BusinessID, 2, UTC_TIMESTAMP(), EmployeeID FROM Orders WHERE OrderID = ?`,
       [orderId, orderId]
     );
     const [[{ OrderNumber }]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
     await conn.commit();
+    notify(locationId);
     spendApproval(req.session, String(req.body.approvalToken));
     res.json({ orderNumber: OrderNumber, totalCents: priced.totalCents, tipCents });
   } catch (err) {

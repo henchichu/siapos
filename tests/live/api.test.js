@@ -1,7 +1,7 @@
 // Needs the dev database. Each run adds a few real test sales to it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock } = require("./env");
+const { start, client, pool, unlock, pickUp } = require("./env");
 
 const DENIED = "Unauthorized. Supervisor or Owner credentials required to override.";
 let env, sam;
@@ -36,6 +36,7 @@ test("a tip is separate from the sale and is never refunded", async () => {
   assert.equal(sale.status, 200);
   assert.equal(sale.body.totalCents, 772); // 7.00 + 10.25% tax, no tip in it
   assert.equal(sale.body.tipCents, 125);
+  await pickUp(sale.body.orderNumber);
   const found = await sam.call(`/refunds/order?q=${sale.body.orderNumber}`);
   assert.equal(found.body.paidCents, 772);
   assert.equal(found.body.tipCents, 125);
@@ -50,6 +51,7 @@ test("a tip is separate from the sale and is never refunded", async () => {
 
 test("a server can't sign their own refund", async () => {
   const sale = await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } });
+  await pickUp(sale.body.orderNumber);
   const found = await sam.call(`/refunds/order?q=${sale.body.orderNumber}`);
   const r = await sam.call("/refunds", { orderId: found.body.orderId, reason: "x", managerNumber: "10420003", managerPin: "333333",
     lines: [{ orderItemId: found.body.lines[0].orderItemId, qty: 1, restock: false }] });

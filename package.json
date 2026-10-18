@@ -7,7 +7,7 @@
     "test": "sql/tests/run.sh && node --test tests/unit/*.test.js",
     "start": "node server/server.js",
     "dev": "node --watch server/server.js",
-    "test:live": "node --test tests/live/api.test.js && node tests/live/click-through.js"
+    "test:live": "node --test tests/live/*.test.js && node tests/live/click-through.js && node tests/live/kitchen-click.js"
   },
   "repository": {
     "type": "git",

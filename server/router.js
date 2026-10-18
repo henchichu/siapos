@@ -75,5 +75,6 @@ router.use(require("./register"));
 router.use(require("./refunds"));
 router.use(require("./kitchen"));
 router.use(require("./shift"));
+router.use(require("./products"));
 
 module.exports = router;

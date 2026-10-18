@@ -24,7 +24,7 @@ app.get("/vendor/:file", (req, res, next) => {
 app.use("/api", express.json(), router);
 
 // Each page opens only for a role that has it in its menu; anyone else goes back to their own home
-const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift" };
+const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products" };
 app.use((req, res, next) => {
   const need = PAGE_NAV[req.path];
   if (need === undefined) return next();
@@ -42,6 +42,7 @@ app.use((err, req, res, next) => {
   if (err.status) return res.status(err.status).json({ error: err.message });
   // a rule the database enforces itself (SQLSTATE 45000): its message is written for people
   if (err.sqlState === "45000") return res.status(409).json({ error: err.sqlMessage });
+  if (err.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "That name or SKU is already in use." });
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });

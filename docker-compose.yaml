@@ -37,6 +37,9 @@ services:
       DB_USER: app_user
       DB_PASSWORD_FILE: /run/secrets/app_user_password
       GIFTCARD_SECRET_FILE: /run/secrets/giftcard_secret
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     secrets:
       - app_user_password
       - giftcard_secret
@@ -46,6 +49,7 @@ services:
 
 volumes:
   mysql_data:
+  uploads:
 
 secrets:
   db_root_password:

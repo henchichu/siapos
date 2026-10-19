@@ -1,13 +1,13 @@
 // Needs the dev database. Sells a coffee at Campus, then walks it through the kitchen. Adds test data to the dev DB.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock } = require("./env");
+const { start, client, pool, unlock, topUp } = require("./env");
 
 let env;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
 const find = (tickets, queue, number) => tickets.body.queues[queue].find((t) => t.number === number);
 
-test.before(async () => { env = await start(); });
+test.before(async () => { env = await start(); await topUp("stk-oat", 3000); }); // the sale below uses oat milk
 test.after(async () => { env.server.close(); await pool.end(); });
 
 test("a sale reaches the kitchen, moves New -> Preparing -> Ready -> picked up, and only then can be refunded", async () => {
@@ -51,7 +51,8 @@ test("report a loss: written to the ledger, listed today, refused for a bad amou
   assert.equal((await loss({ amount: "250", note: " Past date " })).status, 200);
   const after = await jordan.call("/kitchen/losses");
   assert.equal(after.body.losses.length, before.body.losses.length + 1);
-  assert.deepEqual(after.body.losses[0], { ...after.body.losses[0], item: "Whole milk", amount: 250, unit: "ml", reason: "Spoiled or expired", by: "Jordan" });
+  // other screens (the inventory tests) report losses too, so look for this one rather than the newest
+  assert.ok(after.body.losses.some((l) => l.item === "Whole milk" && l.amount === 250 && l.unit === "ml" && l.reason === "Spoiled or expired" && l.by === "Jordan"));
 
   assert.equal((await loss({ amount: "0" })).status, 400);
   assert.equal((await loss({ amount: "5", reason: "stolen" })).status, 400);

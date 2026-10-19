@@ -54,4 +54,14 @@ async function removeCatalog({ products = [], groups = [], promotions = [] }) {
   }
 }
 
-module.exports = { start, client, pool, unlock, pickUp, removeCatalog };
+// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Campus
+async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
+  const [[row]] = await pool.query("SELECT Quantity AS qty, AverageUnitCost AS cost FROM Inventory WHERE LocationID = ? AND StockItemID = ?", [locationId, stockItemId]);
+  if (Number(row.qty) >= atLeast) return;
+  await pool.query(
+    `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID, QuantityChange, UnitCost, TransactionTypeCode, Note)
+     VALUES (UUID(), 'biz-brewbean', ?, ?, 'emp-leo', ?, ?, 1, 'test top-up')`,
+    [stockItemId, locationId, atLeast - Number(row.qty), row.cost]);
+}
+
+module.exports = { start, client, pool, unlock, pickUp, removeCatalog, topUp };

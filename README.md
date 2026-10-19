@@ -32,11 +32,6 @@ docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 
 The demo gift card `dev-seed-card-0001` only matches the dev secret `dev-giftcard-secret`; put that in `sql/secrets/giftcard_secret.txt` for development.
 
-
-## Products
-
-`/products.html` shows a read-only list (name, sizes, category, price from, available) to anyone with permission 11. With permission 12 it becomes four tabs: Products, Sizes and recipes, Option groups, Promotions. Costs and margins need permission 13. Photos are saved under `UPLOAD_DIR` (a Docker volume, `/app/uploads`) and only their key is stored in the database; they are limited to PNG, JPEG or WebP up to 2 MB.
-
 ## Tests
 
 `npm test` (or `sql/tests/run.sh`) builds the schema into a throwaway database inside the running `posdb` container and runs every database rule test as `app_user`. Run it before rebuilding the volume, so schema errors show up there first. It also runs the pricing unit tests (`tests/unit`, no database needed).

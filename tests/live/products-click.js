@@ -9,6 +9,7 @@ const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
 const app = ["api", "shell", "products"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
+let cleanup = async () => {}; // runs on success and on a crash, so a failed run doesn't leave products behind
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
@@ -58,6 +59,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   const [[{ today }]] = await pool.query("SELECT DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', 'America/Chicago'), '%Y-%m-%d') AS today");
   const ended = await lc.call("/promotions", { name: `UI ended ${stamp}`, kind: "percent", value: "10", starts: today, ends: today, productIds: ["prd-latte"] });
   await lc.call(`/promotions/${ended.body.id}/end`, {}); // so "Show ended" has one to show
+  cleanup = async () => removeCatalog({ promotions: [ended.body.id], products: (await lc.call("/products/list")).body.products.filter((p) => p.name.includes(stamp)).map((p) => p.id) });
   const m = await open(base, "10420002", "222222");
   const mrows = () => m.$$("tbody tr").filter((r) => r.querySelectorAll("td").length > 1);
   check("manager sees the four tabs, Products first", m.$$(".tab").map((t) => t.textContent).join("|") === "Products|Sizes and recipes|Option groups|Promotions" && m.byText(".tab", "Products").getAttribute("aria-pressed") === "true");
@@ -137,9 +139,8 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("promotion form: type toggle, value, dates, products, Save and Clear", /Percent off/.test(m.text()) && /Amount off/.test(m.text()) && m.$$(".pform input[type=date]").length === 2 && !!m.$(".pform details.multi") && !!m.byText(".pform .pbtn", "Save"));
   check("manager page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
-  // leave the demo catalog as it was
-  await removeCatalog({ promotions: [ended.body.id], products: (await lc.call("/products/list")).body.products.filter((p) => p.name.includes(stamp)).map((p) => p.id) });
+  await cleanup();
   server.close(); await pool.end();
   console.log(fails ? `${fails} FAILED` : "ALL PASSED");
   process.exit(fails ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch(async (e) => { console.error(e); await cleanup().catch(() => {}); process.exit(1); });

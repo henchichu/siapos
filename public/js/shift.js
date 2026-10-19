@@ -1,6 +1,5 @@
 const tabFromHash = () => window.location.hash.slice(1);
 const day = (iso, tz) => new Date(iso).toLocaleDateString([], { month: "short", day: "numeric", timeZone: tz });
-const dayOf = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const localInput = (iso, tz) => new Date(iso).toLocaleString("sv-SE", { timeZone: tz }).slice(0, 16).replace(" ", "T");
 const hrs = (h) => (h == null ? "—" : h.toFixed(2));
 const STATUSES = [["ALL", "All"], ["OPEN", "Open"], ["SUBMITTED", "Submitted"], ["APPROVED", "Approved"], ["REJECTED", "Rejected"]];
@@ -116,7 +115,7 @@ function Team({ onNotice }) {
     const q = new URLSearchParams(filters).toString();
     return api(`/team/timecards?${q}`).then((d) => { setData(d); setDraft(d.selected); }).catch((e) => onNotice(e.message, "error"));
   }, []);
-  useEffect(() => { load({ status: "SUBMITTED" }); }, [load]);
+  useEffect(() => { load({ status: "SUBMITTED", payPeriodId: new URLSearchParams(window.location.search).get("payPeriodId") || "" }); }, [load]); // ?payPeriodId= comes from Needs attention
 
   const run = async (path, body, okText) => {
     try { const r = await api(path, body || {}); onNotice(okText ? okText(r) : r.message); }

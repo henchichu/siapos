@@ -1,6 +1,6 @@
 const express = require("express");
 const pool = require("./database/connection");
-const { findEmployee, workplace, authenticate } = require("./pin");
+const { findEmployee, workplace, authenticate, isOwner } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
 const { access } = require("./nav");
@@ -64,6 +64,34 @@ router.use(session.requireSession);
 
 router.get("/session", (req, res) => res.json(req.session.info));
 
+// Only an owner moves between locations; everyone else stays at the one they signed in to
+const ownerOnly = async (req, res, next) =>
+  (await isOwner(req.session.employeeId)) ? next() : res.status(403).json({ error: "Only an owner can switch location." });
+
+// The places this owner works, and a switch between them: the register and every location-scoped page follow the session
+router.get("/locations", ownerOnly, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT l.LocationID AS id, l.Name AS name FROM EmployeeLocation el JOIN Location l USING (LocationID, BusinessID)
+      WHERE el.EmployeeID = ? AND el.Active AND l.Active ORDER BY l.Name`,
+    [req.session.employeeId]
+  );
+  res.json({ current: req.session.locationId, locations: rows });
+});
+
+router.post("/locations/switch", ownerOnly, async (req, res) => {
+  const [[place]] = await pool.query(
+    `SELECT l.LocationID, l.Name AS LocationName FROM EmployeeLocation el JOIN Location l USING (LocationID, BusinessID)
+      WHERE el.EmployeeID = ? AND el.Active AND l.Active AND l.LocationID = ?`,
+    [req.session.employeeId, String(req.body.locationId)]
+  );
+  if (!place) return res.status(403).json({ error: "You don't work at that location." });
+  const [[reg]] = await pool.query("SELECT RegisterID, Name FROM Register WHERE LocationID = ? AND RegStatusCode = 1 ORDER BY Name LIMIT 1", [place.LocationID]);
+  req.session.locationId = place.LocationID;
+  req.session.registerId = reg?.RegisterID;
+  req.session.info = Object.freeze({ ...req.session.info, locationName: place.LocationName, registerName: reg?.Name });
+  res.json({ locationName: place.LocationName });
+});
+
 // A page that finds the role may not open it reports it here before redirecting home
 router.post("/access-violation", (req, res) => {
   const { employeeName, roleName } = req.session.info;
@@ -77,5 +105,6 @@ router.use(require("./kitchen"));
 router.use(require("./shift"));
 router.use(require("./products"));
 router.use(require("./inventory"));
+router.use(require("./attention"));
 
 module.exports = router;

@@ -4,6 +4,7 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { hasPermission } = require("./pin");
 const { requirePermission } = require("./session");
+const { myLocations } = require("./locations");
 
 const PERM_SEE = 14;    // See inventory
 const PERM_CHANGE = 15; // Restock and adjust stock
@@ -17,11 +18,6 @@ const change = requirePermission(PERM_CHANGE);
 const uuid = () => crypto.randomUUID();
 
 // ---- helpers ----------------------------------------------------------------------------------------------------
-
-const myLocations = async (employeeId) => {
-  const [rows] = await pool.query("SELECT LocationID FROM EmployeeLocation WHERE EmployeeID = ? AND Active", [employeeId]);
-  return rows.map((r) => r.LocationID);
-};
 
 // Stock is only read and changed at locations the employee works at
 async function placeOf(req, id) {

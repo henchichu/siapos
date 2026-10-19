@@ -85,4 +85,10 @@ const hasPermission = (db, employeeId, code) =>
     )
     .then(([[r]]) => !!r.ok);
 
-module.exports = { findEmployee, workplace, authenticate, hasPermission };
+// Read from the database each time, like hasPermission, so a demoted owner loses it at once
+const isOwner = async (employeeId) => {
+  const [[row]] = await pool.query("SELECT r.IsOwner AS owner FROM Employee e JOIN Role r ON r.RoleID = e.RoleID WHERE e.EmployeeID = ?", [employeeId]);
+  return !!row?.owner;
+};
+
+module.exports = { findEmployee, workplace, authenticate, hasPermission, isOwner };

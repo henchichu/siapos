@@ -108,6 +108,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("refund view, #refund", /Find the order/.test(text()) && w.location.hash === "#refund");
   await type($(".find input"), sale[1]);
   await click(byText(".find button", "Find"), 600);
+  check("refund screen offers Send to a manager, off until items and a reason are chosen", !!byText("button", "Send to a manager")?.disabled);
   check("order found, tip shown as not refundable", new RegExp("Order " + sale[1]).test(text()) && /not refundable/.test(text()));
   await click($(".rt tbody input[type=checkbox]"), 200);
   check("refund total excludes the tip", new RegExp("Refund total\\s*\\$" + sale[2].replace(".", "\\.")).test(text()));

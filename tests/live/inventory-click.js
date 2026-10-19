@@ -3,14 +3,15 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool } = require("./env");
+const { start, client, pool } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
 const app = ["api", "shell", "inventory"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
-let cleanup = async () => {}; // runs on success and on a crash, so a failed run doesn't leave test rows behind
+let restore = async () => {};
+let cleanup = async () => restore(); // runs on success and on a crash, so a failed run doesn't leave test rows behind
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
@@ -34,6 +35,11 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 
 (async () => {
   const { server, base } = await start();
+  // The demo stock changes as people use the app, so make one item low on purpose: its reorder level goes just above what is on hand
+  const sc = client(base); await sc.call("/login/pin", { employeeNumber: "10420002", pin: "222222" });
+  const muffin = (await sc.call("/inventory")).body.rows.find((r) => r.id === "stk-muffin");
+  await sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.onHand + 5) });
+  restore = () => sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.reorderAt) });
   const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420002", pin: "222222" }) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
   const m = await open(base, "10420002", "222222");
   const rows = (sel = "section.pview[aria-label=Inventory]") => m.$$(`${sel} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1);
@@ -42,7 +48,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("three tabs, Stock first", m.$$(".tab").map((t) => t.textContent).join("|") === "Stock|Receive delivery|Stock count" && m.byText(".tab", "Stock").getAttribute("aria-pressed") === "true");
   check("stock columns", m.$$("section.pview[aria-label=Inventory] thead th").map((t) => t.textContent).join("|") === "Stock item|On hand|Reorder at|Avg cost|Status|Actions");
   check("a row shows on hand with its unit, reorder level, average cost and status", /^\d+ ml$/.test(cells(row("Whole milk"))[1]) && /^\$0\.00\d+$/.test(cells(row("Whole milk"))[3]) && cells(row("Whole milk"))[4] === "OK");
-  check("at or below the reorder level is LOW", cells(row("Oat milk"))[4] === "LOW" && row("Oat milk").querySelector("td.low"));
+  check("at or below the reorder level is LOW", cells(row("Blueberry muffin"))[4] === "LOW" && row("Blueberry muffin").querySelector("td.low"));
   check("the form column isn't there until a row action", !m.$(".pform"));
   check("footer shows employee, role and location", /Leo Brandt/.test(m.text()) && /Manager · Brewbean Campus/.test(m.text()));
 
@@ -82,6 +88,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   // Add stock item
   const stamp = Date.now().toString(36);
   cleanup = async () => {
+    await restore();
     await pool.query("DELETE FROM Supplier WHERE Name LIKE ?", [`UI supplier ${stamp}%`]); // never delivered to
     await pool.query("DELETE FROM StockItemSupplier WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
     await pool.query("DELETE FROM Inventory WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);

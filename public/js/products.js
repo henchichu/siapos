@@ -1,7 +1,6 @@
 const TABS = [["products", "Products"], ["sizes", "Sizes and recipes"], ["options", "Option groups"], ["promotions", "Promotions"]];
 const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "products"; };
 const usd = (n) => (n == null ? "—" : `$${n.toFixed(2)}`);
-const dayText = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const picks = (min, max) => (max == null ? (min ? `at least ${min}` : "any number") : min === max ? `exactly ${max}` : min ? `${min} to ${max}` : `up to ${max}`);
 
 // A dropdown that holds checkboxes: the native <details> keeps it keyboard-friendly with no extra code
@@ -343,7 +342,7 @@ function PromotionsTab({ data, reload }) {
         <colgroup><col /><col style=${{ width: 100 }} /><col style=${{ width: 80 }} /><col style=${{ width: 90 }} /><col style=${{ width: 90 }} /><col style=${{ width: 76 }} /><col style=${{ width: 116 }} /></colgroup>
         <thead><tr><th>Promotion</th><th>Discount</th><th>Applies to</th><th>Starts</th><th>Ends</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((p) => html`<tr key=${p.id} className=${p.status === "Ended" ? "off" : ""}><td>${p.name}</td><td>${off(p)}</td>
-          <td>${p.productIds.length} ${p.productIds.length === 1 ? "product" : "products"}</td><td>${dayText(p.starts)}</td><td>${dayText(p.ends)}</td><td>${p.status}</td>
+          <td>${p.productIds.length} ${p.productIds.length === 1 ? "product" : "products"}</td><td>${dayOf(p.starts)}</td><td>${dayOf(p.ends)}</td><td>${p.status}</td>
           <td><div className="acts"><button className="act" onClick=${() => show({ id: p.id, name: p.name, kind: p.kind, value: String(p.value), starts: p.starts, ends: p.ends, productIds: p.productIds })}>Edit</button>
             ${p.status !== "Ended" && html`<button className="act" onClick=${() => switchTo(p, "end")}>End</button>`}
             ${!p.active && html`<button className="act" onClick=${() => switchTo(p, "activate")}>Activate</button>`}</div></td></tr>`)}

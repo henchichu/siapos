@@ -331,6 +331,23 @@ function RefundView({ onExit }) {
     setBusy(false);
   };
 
+  // No manager at hand: the refund waits for one (it shows on their Needs attention page)
+  const ask = async () => {
+    setBusy(true);
+    try {
+      const out = await api("/refunds/request", {
+        orderId: found.orderId, reason,
+        lines: chosen.map((l) => ({ orderItemId: l.orderItemId, qty: qtyOf(l), restock: !!picks[l.orderItemId].restock })),
+      });
+      setResult(null); setPicks({}); setNumber(""); setPin("");
+      await load(String(found.orderNumber));
+      setMsg({ kind: "ok", text: `Sent to a manager: ${money(out.totalCents)} to ${out.method} once approved.` });
+    } catch (err) {
+      setMsg({ kind: "error", text: err.message });
+    }
+    setBusy(false);
+  };
+
   return html`<section className="refund" aria-label="Refund on an order">
     <div className="main">
       <div className="title"><button className="btn" onClick=${onExit}>Back to register</button><h2>Refund</h2></div>
@@ -369,6 +386,8 @@ function RefundView({ onExit }) {
       <div className="dashed"><b>Manager override</b>
         <${ManagerFields} number=${number} pin=${pin} setNumber=${setNumber} setPin=${setPin} /></div>
       <${Message} msg=${msg} dashed />
+      <button className="btn block" disabled=${busy || !found || !chosen.length || !reason.trim() || chosen.some((l) => qtyOf(l) < 1)} onClick=${ask}>Send to a manager</button>
+      <p className="sub">No manager here? Send it, and they approve it from Needs attention.</p>
       <div className="btns">
         <button className="btn primary" disabled=${busy || !found || !chosen.length || !reason.trim() || chosen.some((l) => qtyOf(l) < 1)} onClick=${complete}>Complete refund</button>
         <button className="btn" onClick=${onExit}>Cancel</button></div>

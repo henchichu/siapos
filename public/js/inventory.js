@@ -9,7 +9,6 @@ const usd = (n) => `$${n.toFixed(2)}`;
 const delta = (n) => (n > 0 ? `+${qty(n)}` : n < 0 ? `−${qty(-n)}` : "±0");
 const moneyDelta = (n) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}$${Math.abs(n).toFixed(2)}`;
 const when = (iso, tz) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz });
-const dayText = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const num = (s) => (s === "" || s == null || !Number.isFinite(Number(s)) ? null : Number(s));
 const isLow = (r) => r.onHand <= r.reorderAt;
 
@@ -33,7 +32,7 @@ const ShowInactive = ({ checked, onChange }) => html`<label className="check"><i
 function StockTab({ data, reload, onLocation, showInactive, setShowInactive }) {
   const [supplier, setSupplier] = useState("");
   const [query, setQuery] = useState("");
-  const [lowOnly, setLowOnly] = useState(false);
+  const [lowOnly, setLowOnly] = useState(window.location.hash === "#low"); // Needs attention links here with #low
   const [form, setForm] = useState(null); // null = the form column is away; a row action brings it in
   const [adding, setAdding] = useState(null); // the "Add stock item" form, in the same column
   const [msg, setMsg] = useState(null);
@@ -234,7 +233,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       <table className="table mg">
         <colgroup><col style=${{ width: 90 }} /><col /><col style=${{ width: 40 }} /><col style=${{ width: 70 }} /></colgroup>
         <thead><tr><th>Date</th><th>Supplier</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
-        <tbody>${data.deliveries.map((d) => html`<tr key=${d.id}><td>${dayText(d.date)}</td><td>${d.supplier}</td><td className="r">${d.lines}</td><td className="r">${usd(d.total)}</td></tr>`)}
+        <tbody>${data.deliveries.map((d) => html`<tr key=${d.id}><td>${dayOf(d.date)}</td><td>${d.supplier}</td><td className="r">${d.lines}</td><td className="r">${usd(d.total)}</td></tr>`)}
           ${!data.deliveries.length && html`<tr><td colSpan="4">No deliveries yet.</td></tr>`}</tbody>
       </table>
     </section>

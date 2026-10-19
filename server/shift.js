@@ -4,6 +4,7 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { hasPermission } = require("./pin");
 const { requirePermission } = require("./session");
+const { myLocations } = require("./locations");
 
 const PERM_SEE_TEAM = 17;
 const PERM_APPROVE = 18;
@@ -53,11 +54,6 @@ const periodAt = async (businessId, locationId) => {
     [locationId, businessId]
   );
   return p;
-};
-
-const myLocations = async (employeeId) => {
-  const [rows] = await pool.query("SELECT LocationID FROM EmployeeLocation WHERE EmployeeID = ? AND Active", [employeeId]);
-  return rows.map((r) => r.LocationID);
 };
 
 // ---- My shift (everyone) --------------------------------------------------------------------------------------

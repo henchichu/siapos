@@ -106,5 +106,6 @@ router.use(require("./shift"));
 router.use(require("./products"));
 router.use(require("./inventory"));
 router.use(require("./attention"));
+router.use(require("./reports"));
 
 module.exports = router;

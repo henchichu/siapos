@@ -7,7 +7,7 @@
     "test": "sql/tests/run.sh && node --test tests/unit/*.test.js",
     "start": "node server/server.js",
     "dev": "node --watch server/server.js",
-    "test:live": "node --test --test-concurrency=1 tests/live/*.test.js && node tests/live/click-through.js && node tests/live/kitchen-click.js && node tests/live/shift-click.js && node tests/live/home-click.js && node tests/live/products-click.js && node tests/live/inventory-click.js && node tests/live/attention-click.js"
+    "test:live": "node --test --test-concurrency=1 tests/live/*.test.js && node tests/live/click-through.js && node tests/live/kitchen-click.js && node tests/live/shift-click.js && node tests/live/home-click.js && node tests/live/products-click.js && node tests/live/inventory-click.js && node tests/live/attention-click.js && node tests/live/reports-click.js"
   },
   "repository": {
     "type": "git",

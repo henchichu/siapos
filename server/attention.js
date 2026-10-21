@@ -63,4 +63,5 @@ router.get("/attention", async (req, res) => {
   res.json(out);
 });
 
+router.LOSS_REASONS = LOSS_REASONS; // the Stock losses report names reasons the same way
 module.exports = router;

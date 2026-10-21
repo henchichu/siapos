@@ -3,7 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useRef, useCallback } = React;
 
 // Menu items and Home tiles with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", "Needs attention": "/attention.html", Employees: "/shift.html#team" }; // Employees is the team timecards
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/shift.html#team" }; // Employees is the team timecards
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).

@@ -185,7 +185,10 @@ async function completeSale(req) {
         if (!approval) throw new HttpError(403, "The discount approval has expired or no longer matches. Remove it and apply it again.");
       }
       if (customerId) {
-        const [[c]] = await conn.query("SELECT 1 AS ok FROM Customer WHERE CustomerID = ? AND BusinessID = ? AND Active", [String(customerId), businessId]);
+        // a deactivated membership can't be used at the register, even though the customer is still on file
+        const [[c]] = await conn.query(
+          "SELECT 1 AS ok FROM Customer c JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active WHERE c.CustomerID = ? AND c.BusinessID = ? AND c.Active",
+          [String(customerId), businessId]);
         if (!c) throw new HttpError(400, "That rewards member isn't available.");
       }
       const tipCents = methodCode === 2 ? Math.round(Number(payment.tip || 0) * 100) : 0;

@@ -32,10 +32,6 @@ docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 
 The demo gift card `dev-seed-card-0001` only matches the dev secret `dev-giftcard-secret`; put that in `sql/secrets/giftcard_secret.txt` for development.
 
-## Orders
-
-`/orders.html` searches orders (From and To date, Location, Employee, Status; today by default) and lists the newest 200, with the full count shown. Each row links to `/order.html?id=…`: items with options, totals, payments and refunds, who and where, and the status history. "Refund this order" opens the same refund screen the register uses (`public/js/refund.js`) on that order: a manager signs with number and PIN, anyone else sends it to a manager. Both pages and `/api/orders` need the "Search orders" permission (16) and only show orders at the caller's own locations. Adjusting a tip isn't built yet; its button is disabled.
-
 ## Going live
 
 Passwords and PINs cross the network, so serve the app over HTTPS: put a reverse proxy with a certificate in front of it, and publish the app's port to the proxy only (`127.0.0.1:3000:3000` in `docker-compose.yaml`), not to the café network. Then set `COOKIE_SECURE=1` (the session cookie is only sent over HTTPS) and `TRUST_PROXY=1` (the sign-in limit counts each person's own address, not the proxy's) in a `.env` file next to `docker-compose.yaml`. Both default to off, which is right for `localhost` development.

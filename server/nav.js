@@ -17,11 +17,11 @@ function byRole({ RoleName, IsOwner, OpensTo }, destinations) {
   return { nav: ["My shift"], tiles: tilesFor(["My shift"]), home: "/shift.html" };
 }
 
-// Reports and Employees follow the permissions, not the role's name: a menu item and tile only for a role that
-// may see reports (granted.reports) or manage staff (granted.staff). Owners hold every permission.
+// Reports, Employees and Rewards follow the permissions, not the role's name: a menu item and tile only for a role that
+// may see reports (granted.reports), manage staff (granted.staff) or look up members (granted.members). Owners hold every permission.
 function access(emp, destinations, granted) {
   const out = byRole(emp, destinations);
-  const keep = (n) => (n !== "Reports" || granted.reports) && (n !== "Employees" || granted.staff);
+  const keep = (n) => (n !== "Reports" || granted.reports) && (n !== "Employees" || granted.staff) && (n !== "Rewards" || granted.members);
   return { ...out, nav: out.nav.filter(keep), tiles: Object.freeze(out.tiles.filter(keep)) };
 }
 

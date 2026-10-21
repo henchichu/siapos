@@ -27,8 +27,8 @@ app.get("/vendor/:file", (req, res, next) => {
 
 app.use("/api", express.json(), router);
 
-// Reports and Employees are checked live against their permissions (20 and 19), so taking one away works at once
-const LIVE = { "/reports.html": 20, "/employees.html": 19 };
+// Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
+const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };
 app.get(Object.keys(LIVE), async (req, res, next) => {
   const s = session.fromRequest(req);
   if (!s) return res.redirect("/login.html");

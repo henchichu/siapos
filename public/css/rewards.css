@@ -1,0 +1,27 @@
+/* Rewards. Layout from the ClockIt Rewards members and Member history wireframes; the list and form share employees.css */
+.staff .check.search { gap: 12px; }
+.staff .check.search .field { width: 280px; }
+.staff .table .contact .sub, .history .table .sub, .odetail .table .sub { display: block; font-size: 13px; }
+
+.history { padding: 24px 0; }
+.hhead { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.mcards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; padding: 16px 0 8px; }
+.mcards > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.mcards span { font-size: 14px; color: var(--muted); }
+.mcards b { font-size: 36px; font-weight: 600; overflow-wrap: anywhere; }
+.history .tablewrap { overflow-x: auto; }
+.history .table { min-width: 860px; }
+.history .table td { vertical-align: middle; }
+
+.odetail { gap: 20px; }
+.odetail h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.sums { display: flex; flex-direction: column; gap: 6px; margin-left: auto; width: min(320px, 100%); }
+.sumline { display: flex; justify-content: space-between; gap: 12px; }
+.sumline.strong { font-weight: 600; border-top: 2px solid var(--ink); padding-top: 8px; }
+
+@media (max-width: 1100px) { .mcards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .staff .check.search { flex: 1 1 100%; } .staff .check.search .field { width: auto; flex: 1; }
+  .history { padding: 0; }
+  .mcards b { font-size: 28px; }
+}

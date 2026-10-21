@@ -23,7 +23,7 @@ docker compose down -v && docker compose up -d
 
 If `posdb` stays `unhealthy`, an init script failed: check `docker logs posdb`.
 
-The demo shop and the known dev PINs live in `sql/dev/` and are **not** loaded by default. `05-dev-seed.sql` is a demo coffee shop (Brewbean Coffee: two cafés, two weeks of orders, staff shifts) and `06-dev-credentials.sql` gives its staff PINs (owner Maya `111111`, manager Leo `222222`, servers Sam `333333` and Priya `444444`, barista Jordan `555555`, assistant manager Ana `666666`). Load them for development with:
+The demo shop and the known dev PINs live in `sql/dev/` and are **not** loaded by default. `05-dev-seed.sql` is a demo coffee shop (Brewbean Coffee: two cafés, two weeks of orders, staff shifts) and `06-dev-credentials.sql` gives its staff PINs (owner Maya `111111`, manager Leo `222222`, servers Sam `333333` and Priya `444444`, barista Jordan `555555`, assistant manager Ana `666666`; their employee numbers are `10420001` to `10420006` in that order). Load them for development with:
 
 ```sh
 docker compose down -v

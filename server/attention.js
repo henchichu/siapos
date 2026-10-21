@@ -64,3 +64,4 @@ router.get("/attention", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.LOSS_REASONS = LOSS_REASONS;

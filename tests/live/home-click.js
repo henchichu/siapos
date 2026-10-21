@@ -43,7 +43,7 @@ async function home(base, number, pin) {
 
   check("header shows Home and the register and location", /^Home/.test(barista.header) && /Brewbean Campus/.test(barista.header) && /Counter - Brewbean Campus/.test(barista.header), barista.header);
   const link = (h, n) => h.tiles.find((t) => t.textContent.trim() === n)?.getAttribute("href");
-  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Reports") === "/section.html#Reports" && link(owner, "Employees") === "/shift.html#team");
+  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Reports") === "/reports.html" && link(owner, "Employees") === "/shift.html#team");
   check("every tile has its icon and the grid is uniform", owner.tiles.every((t) => t.querySelector("img")?.getAttribute("src")?.startsWith("/img/home/")));
 
   const signOut = owner.tiles.find((t) => t.textContent.trim() === "Sign out");

@@ -1,0 +1,22 @@
+/* Employees. Layout from the ClockIt Employees wireframe; tables, fields and buttons come from shift.css and products.css */
+.staff { display: flex; gap: 40px; align-items: flex-start; padding-bottom: 24px; }
+.staff > .pview { flex: 1 1 0; min-width: 0; padding: 24px 0; overflow-x: auto; }
+.staff > .pform { width: 340px; flex: none; padding: 24px 0; }
+.staff > .pview .table { min-width: 600px; }
+.staff .phead .pfilters { gap: 24px; }
+.staff .table td { vertical-align: middle; }
+.staff .table .person b, .staff .table .person .sub { font-weight: 400; display: block; }
+.staff .table .sub { font-size: 13px; }
+.staff .pform .sub { font-size: 13px; }
+.staff .select:disabled, .staff .field:disabled { background-color: #f4f4f4; color: var(--muted); cursor: not-allowed; }
+.state.locked { color: var(--error); }
+
+@media (max-width: 1360px) {
+  .staff { flex-direction: column; gap: 24px; }
+  .staff > .pview { flex: none; width: 100%; }
+  .staff > .pform { width: 100%; max-width: 560px; }
+}
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .staff > .pview { overflow-x: auto; padding: 0; }
+  .staff .table { min-width: 720px; }
+}

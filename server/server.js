@@ -2,6 +2,8 @@ const path = require("path");
 const express = require("express");
 const router = require("./router");
 const session = require("./session");
+const pool = require("./database/connection");
+const { hasPermission } = require("./pin");
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
@@ -23,8 +25,18 @@ app.get("/vendor/:file", (req, res, next) => {
 
 app.use("/api", express.json(), router);
 
+// Reports and Employees are checked live against their permissions (20 and 19), so taking one away works at once
+const LIVE = { "/reports.html": 20, "/employees.html": 19 };
+app.get(Object.keys(LIVE), async (req, res, next) => {
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (await hasPermission(pool, s.employeeId, LIVE[req.path])) return next();
+  console.warn(`access violation: ${s.info.employeeName} (${s.info.roleName}) tried ${req.path}`);
+  res.redirect(s.info.home);
+});
+
 // Each page opens only for a role that has it in its menu; anyone else goes back to their own home
-const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention", "/reports.html": "Reports" };
+const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention" };
 app.use((req, res, next) => {
   const need = PAGE_NAV[req.path];
   if (need === undefined) return next();

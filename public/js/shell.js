@@ -3,7 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useRef, useCallback } = React;
 
 // Menu items and Home tiles with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/shift.html#team" }; // Employees is the team timecards
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -33,6 +33,16 @@ function Sidebar({ me, current, onSignOut = signOut }) {
       <button className="link" onClick=${onSignOut}>Sign out</button>
     </div>
   </nav>`;
+}
+
+// A dropdown that holds checkboxes: the native <details> keeps it keyboard-friendly with no extra code
+function Multi({ options, value, onChange, empty }) {
+  const names = options.filter((o) => value.includes(o.id)).map((o) => o.name);
+  return html`<details className="multi">
+    <summary className="select">${names.length ? names.join(", ") : empty}</summary>
+    <div className="menu">${options.map((o) => html`<label key=${o.id}><input type="checkbox" checked=${value.includes(o.id)}
+      onChange=${(e) => onChange(e.target.checked ? [...value, o.id] : value.filter((v) => v !== o.id))} /> ${o.name}</label>`)}</div>
+  </details>`;
 }
 
 function SuccessPanel({ name }) {

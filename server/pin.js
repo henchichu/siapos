@@ -50,6 +50,10 @@ async function recordFailure(conn, employeeId) {
   return { status: "bad", retriesLeft: MAX_ATTEMPTS - failed };
 }
 
+// A correct PIN, a new PIN or an owner's Unlock all start the count again
+const clearLockout = (db, employeeId) =>
+  db.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
+
 // Checks a PIN and keeps the attempt counter and lockout.
 // Sign-in: wrong tries count against that employee. Manager override (payerId = the cashier): wrong tries
 // count against the cashier, so nobody can lock a manager out by guessing at their PIN.
@@ -63,7 +67,7 @@ const authenticate = (employeeNumber, pin, payerId) =>
     // FOR UPDATE serialises concurrent guesses so none escape the attempt counter
     const emp = await findEmployee(conn, String(employeeNumber), "FOR UPDATE");
     if (emp && !emp.IsLocked && emp.PinHash && verifySecret(String(pin), emp.PinHash)) {
-      await conn.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [emp.EmployeeID]);
+      await clearLockout(conn, emp.EmployeeID);
       return { status: "ok", emp };
     }
     if (payerId) return recordFailure(conn, payerId);
@@ -91,4 +95,4 @@ const isOwner = async (employeeId) => {
   return !!row?.owner;
 };
 
-module.exports = { findEmployee, workplace, authenticate, hasPermission, isOwner };
+module.exports = { findEmployee, workplace, authenticate, hasPermission, isOwner, clearLockout };

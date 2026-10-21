@@ -59,7 +59,7 @@ async function open(base, number, pin, hash = "") {
   // Manager: Team timecards first, with the toggle
   const m = await open(base, "10420002", "222222");
   check("manager opens Team timecards", /Timecards/.test(m.text()) && !!m.$(".filters") && m.byText(".tab", "Team timecards").getAttribute("aria-pressed") === "true");
-  check("manager sees all nine menu links", m.$$(".nav a.link").length === 9);
+  check("manager sees all ten menu links, Employees among them", m.$$(".nav a.link").length === 10 && m.$$(".nav a.link").some((a) => a.textContent === "Employees"));
   check("counter text", /\d+ waiting for approval/.test(m.text()));
   const rows = () => m.$$(".cards tbody tr").filter((r) => r.querySelectorAll("td").length > 1);
   check("default filter lists only SUBMITTED rows with Approve, Reject, Edit", rows().length > 0 && rows().every((r) => /SUBMITTED/.test(r.textContent) && /Approve/.test(r.textContent) && /Reject/.test(r.textContent) && /Edit/.test(r.textContent)));

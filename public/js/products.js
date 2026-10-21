@@ -3,17 +3,6 @@ const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS
 const usd = (n) => (n == null ? "—" : `$${n.toFixed(2)}`);
 const picks = (min, max) => (max == null ? (min ? `at least ${min}` : "any number") : min === max ? `exactly ${max}` : min ? `${min} to ${max}` : `up to ${max}`);
 
-// A dropdown that holds checkboxes: the native <details> keeps it keyboard-friendly with no extra code
-function Multi({ options, value, onChange, empty }) {
-  const names = options.filter((o) => value.includes(o.id)).map((o) => o.name);
-  return html`<details className="multi">
-    <summary className="select">${names.length ? names.join(", ") : empty}</summary>
-    <div className="menu">${options.map((o) => html`<label key=${o.id}><input type="checkbox" checked=${value.includes(o.id)}
-      onChange=${(e) => onChange(e.target.checked ? [...value, o.id] : value.filter((v) => v !== o.id))} /> ${o.name}</label>`)}</div>
-  </details>`;
-}
-
-
 function Tabs({ tab, onTab }) {
   return html`<div className="tabs" role="group" aria-label="Product management">
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;

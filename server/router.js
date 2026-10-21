@@ -1,11 +1,13 @@
 const express = require("express");
 const pool = require("./database/connection");
-const { findEmployee, workplace, authenticate, isOwner } = require("./pin");
+const { findEmployee, workplace, authenticate, isOwner, hasPermission } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
 const { access } = require("./nav");
 
 const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html" };
+const PERM_REPORTS = 20;
+const PERM_MANAGE_STAFF = 19;
 
 const router = express.Router();
 router.use((req, res, next) => {
@@ -36,7 +38,8 @@ router.post("/login/pin", async (req, res) => {
 
   const { emp } = result;
   const place = (await workplace(emp.EmployeeID)) || {};
-  const { nav, tiles, home } = access(emp, DESTINATIONS);
+  const granted = { reports: await hasPermission(pool, emp.EmployeeID, PERM_REPORTS), staff: await hasPermission(pool, emp.EmployeeID, PERM_MANAGE_STAFF) };
+  const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
   session.create(res, {
     employeeId: emp.EmployeeID,
     businessId: emp.BusinessID,
@@ -107,5 +110,6 @@ router.use(require("./products"));
 router.use(require("./inventory"));
 router.use(require("./attention"));
 router.use(require("./reports"));
+router.use(require("./employees"));
 
 module.exports = router;

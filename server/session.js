@@ -30,6 +30,11 @@ function destroy(req, res) {
   res.clearCookie("session");
 }
 
+// Signs someone out everywhere at once, e.g. when they are deactivated
+function endSessionsOf(employeeId) {
+  for (const [token, s] of sessions) if (s.employeeId === employeeId) sessions.delete(token);
+}
+
 function fromRequest(req) {
   const token = tokenOf(req);
   const s = sessions.get(token);
@@ -79,6 +84,6 @@ function giftFailed(s) {
 const giftOk = (s) => { s.giftFails = null; };
 
 module.exports = {
-  create, destroy, fromRequest, requireSession, requirePermission,
+  create, destroy, endSessionsOf, fromRequest, requireSession, requirePermission,
   grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk,
 };

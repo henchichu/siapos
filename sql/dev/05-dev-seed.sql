@@ -55,14 +55,15 @@ VALUES
     ('role-server',  @biz, 'Server',            'REGISTER', FALSE),
     ('role-barista', @biz, 'Chef / barista',    'KITCHEN',  FALSE);
 
--- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides) and 18 (approve timecards)
+-- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards), 19 (manage staff)
+-- and 20 (reports): only owners and managers see Reports and Employees
 INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
 SELECT r.RoleID, @biz, p.PermissionCode
   FROM Role r JOIN Permission p
     ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
     OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
-    OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20))
-    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 23));
+    OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23));
 
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES

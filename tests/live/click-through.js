@@ -25,7 +25,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   w.eval(lib("htm/dist/htm.umd.js"));
   const errors = [];
   w.console.error = (...a) => errors.push(a.join(" ").slice(0, 300));
-  w.eval(["api", "shell", "register"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n"));
+  w.eval(["api", "shell", "refund", "register"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n"));
 
   const $ = (sel) => w.document.querySelector(sel);
   const $$ = (sel) => [...w.document.querySelectorAll(sel)];

@@ -5,6 +5,8 @@ const { requirePermission } = require("./session");
 const { isOwner, hasPermission } = require("./pin");
 const { LOSS_REASONS } = require("./attention");
 const { mondayOf, splitOvertime, shiftPay } = require("./overtime");
+const { isDate } = require("./dates");
+const { cents } = require("./pricing");
 
 const PERM_REPORTS = 20;
 const PERM_COSTS = 13;
@@ -23,8 +25,6 @@ const NOT_GIFT_CARD = "NOT EXISTS (SELECT 1 FROM ProductVariant v JOIN Product p
 const router = express.Router();
 router.use("/reports", requirePermission(PERM_REPORTS));
 
-const cents = (n) => Math.round(Number(n || 0) * 100);
-const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 864e5);
 

@@ -238,22 +238,14 @@ router.post("/sizes/:id/recipe", edit, async (req, res) => {
     seen.add(stockItemId);
     return [stockItemId, quantity(l.quantity)];
   });
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  await pool.tx(async (conn) => {
     await owns(conn, "SELECT 1 AS ok FROM ProductVariant WHERE VariantID = ? AND BusinessID = ? FOR UPDATE", [req.params.id, businessId], "Size not found.");
     for (const [stockItemId] of clean) await owns(conn, "SELECT 1 AS ok FROM StockItem WHERE StockItemID = ? AND BusinessID = ? AND Active", [stockItemId, businessId], "Choose stock items from the list.");
     await conn.query("DELETE FROM VariantRecipe WHERE VariantID = ?", [req.params.id]);
     for (const [stockItemId, qty] of clean)
       await conn.query("INSERT INTO VariantRecipe (VariantID, StockItemID, BusinessID, QuantityPerUnit) VALUES (?, ?, ?, ?)", [req.params.id, stockItemId, businessId, qty]);
-    await conn.commit();
-    res.json({ ok: true });
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+  });
+  res.json({ ok: true });
 });
 
 // ---- Option groups ----------------------------------------------------------------------------------------------
@@ -314,9 +306,7 @@ async function saveGroup(req, res, groupId) {
   if (min > options.length) throw new HttpError(400, "Fewest choices can't be more than the number of options, or the product could never be sold.");
   const productIds = ids(req.body.productIds);
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  const saved = await pool.tx(async (conn) => {
     for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [p, businessId], "Choose products from the list.");
     let id = groupId;
     if (id) {
@@ -355,14 +345,9 @@ async function saveGroup(req, res, groupId) {
     await conn.query(`DELETE FROM ProductModifierGroup WHERE ModifierGroupID = ? ${productIds.length ? "AND ProductID NOT IN (?)" : ""}`, productIds.length ? [id, productIds] : [id]);
     for (const p of productIds)
       await conn.query("INSERT IGNORE INTO ProductModifierGroup (ProductID, ModifierGroupID, BusinessID) VALUES (?, ?, ?)", [p, id, businessId]);
-    await conn.commit();
-    res.json({ id });
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    return id;
+  });
+  res.json({ id: saved });
 }
 router.post("/option-groups", edit, (req, res) => saveGroup(req, res, null));
 router.post("/option-groups/:id", edit, (req, res) => saveGroup(req, res, req.params.id));
@@ -403,9 +388,7 @@ async function savePromotion(req, res, promotionId) {
   const productIds = ids(req.body.productIds);
   if (!productIds.length) throw new HttpError(400, "Choose at least one product.");
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  const saved = await pool.tx(async (conn) => {
     for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [p, businessId], "Choose products from the list.");
     const [[{ tz }]] = await conn.query("SELECT TimeZone AS tz FROM Location WHERE LocationID = ?", [locationId]);
     // runs from the start of the first day to the end of the last, café time
@@ -426,14 +409,9 @@ async function savePromotion(req, res, promotionId) {
     }
     await conn.query("DELETE FROM PromotionProduct WHERE PromotionID = ?", [id]);
     for (const p of productIds) await conn.query("INSERT INTO PromotionProduct (PromotionID, ProductID, BusinessID) VALUES (?, ?, ?)", [id, p, businessId]);
-    await conn.commit();
-    res.json({ id });
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    return id;
+  });
+  res.json({ id: saved });
 }
 router.post("/promotions", edit, (req, res) => savePromotion(req, res, null));
 router.post("/promotions/:id", edit, (req, res) => savePromotion(req, res, req.params.id));

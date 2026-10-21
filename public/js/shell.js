@@ -3,7 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useRef, useCallback } = React;
 
 // Menu items and Home tiles with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html" };
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -70,3 +70,38 @@ function Message({ msg, dashed }) {
   if (!msg?.text) return html`<p className="sr" role="status"></p>`;
   return html`<p className=${`msg ${dashed ? "dashed " : ""}${msg.kind || ""}`} role="status">${msg.text}</p>`;
 }
+
+// Idle sign-out. The server ends a session after IDLE_MS without a touch (server/session.js).
+// Work on the page touches it, throttled; the notice counts down from that same moment and warns at 5 minutes and 1 minute.
+const IDLE_MS = 15 * 60 * 1000;
+const TOUCH_EVERY_MS = 15 * 1000;
+let touchedAt = 0;
+const lastTouch = () => { try { return Math.max(touchedAt, Number(localStorage.getItem("idle.touched")) || 0); } catch (err) { return touchedAt; } }; // shared with other tabs
+
+function noteActivity() {
+  const now = Date.now();
+  if (now - lastTouch() < TOUCH_EVERY_MS) return;
+  touchedAt = now;
+  try { localStorage.setItem("idle.touched", String(now)); } catch (err) { /* storage can be blocked */ }
+  api("/session/touch", {}).catch(() => {});
+}
+["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
+
+function IdleWarning() {
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const left = IDLE_MS - (Date.now() - lastTouch());
+      if (left <= 0) { clearInterval(t); signOut(); return; }
+      setLevel(left <= 60 * 1000 ? 2 : left <= 5 * 60 * 1000 ? 1 : 0);
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  return level ? html`<div className="idle" role="alert">
+    <span>No activity: you'll be signed out in ${level === 2 ? "1 minute" : "5 minutes"}.</span>
+    <button onClick=${() => { noteActivity(); setLevel(0); }}>Stay signed in</button></div>` : null;
+}
+document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/css/idle.css" }));
+const idleRoot = document.body.appendChild(document.createElement("div"));
+ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`);
+noteActivity(); // opening a page counts as activity

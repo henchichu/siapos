@@ -37,7 +37,8 @@ router.post("/login/pin", async (req, res) => {
       .json({ error: `Incorrect PIN. ${result.retriesLeft} retries left.`, retriesLeft: result.retriesLeft });
 
   const { emp } = result;
-  const place = (await workplace(emp.EmployeeID)) || {};
+  const place = await workplace(emp.EmployeeID);
+  if (!place) return res.status(403).json({ error: "You aren't assigned to a café. Ask an owner to add you to one." });
   const granted = { reports: await hasPermission(pool, emp.EmployeeID, PERM_REPORTS), staff: await hasPermission(pool, emp.EmployeeID, PERM_MANAGE_STAFF) };
   const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
   session.create(res, {
@@ -66,6 +67,8 @@ router.post("/logout", (req, res) => {
 router.use(session.requireSession);
 
 router.get("/session", (req, res) => res.json(req.session.info));
+// The page calls this when the person does something, which restarts the idle clock
+router.post("/session/touch", (req, res) => { req.session.active = Date.now(); res.json({}); });
 
 // Only an owner moves between locations; everyone else stays at the one they signed in to
 const ownerOnly = async (req, res, next) =>
@@ -111,5 +114,6 @@ router.use(require("./inventory"));
 router.use(require("./attention"));
 router.use(require("./reports"));
 router.use(require("./employees"));
+router.use(require("./orders"));
 
 module.exports = router;

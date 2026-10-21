@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
-const ALL = "Inventory|Rewards|Employees|Needs attention|Products|Settings|Kitchen|Sign out|Reports|Register|My shift";
+const ALL = "Inventory|Rewards|Employees|Needs attention|Products|Settings|Kitchen|Orders|Sign out|Reports|Register|My shift";
 
 async function home(base, number, pin) {
   const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
@@ -43,7 +43,7 @@ async function home(base, number, pin) {
 
   check("header shows Home and the register and location", /^Home/.test(barista.header) && /Brewbean Campus/.test(barista.header) && /Counter - Brewbean Campus/.test(barista.header), barista.header);
   const link = (h, n) => h.tiles.find((t) => t.textContent.trim() === n)?.getAttribute("href");
-  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Reports") === "/reports.html" && link(owner, "Employees") === "/employees.html");
+  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Orders") === "/orders.html" && link(owner, "Reports") === "/reports.html" && link(owner, "Employees") === "/employees.html");
   check("a manager's Employees tile opens Employees too", link(manager, "Employees") === "/employees.html");
   check("every tile has its icon and the grid is uniform", owner.tiles.every((t) => t.querySelector("img")?.getAttribute("src")?.startsWith("/img/home/")));
 

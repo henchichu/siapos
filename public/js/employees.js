@@ -1,4 +1,4 @@
-// Employees: the staff list on the left, the add / edit form on the right. A PIN only ever travels from the form to the server.
+// Employees: the staff list, and the add / edit form in a right-hand column that is only there while adding or editing. A PIN only ever travels from the form to the server.
 // Owners manage everyone and set pay. Managers manage the staff at their own locations below them, and see pay read-only.
 const usd = (n) => (n == null ? "—" : `$${n.toFixed(2)}`);
 const empty = (data) => ({ id: null, firstName: "", lastName: "", number: "", email: "", roleId: "", locationIds: [], rate: "", startsOn: data.canPay ? data.today : "", pin: "" });
@@ -34,7 +34,7 @@ function StaffForm({ data, form, setForm, msg, busy, onSave, onClear }) {
   const editing = !!form.id;
   const self = form.id === data.me;
   const digits = (n) => (e) => e.target.value.replace(/\D/g, "").slice(0, n);
-  return html`<aside className="pform" aria-label=${editing ? "Edit employee" : "Add employee"}>
+  return html`<aside className="pform pside" aria-label=${editing ? "Edit employee" : "Add employee"}>
     <h2>${editing ? "Edit employee" : "Add employee"}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <label className="pf"><b>First name</b><input className="field" maxLength="50" value=${form.firstName} onChange=${(e) => set({ firstName: e.target.value })} /></label>
@@ -71,24 +71,24 @@ function App() {
   const [error, setError] = useState("");
   const [role, setRole] = useState("all");
   const [showInactive, setShowInactive] = useState(false);
-  const [form, setForm] = useState(null);
+  const [form, setForm] = useState(null); // null: the form column is closed
   const [msg, setMsg] = useState(null); // the form's message area
   const [note, setNote] = useState(null); // what a row action did
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => api("/employees").then((d) => { setData(d); return d; }).catch((e) => setError(e.message)), []);
-  useEffect(() => { load().then((d) => d && setForm(empty(d))); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  const clear = () => { setForm(empty(data)); setMsg(null); };
-  const edit = (e) => { setForm(fromEmployee(e)); setMsg(null); setNote(null); };
+  const clear = () => { setForm(null); setMsg(null); };
+  const show = (f) => { setForm(f); setMsg(null); setNote(null); };
   const save = async () => {
     setBusy(true);
     try {
       const { id, ...body } = form;
       // pay is the owner's to send; for anyone else the rate shown is only for reading
       const out = await api(id ? `/employees/${id}` : "/employees", data.canPay ? body : { ...body, rate: "", startsOn: "" });
-      setMsg({ kind: "ok", text: out.message });
-      setForm(empty(data));
+      setNote({ kind: "ok", text: out.message });
+      clear();
       await load();
     } catch (e) { setMsg({ kind: "error", text: e.message }); }
     setBusy(false);
@@ -108,18 +108,19 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Employees" />
     <section className="main scrolls" aria-label="Employees">
-      ${error ? html`<p className="success" role="alert">${error}</p>` : !data || !form ? html`<p className="success">Loading…</p>` : html`<div className="staff">
+      ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<div className="staff">
         <section className="pview">
           <header className="phead"><h2>Employees</h2>
             <div className="pfilters">
               <select className="select" aria-label="Role" value=${role} onChange=${(e) => setRole(e.target.value)}>
                 <option value="all">All roles</option>${data.roles.map((r) => html`<option key=${r.id} value=${r.id}>${r.name}</option>`)}</select>
               <label className="check"><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> Show inactive</label>
+              <button className="pbtn" onClick=${() => show(empty(data))}>Add employee</button>
             </div></header>
           ${note && html`<${Message} msg=${note} />`}
-          <${StaffTable} data=${data} rows=${rows} busy=${busy} onEdit=${edit} onAct=${act} editingId=${form.id} />
+          <${StaffTable} data=${data} rows=${rows} busy=${busy} onEdit=${(e) => show(fromEmployee(e))} onAct=${act} editingId=${form?.id} />
         </section>
-        <${StaffForm} data=${data} form=${form} setForm=${setForm} msg=${msg} busy=${busy} onSave=${save} onClear=${clear} />
+        ${form && html`<${StaffForm} data=${data} form=${form} setForm=${setForm} msg=${msg} busy=${busy} onSave=${save} onClear=${clear} />`}
       </div>`}
       ${confirm && html`<${Confirm} title=${`Deactivate ${confirm.firstName} ${confirm.lastName}?`}
         text="They won't be able to sign in until they're reactivated. Their shifts, sales and pay history stay on record." label="Deactivate"

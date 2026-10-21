@@ -38,6 +38,8 @@ services:
       DB_PASSWORD_FILE: /run/secrets/app_user_password
       GIFTCARD_SECRET_FILE: /run/secrets/giftcard_secret
       UPLOAD_DIR: /app/uploads
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
+      TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
     volumes:
       - uploads:/app/uploads
     secrets:

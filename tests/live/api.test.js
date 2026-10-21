@@ -80,3 +80,27 @@ test("a $0 sale can't carry a tip", async () => {
   const r = await sam.call("/register/orders", { items: [croissant], discount, approvalToken: auth.body.approvalToken, payment: { method: "card", tip: "1.00" } });
   assert.equal(r.status, 400);
 });
+
+test("pressing Complete sale again after a lost reply gives the first receipt, not a second sale", async () => {
+  const sale = { saleId: `t-${Date.now()}`, items: [croissant], payment: { method: "cash" } };
+  const count = async () => (await pool.query("SELECT COUNT(*) AS n FROM Orders WHERE EmployeeID = 'emp-sam'"))[0][0].n;
+  const before = await count();
+  const [first, second] = await Promise.all([sam.call("/register/orders", sale), sam.call("/register/orders", sale)]); // the second while the first is still running
+  const third = await sam.call("/register/orders", sale);
+  assert.deepEqual([first.status, second.status, third.status], [200, 200, 200]);
+  assert.equal(second.body.orderNumber, first.body.orderNumber);
+  assert.equal(third.body.orderNumber, first.body.orderNumber);
+  assert.equal(await count(), before + 1, "one order was made");
+
+  const changed = await sam.call("/register/orders", { ...sale, items: [{ ...croissant, quantity: 2 }] });
+  assert.notEqual(changed.body.orderNumber, first.body.orderNumber, "a different cart under the same id is a new sale");
+  assert.equal(await count(), before + 2);
+});
+
+test("a sale that failed can be tried again with the same id", async () => {
+  const sale = { saleId: `f-${Date.now()}`, items: [croissant], payment: { method: "gift", giftCardCode: "no-such-card" } };
+  assert.equal((await sam.call("/register/orders", sale)).status, 400);
+  assert.equal((await sam.call("/register/orders", sale)).status, 400, "answered again, not remembered as a receipt");
+  const paid = await sam.call("/register/orders", { ...sale, payment: { method: "cash" } });
+  assert.equal(paid.status, 200);
+});

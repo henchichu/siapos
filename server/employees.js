@@ -6,6 +6,8 @@ const { requirePermission, endSessionsOf } = require("./session");
 const { hashSecret } = require("./auth");
 const { clearLockout, isOwner } = require("./pin");
 const { myLocations } = require("./locations");
+const { isDate } = require("./dates");
+const { cents, dollars } = require("./pricing");
 
 const PERM_MANAGE_STAFF = 19;
 const OPEN = 1; // a shift still running
@@ -13,9 +15,6 @@ const OPEN = 1; // a shift still running
 const router = express.Router();
 router.use("/employees", requirePermission(PERM_MANAGE_STAFF));
 
-const cents = (n) => Math.round(Number(n) * 100);
-const dollars = (c) => (c / 100).toFixed(2);
-const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 const dayOf = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 // The café's today, where the owner signed in
@@ -239,6 +238,7 @@ router.post("/employees/:id", async (req, res) => {
         [e.id, businessId, dollars(cents(f.rate)), f.startsOn]);
     }
   });
+  if (f.roleId !== e.roleId) endSessionsOf(e.id); // their menu and pages were fixed at sign-in; the next one reads the new role
   const parts = [`Saved ${f.firstName} ${f.lastName}.`];
   if (newRate) parts.push(`New rate $${dollars(cents(f.rate))} from ${dayOf(f.startsOn)}.`);
   if (f.pin) parts.push("Their PIN has been reset.");

@@ -66,21 +66,6 @@ const post = (conn, { businessId, locationId, employeeId, stockItemId, qty, cost
     [uuid(), businessId, stockItemId, locationId, employeeId, qty.toFixed(3), cost, type, deliveryId, countId, note]
   );
 
-async function inTransaction(work) {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const result = await work(conn);
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
-}
-
 // ---- Stock ------------------------------------------------------------------------------------------------------
 
 router.get("/inventory", see, async (req, res) => {
@@ -151,7 +136,7 @@ router.post("/inventory/change", change, async (req, res) => {
     entry = { qty: type === COUNT_CORRECTION ? raw : -Math.abs(raw), type };
   } else if (hasQty) throw new HttpError(400, "Choose Restock or Adjustment.");
 
-  const onHand = await inTransaction(async (conn) => {
+  const onHand = await pool.tx(async (conn) => {
     await ensureRow(conn, businessId, locationId, item.id);
     const [[row]] = await conn.query("SELECT AverageUnitCost AS cost FROM Inventory WHERE LocationID = ? AND StockItemID = ? FOR UPDATE", [locationId, item.id]);
     if (entry) {
@@ -186,7 +171,7 @@ router.post("/inventory/item", change, async (req, res) => {
     supplierId = sup.id;
   }
   try {
-    const id = await inTransaction(async (conn) => {
+    const id = await pool.tx(async (conn) => {
       const itemId = uuid();
       await conn.query("INSERT INTO StockItem (StockItemID, BusinessID, Name, StockUnitCode) VALUES (?, ?, ?, ?)", [itemId, businessId, name, unit.code]);
       await conn.query("INSERT INTO Inventory (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold) VALUES (?, ?, ?, ?, ?)", [uuid(), locationId, itemId, businessId, threshold]);
@@ -263,7 +248,7 @@ router.post("/inventory/delivery", change, async (req, res) => {
   clean.sort((a, b) => (a.id < b.id ? -1 : 1)); // every request locks stock rows in the same order, so two at once can't deadlock
 
   try {
-    const deliveryId = await inTransaction(async (conn) => {
+    const deliveryId = await pool.tx(async (conn) => {
       const id = uuid();
       await conn.query(
         "INSERT INTO Delivery (DeliveryID, BusinessID, LocationID, SupplierID, InvoiceNumber, DeliveredOn, ReceivedByEmployeeID) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -332,7 +317,7 @@ router.post("/inventory/count", change, async (req, res) => {
   }
   clean.sort((a, b) => (a.id < b.id ? -1 : 1)); // same lock order as a delivery
 
-  const result = await inTransaction(async (conn) => {
+  const result = await pool.tx(async (conn) => {
     const countId = uuid();
     await conn.query("INSERT INTO StockCount (StockCountID, BusinessID, LocationID, CountedByEmployeeID, CountedAt, ItemsCounted, Note) VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?)",
       [countId, businessId, locationId, employeeId, clean.length, note]);

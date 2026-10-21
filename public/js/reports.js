@@ -55,7 +55,7 @@ function useReport(path, initial) {
   const [filters, setFilters] = useState(initial);
   const [report, setReport] = useState(null);
   const [msg, setMsg] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true); // the mount effect runs a report at once
   const applied = useRef(initial);
   const go = useCallback(async (f) => {
     applied.current = f;
@@ -105,13 +105,13 @@ function LiveSales({ options }) {
 
   return html`<section className="pview report" aria-label="Live sales">
     <${Filters} r=${r} options=${options} dates=${false} first=${html`<${DateField} label="Day" value=${r.filters.day} onChange=${(v) => r.set({ day: v })} />`} />
+    <div className="livebar">
+      <div className="tabs thin" role="group" aria-label="Group by">
+        ${[["hour", "By hour"], ["day", "By day"]].map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${r.filters.by === k} disabled=${r.busy}
+          onClick=${() => r.run({ by: k })}>${l}</button>`)}</div>
+      ${report && html`<span className="sub" role="status">${live ? "Updated" : "As of"} ${clock(report.updatedAt, report.timeZone)}${live ? " · refreshes every minute" : ""}</span>`}
+    </div>
     ${report && html`<${React.Fragment}>
-      <div className="livebar">
-        <div className="tabs thin" role="group" aria-label="Group by">
-          ${[["hour", "By hour"], ["day", "By day"]].map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${report.by === k} disabled=${r.busy}
-            onClick=${() => r.run({ by: k })}>${l}</button>`)}</div>
-        <span className="sub" role="status">${live ? "Updated" : "As of"} ${clock(report.updatedAt, report.timeZone)}${live ? " · refreshes every minute" : ""}</span>
-      </div>
       <p className="sub">${report.location} · ${byHour ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
       <${Cards} cards=${[["Gross sales", money(report.cards.gross)], ["Discounts", money(report.cards.discounts)], ["Refunds", money(report.cards.refunds)],
         [live ? "Net sales so far" : "Net sales", money(report.cards.net), true],

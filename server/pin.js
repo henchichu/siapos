@@ -64,8 +64,9 @@ const authenticate = (employeeNumber, pin, payerId) =>
       const [[p]] = await conn.query("SELECT LockedUntil > NOW() AS locked, LockedUntil FROM EmployeeCredential WHERE EmployeeID = ? FOR UPDATE", [payerId]);
       if (p?.locked) return { status: "locked", lockedUntil: p.LockedUntil };
     }
-    // FOR UPDATE serialises concurrent guesses so none escape the attempt counter
-    const emp = await findEmployee(conn, String(employeeNumber), "FOR UPDATE");
+    // Locking the credential row serialises concurrent guesses so none escape the attempt counter. Only that row:
+    // locking the joined Business and Role rows too made two sign-ins deadlock, and every sign-in wait for every other.
+    const emp = await findEmployee(conn, String(employeeNumber), "FOR UPDATE OF c");
     if (emp && !emp.IsLocked && emp.PinHash && verifySecret(String(pin), emp.PinHash)) {
       await clearLockout(conn, emp.EmployeeID);
       return { status: "ok", emp };

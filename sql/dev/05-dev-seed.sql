@@ -71,7 +71,8 @@ VALUES
     ('emp-leo',    @biz, 'Leo',    'Brandt', 'leo@brewbean.example.com',    '10420002', 'role-manager'),
     ('emp-sam',    @biz, 'Sam',    'Rivera', 'sam@brewbean.example.com',    '10420003', 'role-server'),
     ('emp-priya',  @biz, 'Priya',  'Shah',   'priya@brewbean.example.com',  '10420004', 'role-server'),
-    ('emp-jordan', @biz, 'Jordan', 'Lee',    'jordan@brewbean.example.com', '10420005', 'role-barista');
+    ('emp-jordan', @biz, 'Jordan', 'Lee',    'jordan@brewbean.example.com', '10420005', 'role-barista'),
+    ('emp-ana',    @biz, 'Ana',    'Torres', 'ana@brewbean.example.com',    '10420006', 'role-asst');
 
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID)
 VALUES
@@ -79,7 +80,8 @@ VALUES
     ('emp-leo',  'loc-downtown', @biz), ('emp-leo',  'loc-campus', @biz),
     ('emp-sam',  'loc-downtown', @biz),
     ('emp-priya', 'loc-campus', @biz),
-    ('emp-jordan', 'loc-campus', @biz);
+    ('emp-jordan', 'loc-campus', @biz),
+    ('emp-ana', 'loc-campus', @biz);
 
 -- Sam got a raise when the current pay period started
 INSERT INTO EmployeePayRate (PayRateID, EmployeeID, BusinessID, HourlyRate, EffectiveFrom, EffectiveTo)
@@ -88,6 +90,7 @@ VALUES
     ('rate-sam-1',  'emp-sam',    @biz, 16.50, TIMESTAMP(@D - INTERVAL 180 DAY), TIMESTAMP(@D - INTERVAL 13 DAY)),
     ('rate-sam-2',  'emp-sam',    @biz, 17.25, TIMESTAMP(@D - INTERVAL 13 DAY), NULL),
     ('rate-priya',  'emp-priya',  @biz, 16.75, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
+    ('rate-ana',    'emp-ana',    @biz, 19.50, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
     ('rate-jordan', 'emp-jordan', @biz, 16.00, TIMESTAMP(@D - INTERVAL 90 DAY), NULL);
 
 INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate)

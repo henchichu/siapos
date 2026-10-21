@@ -116,3 +116,29 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   assert.equal((await close()).status, 409);
   assert.equal((await leo.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
 });
+
+test("nobody approves or edits their own timecard, except an owner", async () => {
+  const leo = await signIn("10420002", "222222");
+  const maya = await signIn("10420001", "111111");
+  const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
+  const id = `pp-own-${start}`;
+  await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  const card = (who, n) => pool.query(
+    `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
+     VALUES (?, ?, 'loc-campus', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
+    [`te-own-${start}-${n}`, who, id, start, start]);
+  await card("emp-leo", 1);
+  const mine = `te-own-${start}-1`;
+  const status = async () => (await leo.call(`/team/timecards?payPeriodId=${id}`)).body.rows[0].status;
+
+  assert.equal((await leo.call(`/team/timecards/${mine}/approve`, {})).status, 409, "a manager can't approve their own card");
+  assert.equal((await leo.call(`/team/timecards/${mine}/reject`, {})).status, 409);
+  const times = { clockIn: `${start}T08:00`, clockOut: `${start}T20:00`, breakMinutes: 0 };
+  assert.equal((await leo.call(`/team/timecards/${mine}/edit`, times)).status, 409, "or edit it");
+  assert.equal((await leo.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" })).body.approved, 0, "approve all skips it");
+  assert.equal(await status(), "SUBMITTED");
+
+  assert.equal((await maya.call(`/team/timecards/${mine}/approve`, {})).status, 200, "someone else can");
+  await card("emp-maya", 2);
+  assert.equal((await maya.call(`/team/timecards/te-own-${start}-2/approve`, {})).status, 200, "an owner has no one above them, so may approve their own");
+});

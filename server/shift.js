@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
-const { hasPermission } = require("./pin");
+const { hasPermission, isOwner } = require("./pin");
 const { requirePermission } = require("./session");
 const { myLocations } = require("./locations");
 
@@ -122,6 +122,10 @@ router.get("/shift", async (req, res) => {
 // Each action is one UPDATE guarded by the state it needs, so a double click or a second screen can't repeat it
 const changed = (r, message) => { if (!r.affectedRows) throw new HttpError(409, message); };
 
+// Nobody approves or edits their own hours, except an owner: with no one above them, the pay period couldn't close
+const OWN = "AND (? OR te.EmployeeID <> ?)";
+const ownParams = async (employeeId) => [await isOwner(employeeId), employeeId];
+
 router.post("/shift/clock-in", async (req, res) => {
   const { businessId, locationId, employeeId } = req.session;
   const [[already]] = await pool.query("SELECT 1 AS yes FROM TimeEntry WHERE EmployeeID = ? AND TimeEntryStatusCode = ?", [employeeId, OPEN]);
@@ -215,11 +219,11 @@ router.get("/team/timecards", requirePermission(PERM_SEE_TEAM), async (req, res)
 const decide = (to) => async (req, res) => {
   const { businessId, employeeId } = req.session;
   const [r] = await pool.query(
-    `UPDATE TimeEntry SET TimeEntryStatusCode = ?, ApprovedByEmployeeID = ?
-      WHERE TimeEntryID = ? AND BusinessID = ? AND LocationID IN (?) AND TimeEntryStatusCode = ?`,
-    [to, to === APPROVED ? employeeId : null, req.params.id, businessId, await myLocations(employeeId), SUBMITTED]
+    `UPDATE TimeEntry te SET te.TimeEntryStatusCode = ?, te.ApprovedByEmployeeID = ?
+      WHERE TimeEntryID = ? AND BusinessID = ? AND LocationID IN (?) AND TimeEntryStatusCode = ? ${OWN}`,
+    [to, to === APPROVED ? employeeId : null, req.params.id, businessId, await myLocations(employeeId), SUBMITTED, ...(await ownParams(employeeId))]
   );
-  changed(r, "That timecard is no longer waiting for approval.");
+  changed(r, "That timecard is not waiting for approval, or it is your own. Another manager has to approve it.");
   res.json({ ok: true });
 };
 router.post("/team/timecards/:id/approve", requirePermission(PERM_APPROVE), decide(APPROVED));
@@ -231,9 +235,9 @@ router.post("/team/timecards/approve-all", requirePermission(PERM_APPROVE), asyn
   const mine = await myLocations(employeeId);
   const scope = mine.includes(req.body.locationId) ? [req.body.locationId] : mine;
   const [r] = await pool.query(
-    `UPDATE TimeEntry SET TimeEntryStatusCode = ?, ApprovedByEmployeeID = ?
-      WHERE BusinessID = ? AND PayPeriodID = ? AND LocationID IN (?) AND TimeEntryStatusCode = ?`,
-    [APPROVED, employeeId, businessId, String(req.body.payPeriodId), scope, SUBMITTED]
+    `UPDATE TimeEntry te SET te.TimeEntryStatusCode = ?, te.ApprovedByEmployeeID = ?
+      WHERE BusinessID = ? AND PayPeriodID = ? AND LocationID IN (?) AND TimeEntryStatusCode = ? ${OWN}`,
+    [APPROVED, employeeId, businessId, String(req.body.payPeriodId), scope, SUBMITTED, ...(await ownParams(employeeId))]
   );
   res.json({ approved: r.affectedRows });
 });
@@ -249,10 +253,10 @@ router.post("/team/timecards/:id/edit", requirePermission(PERM_APPROVE), async (
 
   const [[entry]] = await pool.query(
     `SELECT l.TimeZone AS tz FROM TimeEntry te JOIN Location l ON l.LocationID = te.LocationID
-      WHERE te.TimeEntryID = ? AND te.BusinessID = ? AND te.LocationID IN (?) AND te.TimeEntryStatusCode IN (?, ?)`,
-    [req.params.id, businessId, await myLocations(employeeId), SUBMITTED, REJECTED]
+      WHERE te.TimeEntryID = ? AND te.BusinessID = ? AND te.LocationID IN (?) AND te.TimeEntryStatusCode IN (?, ?) ${OWN}`,
+    [req.params.id, businessId, await myLocations(employeeId), SUBMITTED, REJECTED, ...(await ownParams(employeeId))]
   );
-  if (!entry) throw new HttpError(409, "That timecard can't be edited.");
+  if (!entry) throw new HttpError(409, "That timecard can't be edited. You can't edit your own; another manager has to.");
   const [[span]] = await pool.query(
     "SELECT TIMESTAMPDIFF(MINUTE, CONVERT_TZ(?, ?, '+00:00'), CONVERT_TZ(?, ?, '+00:00')) AS minutes",
     [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz]

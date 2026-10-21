@@ -295,3 +295,9 @@ test("a sale counts today, and its refund comes off today", async () => {
   assert.deepEqual([end.orders - before.orders, end.refunds - before.refunds, end.net - before.net, back.cards.tax - beforeTax], [1, 525, 0, 0], "still an order, but the money went back");
   assert.equal((await live(maya, { location: "loc-downtown" })).cards.tips - tipsBefore, 100, "a refund never takes the tip back");
 });
+
+test("a report date must be a real day", async () => {
+  const r = await maya.call("/reports/sales-by-day?from=2026-02-31&to=2026-03-05");
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /From and a To/);
+});

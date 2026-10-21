@@ -235,3 +235,28 @@ test("Unlock lifts a PIN lockout", async () => {
   assert.equal((await byNumber(body.number)).status, "Active");
   assert.equal((await signIn(body.number, body.pin)).r.status, 200);
 });
+
+test("a pay-rate start date must be a real day", async () => {
+  const { r } = await person({ startsOn: "2026-02-31" });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /date the pay rate starts/);
+});
+
+test("changing someone's role signs them out; someone with no café can't sign in", async () => {
+  const { r, body } = await person();
+  assert.equal(r.status, 200);
+  const worker = await signIn(body.number, "246810");
+  assert.equal(worker.r.status, 200);
+  assert.equal((await worker.c.call("/session")).status, 200);
+
+  assert.equal((await maya.call(`/employees/${r.body.id}`, { ...body, pin: "" })).status, 200);
+  assert.equal((await worker.c.call("/session")).status, 200, "an edit that keeps the role leaves them signed in");
+  assert.equal((await maya.call(`/employees/${r.body.id}`, { ...body, roleId: "role-barista", pin: "" })).status, 200);
+  assert.equal((await worker.c.call("/session")).status, 401, "a new role ends their sessions");
+  assert.equal((await signIn(body.number, "246810")).r.status, 200, "and they sign in again with it");
+
+  await pool.query("UPDATE EmployeeLocation SET Active = FALSE WHERE EmployeeID = ?", [r.body.id]);
+  const none = await signIn(body.number, "246810");
+  assert.equal(none.r.status, 403);
+  assert.match(none.r.body.error, /aren't assigned to a café/);
+});

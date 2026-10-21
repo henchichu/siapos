@@ -5,10 +5,8 @@ const REASONS = [["broken", "Broken or spilled"], ["spoiled", "Spoiled or expire
 const qty = (n) => String(Math.round(n * 1000) / 1000);
 // A unit cost worked out from a total can need many places (a millilitre of milk costs a fraction of a cent)
 const unitMoney = (n) => (n == null ? "—" : n >= 0.1 ? `$${n.toFixed(2)}` : `$${n.toFixed(6).replace(/0+$/, "").padEnd(6, "0")}`);
-const usd = (n) => `$${n.toFixed(2)}`;
 const delta = (n) => (n > 0 ? `+${qty(n)}` : n < 0 ? `−${qty(-n)}` : "±0");
 const moneyDelta = (n) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}$${Math.abs(n).toFixed(2)}`;
-const when = (iso, tz) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz });
 const num = (s) => (s === "" || s == null || !Number.isFinite(Number(s)) ? null : Number(s));
 const isLow = (r) => r.onHand <= r.reorderAt;
 
@@ -26,8 +24,6 @@ const visibleSuppliers = (data, showInactive) => data.suppliers.filter((s) => s.
 const SupplierSelect = ({ data, value, onChange, showInactive, empty = "All suppliers", label = "Supplier" }) => html`<select className="select" aria-label=${label} value=${value} onChange=${(e) => onChange(e.target.value)}>
   <option value="">${empty}</option>${visibleSuppliers(data, showInactive).map((s) => html`<option key=${s.id} value=${s.id}>${s.name}${s.active ? "" : " (deactivated)"}</option>`)}</select>`;
 const ShowInactive = ({ checked, onChange }) => html`<label className="check"><input type="checkbox" checked=${checked} onChange=${(e) => onChange(e.target.checked)} /> Show deactivated</label>`;
-
-// ---- Stock ------------------------------------------------------------------------------------------------------
 
 function StockTab({ data, reload, onLocation, showInactive, setShowInactive }) {
   const [supplier, setSupplier] = useState("");
@@ -140,8 +136,6 @@ function StockTab({ data, reload, onLocation, showInactive, setShowInactive }) {
   </div>`;
 }
 
-// ---- Receive delivery -------------------------------------------------------------------------------------------
-
 function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
   const [supplierId, setSupplierId] = useState("");
   const [date, setDate] = useState(data.location.today);
@@ -185,7 +179,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
     try {
       const r = await api("/inventory/delivery", { locationId: data.location.id, supplierId, deliveredOn: date, invoice, lines });
       clear();
-      setMsg({ kind: "ok", text: `Delivery received: ${r.lines} ${r.lines === 1 ? "line" : "lines"}, ${usd(r.total)}.` });
+      setMsg({ kind: "ok", text: `Delivery received: ${r.lines} ${r.lines === 1 ? "line" : "lines"}, ${fromDollars(r.total)}.` });
       await reload();
     } catch (e) { setMsg({ kind: "error", text: e.message }); }
     setBusy(false);
@@ -224,7 +218,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
           <option value="">Stock item</option>${data.items.map((i) => html`<option key=${i.id} value=${i.id}>${i.name}</option>`)}</select>
         <button className="pbtn outline" onClick=${addLine}>Add line</button>
       </div>
-      <div className="costline"><span>Delivery total</span><span>${usd(total)}</span></div>
+      <div className="costline"><span>Delivery total</span><span>${fromDollars(total)}</span></div>
       <${Message} msg=${msg} dashed />
       <div className="pactions left"><button className="pbtn" disabled=${busy || (chosen && !chosen.active)} onClick=${receive}>Receive into stock</button><button className="pbtn outline" onClick=${() => { clear(); setMsg(null); }}>Clear</button></div>
     </section>
@@ -233,14 +227,12 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       <table className="table mg">
         <colgroup><col style=${{ width: 90 }} /><col /><col style=${{ width: 40 }} /><col style=${{ width: 70 }} /></colgroup>
         <thead><tr><th>Date</th><th>Supplier</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
-        <tbody>${data.deliveries.map((d) => html`<tr key=${d.id}><td>${dayOf(d.date)}</td><td>${d.supplier}</td><td className="r">${d.lines}</td><td className="r">${usd(d.total)}</td></tr>`)}
+        <tbody>${data.deliveries.map((d) => html`<tr key=${d.id}><td>${dayOf(d.date)}</td><td>${d.supplier}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
           ${!data.deliveries.length && html`<tr><td colSpan="4">No deliveries yet.</td></tr>`}</tbody>
       </table>
     </section>
   </div>`;
 }
-
-// ---- Stock count ------------------------------------------------------------------------------------------------
 
 function CountTab({ data, reload, onLocation }) {
   const [supplier, setSupplier] = useState("");
@@ -293,8 +285,6 @@ function CountTab({ data, reload, onLocation }) {
       <button className="pbtn outline" onClick=${() => { setCounted({}); setNote(""); setMsg(null); }}>Clear</button></div>
   </section>`;
 }
-
-// ---- Page -------------------------------------------------------------------------------------------------------
 
 function App() {
   const me = useMe();

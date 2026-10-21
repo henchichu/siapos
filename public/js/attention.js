@@ -1,4 +1,3 @@
-const usd = (n) => `$${n.toFixed(2)}`;
 const qty = (n) => String(Math.round(n * 1000) / 1000);
 
 // One panel: title and how many, its table, and the button that goes where the work is done
@@ -42,7 +41,7 @@ function ReviewRefunds({ onClose, onChanged }) {
       <label>Your employee number<input className="field" inputMode="numeric" maxLength="8" autoComplete="off" value=${number} onChange=${(e) => setNumber(e.target.value.replace(/\D/g, ""))} /></label>
       <label>PIN (6 digits)<input className="field" type="password" inputMode="numeric" maxLength="6" autoComplete="off" value=${pin} onChange=${(e) => setPin(e.target.value.replace(/\D/g, ""))} /></label></div>`}
     <ul className="waiting">${(refunds || []).map((r) => html`<li key=${r.id}>
-      <div className="row"><b>Order ${r.orderNumber} · ${usd(r.amount)}</b><span className="sub">Asked by ${r.askedBy}</span></div>
+      <div className="row"><b>Order ${r.orderNumber} · ${fromDollars(r.amount)}</b><span className="sub">Asked by ${r.askedBy}</span></div>
       <p className="sub">${r.why}. Reason given: ${r.reason}</p>
       <p>${r.lines.map((l) => `${l.qty} × ${l.name}${l.restocked ? ` (${l.restocked} back to stock)` : ""}`).join(", ")}</p>
       <div className="btns"><button className="btn primary" disabled=${busy || number.length !== 8 || pin.length !== 6} onClick=${() => answer(r, "approve", { managerNumber: number, managerPin: pin })}>Approve</button>
@@ -105,7 +104,7 @@ function App() {
           ${refunds && html`<${Panel} title="Refunds waiting for an override" count=${refunds.count} empty="No refunds are waiting."
             action=${refunds.count > 0 && html`<button className="pbtn outline" onClick=${() => setReview(true)}>Review refund</button>`}>
             <${Table} cols=${[64, 84, 90, 0]} heads=${[["Order"], ["Amount", true], ["Asked by"], ["Why"]]}>
-              ${refunds.rows.map((r, i) => html`<tr key=${i}><td>${r.orderNumber}</td><td className="r">${usd(r.amount)}</td><td>${r.askedBy}</td><td>${r.why}</td></tr>`)}<//>
+              ${refunds.rows.map((r, i) => html`<tr key=${i}><td>${r.orderNumber}</td><td className="r">${fromDollars(r.amount)}</td><td>${r.askedBy}</td><td>${r.why}</td></tr>`)}<//>
           <//>`}
         </div>
         ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}

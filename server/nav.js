@@ -5,7 +5,7 @@ const KITCHEN = ["Kitchen", "My shift"];
 
 // Home dashboard tiles, in the wireframe's order: the role's menu items, plus Sign out for everyone.
 // Settings has no menu item, so only full access gets it.
-const TILES = ["Inventory", "Rewards", "Employees", "Needs attention", "Products", "Settings", "Kitchen", "Sign out", "Reports", "Register", "My shift"];
+const TILES = ["Inventory", "Rewards", "Employees", "Needs attention", "Products", "Settings", "Kitchen", "Orders", "Sign out", "Reports", "Register", "My shift"];
 const tilesFor = (names) => Object.freeze(TILES.filter((t) => t === "Sign out" || names.includes(t)));
 
 // Roles are named by each business, so they are matched by name; anything unrecognised gets the least access

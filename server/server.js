@@ -9,6 +9,8 @@ const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
 const app = express();
+// Behind an HTTPS proxy every request comes from the proxy: trust its forwarded address, or the sign-in limit counts the whole shop as one
+if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
@@ -36,7 +38,7 @@ app.get(Object.keys(LIVE), async (req, res, next) => {
 });
 
 // Each page opens only for a role that has it in its menu; anyone else goes back to their own home
-const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention" };
+const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention", "/orders.html": "Orders", "/order.html": "Orders" };
 app.use((req, res, next) => {
   const need = PAGE_NAV[req.path];
   if (need === undefined) return next();

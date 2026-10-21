@@ -5,12 +5,16 @@ const { hasPermission } = require("./pin");
 // shortcut: in memory, so a restart signs everyone out; move to a table when running more than one server
 const sessions = new Map();
 const SESSION_MS = 8 * 60 * 60 * 1000; // one shift
+const IDLE_MS = 15 * 60 * 1000; // no sign of the person; public/js/shell.js warns before this
 const APPROVAL_MS = 10 * 60 * 1000;
 const GIFT_TRIES = 5;
 const GIFT_WINDOW_MS = 15 * 60 * 1000;
 
+// Idle time counts from sign-in or the last touch(). Page polling doesn't touch, so a screen left alone still times out.
+const over = (s) => s.expires < Date.now() || Date.now() - s.active >= IDLE_MS;
+
 setInterval(() => {
-  for (const [token, s] of sessions) if (s.expires < Date.now()) sessions.delete(token);
+  for (const [token, s] of sessions) if (over(s)) sessions.delete(token);
 }, 60 * 60 * 1000).unref();
 
 const tokenOf = (req) => /(?:^|;\s*)session=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
@@ -20,7 +24,7 @@ function create(res, data) {
   Object.freeze(data.info.tiles);
   Object.freeze(data.info); // the role and what it may open can't change until the next sign-in
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, { ...data, approvals: new Map(), expires: Date.now() + SESSION_MS });
+  sessions.set(token, { ...data, approvals: new Map(), sales: new Map(), expires: Date.now() + SESSION_MS, active: Date.now() });
   // set COOKIE_SECURE=1 once the app is served over HTTPS
   res.cookie("session", token, { httpOnly: true, sameSite: "strict", maxAge: SESSION_MS, secure: process.env.COOKIE_SECURE === "1" });
 }
@@ -38,8 +42,8 @@ function endSessionsOf(employeeId) {
 function fromRequest(req) {
   const token = tokenOf(req);
   const s = sessions.get(token);
-  if (s && s.expires < Date.now()) sessions.delete(token);
-  return s && s.expires >= Date.now() ? s : null;
+  if (s && over(s)) sessions.delete(token);
+  return s && !over(s) ? s : null;
 }
 
 function requireSession(req, res, next) {

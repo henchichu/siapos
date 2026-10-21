@@ -145,8 +145,28 @@ async function components(conn, line) {
   return [...used].map(([stockItemId, perUnit]) => [stockItemId, perUnit * line.quantity]);
 }
 
-// The same steps the dev seed takes: open the order, add lines, record stock used, total it, pay, complete
+// The same steps the dev seed takes: open the order, add lines, record stock used, total it, pay, complete.
+// The page sends a saleId with each sale. A second request with the same saleId and the same contents (the first reply
+// was lost, so the cashier pressed again) gets the first receipt instead of a second sale.
+// shortcut: remembered per sign-in, in memory; a sale repeated after signing in again isn't recognised.
+const SALES_KEPT = 50;
 router.post("/register/orders", async (req, res) => {
+  const { sales } = req.session;
+  const id = String(req.body.saleId || "");
+  const contents = JSON.stringify({ ...req.body, saleId: undefined });
+  let sale = id && sales.get(id)?.contents === contents ? sales.get(id).receipt : null;
+  if (!sale) {
+    sale = completeSale(req);
+    if (id) {
+      sales.set(id, { contents, receipt: sale });
+      sale.catch(() => sales.get(id)?.receipt === sale && sales.delete(id)); // a sale that failed can be tried again
+      if (sales.size > SALES_KEPT) sales.delete(sales.keys().next().value);
+    }
+  }
+  res.json(await sale);
+});
+
+async function completeSale(req) {
   const { employeeId, businessId, locationId, registerId } = req.session;
   const { payment = {}, customerId } = req.body;
   const methodCode = METHODS[payment.method];
@@ -272,14 +292,14 @@ router.post("/register/orders", async (req, res) => {
       );
       const [[{ OrderNumber }]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
       return { orderNumber: OrderNumber, totalCents: priced.totalCents, tipCents };
-    });
+    }, () => releaseApproval(req.session, String(req.body.approvalToken))); // a deadlock reruns the sale, which takes the approval again
   } catch (err) {
     releaseApproval(req.session, String(req.body.approvalToken));
     throw err;
   }
   notify(locationId);
   spendApproval(req.session, String(req.body.approvalToken));
-  res.json(receipt);
-});
+  return receipt;
+}
 
 module.exports = router;

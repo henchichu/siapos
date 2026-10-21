@@ -1,7 +1,7 @@
 const { HttpError } = require("./errors");
 
 const REASONS = ["Regular", "Employee", "Complaint", "Damaged"];
-const cents = (decimalString) => Math.round(parseFloat(decimalString) * 100);
+const cents = (decimal) => Math.round(Number(decimal || 0) * 100); // a missing amount (a NULL column) is zero
 const dollars = (c) => (c / 100).toFixed(2);
 
 // Splits `total` across lines in proportion to their caps; shares sum to total and never pass a cap

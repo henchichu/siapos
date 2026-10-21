@@ -7,6 +7,7 @@ const { verifyOverride } = require("./override");
 const { requirePermission } = require("./session");
 const { myLocations } = require("./locations");
 const { hasPermission } = require("./pin");
+const { label } = require("./labels");
 
 const PERM_SIGN_REFUND_OVERRIDES = 3;
 const PERM_APPROVE_DISCOUNTS = 4;
@@ -15,25 +16,22 @@ const PERM_REFUND = 2;
 const router = express.Router();
 router.use("/refunds", requirePermission(PERM_REFUND));
 
-const methodName = (description) => {
-  const s = description.replace(/_/g, " ").toLowerCase();
-  return s[0].toUpperCase() + s.slice(1);
-};
-
 router.get("/refunds/order", async (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   if (!q) throw new HttpError(400, "Enter an order number, or a member email or phone.");
-  const { businessId } = req.session;
+  const { businessId, employeeId } = req.session;
+  const mine = await myLocations(employeeId); // an order at another café isn't found, so it can't be refunded from here
+  if (!mine.length) throw new HttpError(404, "No order found.");
 
   const base = `SELECT o.OrderID, o.OrderNumber, o.OrderDateTime, o.OrderStatusCode, c.FirstName, c.LastName
-                  FROM Orders o LEFT JOIN Customer c ON c.CustomerID = o.CustomerID WHERE o.BusinessID = ?`;
+                  FROM Orders o LEFT JOIN Customer c ON c.CustomerID = o.CustomerID WHERE o.BusinessID = ? AND o.LocationID IN (?)`;
   const [[order]] = /^\d{1,8}$/.test(q)
-    ? await pool.query(`${base} AND o.OrderNumber = ?`, [businessId, q])
+    ? await pool.query(`${base} AND o.OrderNumber = ?`, [businessId, mine, q])
     : await pool.query(
         `${base} AND o.OrderStatusCode IN (5, 7)
             AND (c.Email = ? OR REGEXP_REPLACE(c.Phone, '[^0-9]', '') = ?)
           ORDER BY o.OrderDateTime DESC LIMIT 1`,
-        [businessId, q, q.replace(/\D/g, "") || "#"]
+        [businessId, mine, q, q.replace(/\D/g, "") || "#"]
       );
   if (!order) throw new HttpError(404, "No order found.");
   if (![5, 7].includes(order.OrderStatusCode))
@@ -63,7 +61,7 @@ router.get("/refunds/order", async (req, res) => {
     member: order.FirstName ? [order.FirstName, order.LastName].filter(Boolean).join(" ") : null,
     paidCents: payments.reduce((a, p) => a + cents(p.Amount), 0),
     tipCents: payments.reduce((a, p) => a + cents(p.TipAmount), 0), // never part of a refund
-    method: payments.map((p) => methodName(p.Description)).join(" + "),
+    method: payments.map((p) => label(p.Description)).join(" + "),
     lines: lines.map((l) => ({
       orderItemId: l.OrderItemID,
       name: l.Sizes > 1 ? `${l.Product}, ${l.Variant}` : l.Product,
@@ -129,8 +127,8 @@ async function recordRefund(conn, { session, orderId, wanted, reason, managerId 
   );
   if (!order) throw new HttpError(404, "No order found.");
   if (![5, 7].includes(order.OrderStatusCode)) throw new HttpError(409, "Only completed orders can be refunded.");
+  if (!(await myLocations(employeeId)).includes(order.LocationID)) throw new HttpError(403, "You don't work at that order's location.");
   if (pending) {
-    if (!(await myLocations(employeeId)).includes(order.LocationID)) throw new HttpError(403, "You don't work at that order's location.");
     const [[gift]] = await conn.query("SELECT COUNT(*) AS n FROM OrderItem oi JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID WHERE oi.OrderID = ? AND p.IsGiftCard", [order.OrderID]);
     if (gift.n) throw new HttpError(409, "This order sold a gift card. Refund it with a manager present.");
   }
@@ -201,7 +199,7 @@ async function recordRefund(conn, { session, orderId, wanted, reason, managerId 
 
   const orderRefunded = pending ? false
     : await afterRefund(conn, { order, paymentId: payment.PaymentID, remainingBefore: cents(payment.Remaining), totalCents, employeeId, businessId });
-  return { itemsCents: netCents, taxCents, totalCents, method: methodName(payment.Description), orderRefunded };
+  return { itemsCents: netCents, taxCents, totalCents, method: label(payment.Description), orderRefunded };
 }
 
 router.post("/refunds", async (req, res) => {
@@ -287,7 +285,7 @@ router.post("/refunds/:id/approve", needSigner, async (req, res) => {
     await conn.query("UPDATE Refund SET RefundStatusCode = 2, RefundDateTime = UTC_TIMESTAMP(), ApprovedByEmployeeID = ?, UpdatedBy = ? WHERE RefundID = ?", [managerId, employeeId, ref.RefundID]);
     const totalCents = cents(ref.Amount);
     const orderRefunded = await afterRefund(conn, { order: { OrderID: ref.OrderID, OrderStatusCode: ref.OrderStatusCode }, paymentId: ref.PaymentID, remainingBefore: cents(payment.Remaining), totalCents, employeeId, businessId });
-    return { totalCents, method: methodName(payment.Description), orderRefunded };
+    return { totalCents, method: label(payment.Description), orderRefunded };
   });
   res.json(out);
 });

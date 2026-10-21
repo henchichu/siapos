@@ -1,14 +1,12 @@
 const TABS = [["products", "Products"], ["sizes", "Sizes and recipes"], ["options", "Option groups"], ["promotions", "Promotions"]];
 const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "products"; };
-const usd = (n) => (n == null ? "—" : `$${n.toFixed(2)}`);
+const usd = (n) => (n == null ? "—" : fromDollars(n));
 const picks = (min, max) => (max == null ? (min ? `at least ${min}` : "any number") : min === max ? `exactly ${max}` : min ? `${min} to ${max}` : `up to ${max}`);
 
 function Tabs({ tab, onTab }) {
   return html`<div className="tabs" role="group" aria-label="Product management">
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;
 }
-
-// ---- Products, read-only (server view) -------------------------------------------------------------------------
 
 function Filters({ categories, category, setCategory, query, setQuery, children }) {
   return html`<div className="pfilters">
@@ -36,8 +34,6 @@ function ReadOnly({ data }) {
     </table>
   </section>`;
 }
-
-// ---- Products tab -----------------------------------------------------------------------------------------------
 
 const BLANK = { id: null, name: "", description: "", categoryId: "", active: true, hasPhoto: false };
 
@@ -111,8 +107,6 @@ function ProductsTab({ data, reload }) {
     </aside>`}
   </div>`;
 }
-
-// ---- Sizes and recipes ------------------------------------------------------------------------------------------
 
 const BLANK_SIZE = { id: null, name: "", sku: "", price: "", taxCategoryId: "", restock: false };
 
@@ -216,8 +210,6 @@ function SizesTab({ products }) {
   </div>`;
 }
 
-// ---- Option groups ----------------------------------------------------------------------------------------------
-
 const BLANK_GROUP = { id: null, name: "", min: "0", max: "", options: [], productIds: [] };
 const BLANK_OPTION = { name: "", priceDelta: "", type: "none", stockItemId: "", toId: "", quantity: "" };
 
@@ -298,8 +290,6 @@ function OptionsTab({ data, reload }) {
   </div>`;
 }
 
-// ---- Promotions -------------------------------------------------------------------------------------------------
-
 const BLANK_PROMO = { id: null, name: "", kind: "percent", value: "", starts: "", ends: "", productIds: [] };
 
 function PromotionsTab({ data, reload }) {
@@ -352,8 +342,6 @@ function PromotionsTab({ data, reload }) {
     </aside>`}
   </div>`;
 }
-
-// ---- Page -------------------------------------------------------------------------------------------------------
 
 function Manage({ data, reloadProducts }) {
   const [tab, setTab] = useState(tabFromHash);

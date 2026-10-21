@@ -1,4 +1,4 @@
-// Drives the real Employees page in jsdom as the owner: the table and its filters, Edit and Clear, adding someone,
+// Drives the real Employees page in jsdom as the owner: the table and its filters, the form column that opens for Add and Edit and closes on Clear or Save, adding someone,
 // and Deactivate / Reactivate; then as a manager. The employee it adds is removed at the end.
 const fs = require("fs");
 const path = require("path");
@@ -54,7 +54,11 @@ async function open(base, number, pin) {
   check("name with the number under it, role, locations, rate and status", m.cells(m.row("10420003")).slice(0, 5).join("|") === "Sam RiveraNo. 10420003|Server|Brewbean Downtown|$17.25|Active", m.cells(m.row("10420003")).join("|"));
   check("an active row offers Edit and Deactivate", m.cells(m.row("10420003"))[5] === "EditDeactivate");
   check("you can't deactivate yourself", m.byText("tr", "Maya").querySelectorAll("button")[1].disabled);
-  check("Add employee form, PIN required", m.title() === "Add employee" && !!m.field("PIN (6 digits)") && m.field("Starts on").value.length === 10);
+  check("no form column until an action calls for it", !m.$(".pform") && !!m.byText("button", "Add employee"));
+  await m.click(m.byText("button", "Add employee"));
+  check("Add employee opens the form column, PIN required", m.title() === "Add employee" && m.$(".pform").classList.contains("pside") && !!m.field("PIN (6 digits)") && m.field("Starts on").value.length === 10);
+  await m.click(m.byText("button", "Clear"));
+  check("Clear closes it again", !m.$(".pform"));
 
   const all = m.rows().length;
   await m.choose(m.$("select[aria-label=Role]"), "role-server");
@@ -68,12 +72,14 @@ async function open(base, number, pin) {
   check("the PIN is optional when editing and never filled in", /leave blank/.test(m.$$(".pform label b").map((b) => b.textContent).join()) && m.field("New PIN").value === "");
   check("the row being edited is marked", m.row("10420003").className.includes("sel"));
   await m.click(m.byText("button", "Clear"));
-  check("Clear empties the form and goes back to Add employee", m.title() === "Add employee" && m.field("First name").value === "" && m.field("Role").value === "");
+  check("Clear closes the form column, and nothing is marked as being edited", !m.$(".pform") && !m.row("10420003").className.includes("sel"));
 
   await m.click(m.byText("tr", "Maya").querySelector("button"));
   check("editing yourself: the role can't be changed", m.field("Role").disabled && /can't change your own role/.test(m.$(".pform").textContent));
   await m.click(m.byText("button", "Clear"));
 
+  await m.click(m.byText("button", "Add employee"));
+  check("Add after Edit starts from an empty form", m.title() === "Add employee" && m.field("First name").value === "" && m.field("Role").value === "");
   await m.click(m.byText("button", "Save"));
   check("Save with nothing filled in lists what's missing", /first name/.test(m.message()) && /8 digits/.test(m.message()) && /PIN must be 6/.test(m.message()), m.message());
 
@@ -89,9 +95,9 @@ async function open(base, number, pin) {
   await m.type(m.field("PIN"), "975310");
   check("the PIN field takes digits only and hides them", m.field("PIN").type === "password");
   await m.click(m.byText("button", "Save"), 700);
-  check("Save adds them and says so", new RegExp(`Added Click Tester \\(No\\. ${NUMBER}\\)`).test(m.message()), m.message());
+  check("Save adds them and says so, above the table", new RegExp(`Added Click Tester \\(No\\. ${NUMBER}\\)`).test(m.$(".pview .msg")?.textContent || ""), m.$(".pview .msg")?.textContent);
   check("they appear in the table", !!m.row(NUMBER) && m.cells(m.row(NUMBER)).slice(1, 5).join("|") === "Chef / barista|Brewbean Campus|$15.50|Active");
-  check("and the form is cleared", m.title() === "Add employee" && m.field("First name").value === "" && m.field("PIN").value === "");
+  check("and the form column closes", !m.$(".pform"));
 
   await m.click(m.row(NUMBER).querySelectorAll("button")[1]);
   check("Deactivate asks first", /Deactivate Click Tester\?/.test(m.$("dialog[open]")?.textContent || ""));
@@ -108,6 +114,7 @@ async function open(base, number, pin) {
   check("manager: Employees in the sidebar, marked as this page", l.$(".nav [aria-current=page]")?.textContent === "Employees");
   check("manager: owners and managers are Owner only", l.cells(l.row("10420001"))[5] === "Owner only" && l.cells(l.row("10420002"))[5] === "Owner only");
   check("manager: staff below them can be edited", l.cells(l.row("10420004"))[5] === "EditDeactivate");
+  await l.click(l.byText("button", "Add employee"));
   check("manager: the Role list leaves out Owner and Manager", ![...l.field("Role").options].some((o) => /^(Owner|Manager)$/.test(o.textContent)) && [...l.field("Role").options].some((o) => o.textContent === "Server"));
   check("manager: no pay on a new person", l.field("Hourly rate").disabled && l.field("Starts on").disabled && l.field("Hourly rate").value === "" && /Only an owner can set or change pay rates/.test(l.$(".pform").textContent));
   await l.click(l.row("10420004").querySelector("button"));

@@ -1,4 +1,4 @@
-// Drives the real Rewards page in jsdom: search, Show inactive, Enroll / Edit / Clear, Deactivate / Reactivate, then a
+// Drives the real Rewards page in jsdom: search, Show inactive, Add new member / Edit / Clear, Deactivate / Reactivate, then a
 // member's history and an order's details, and Back to members; then as a server. The member it enrolls is removed at the end.
 const fs = require("fs");
 const path = require("path");
@@ -49,6 +49,7 @@ async function open(base, number, pin, at = "/rewards.html") {
     cells: (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim()),
     title: () => $(".pform h2")?.textContent,
     message: () => $(".pform .msg")?.textContent || "",
+    note: () => $(".pview .msg")?.textContent || "", // above the table
   };
 }
 
@@ -63,7 +64,9 @@ async function open(base, number, pin, at = "/rewards.html") {
   check("members only: Ava and Chloe, not the customers Ben and Diego", !!m.row("Ava Nguyen") && !!m.row("Chloe Moreau") && !m.row("Ben") && !m.row("Diego"));
   check("a row: name, email (phone under it), tier, points, status, actions", m.cells(m.row("Chloe Moreau")).slice(0, 2).join("|") === "Chloe Moreau|chloe@example.com312-555-0177"
     && m.cells(m.row("Chloe Moreau"))[2] === "Bean" && m.cells(m.row("Chloe Moreau"))[4] === "Active" && m.cells(m.row("Chloe Moreau"))[5] === "EditHistoryDeactivate", m.cells(m.row("Chloe Moreau")).join("|"));
-  check("Enroll member form, with the note under it", m.title() === "Enroll member" && /Email or phone is required \(at least one\)\./.test(m.$(".pform").textContent));
+  check("the form column starts closed", !m.$(".pform") && !!m.byText("button", "Add new member"));
+  await m.click(m.byText("button", "Add new member"));
+  check("Add new member opens Enroll member, with the note under it", m.title() === "Enroll member" && /Email or phone is required \(at least one\)\./.test(m.$(".pform").textContent));
 
   // typing: one search, after the typing stops, and no page reload
   const before = m.w.calls.length;
@@ -87,8 +90,8 @@ async function open(base, number, pin, at = "/rewards.html") {
   await m.type(m.field("Phone"), "");
   await m.type(m.field("Email"), `Click${TAG}@Example.com`);
   await m.click(m.byText("button", "Save"), 800);
-  check("Save enrolls them and says so", m.message() === `Enrolled Click ${LAST}.`, m.message());
-  check("the form is cleared", m.title() === "Enroll member" && m.field("First name").value === "" && m.field("Email").value === "");
+  check("Save enrolls them and says so above the table", m.note() === `Enrolled Click ${LAST}.`, m.note());
+  check("the form closes", !m.$(".pform"));
   check("they appear in the list, email in lowercase, lowest tier, 0 points", !!m.row(`Click ${LAST}`)
     && m.cells(m.row(`Click ${LAST}`)).slice(1, 5).join("|") === `click${TAG}@example.com|Bean|0|Active`, m.row(`Click ${LAST}`) && m.cells(m.row(`Click ${LAST}`)).join("|"));
 
@@ -101,11 +104,11 @@ async function open(base, number, pin, at = "/rewards.html") {
   await m.type(m.field("Email"), `click${TAG}@example.com`);
   await m.type(m.field("Phone"), "773.555.0198");
   await m.click(m.byText("button", "Save"), 800);
-  check("Save updates them and goes back to Enroll member", m.message() === `Saved Click ${LAST}.` && m.title() === "Enroll member"
+  check("Save updates them and closes the form", m.note() === `Saved Click ${LAST}.` && !m.$(".pform")
     && m.cells(m.row(`Click ${LAST}`))[1] === `click${TAG}@example.com773-555-0198`, m.message());
   await m.click(m.row(`Click ${LAST}`).querySelector("button"));
   await m.click(m.byText("button", "Clear"));
-  check("Clear switches back to Enroll member", m.title() === "Enroll member" && m.field("First name").value === "");
+  check("Clear closes the form and unmarks the row", !m.$(".pform") && !m.row(`Click ${LAST}`).className.includes("sel"));
 
   await m.click(m.row(`Click ${LAST}`).querySelectorAll("button")[2]);
   check("Deactivate asks first", new RegExp(`Deactivate Click ${LAST}\\?`).test(m.$("dialog[open]")?.textContent || ""));
@@ -142,6 +145,7 @@ async function open(base, number, pin, at = "/rewards.html") {
   // A server looks up, enrolls and sees history, but doesn't edit or deactivate
   const s = await open(base, "10420003", "333333");
   check("server: History only", s.cells(s.row("Ava Nguyen"))[5] === "History");
+  await s.click(s.byText("button", "Add new member"));
   check("server: can enroll", s.title() === "Enroll member");
   // opened straight on a member's history, as the browser's Back would
   const h = await open(base, "10420003", "333333", "/rewards.html?member=cus-ava&q=ava");

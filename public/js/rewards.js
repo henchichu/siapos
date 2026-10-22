@@ -1,4 +1,4 @@
-// Rewards: the members list with the Enroll / Edit form, and one member's history of orders and points.
+// Rewards: the members list, with the Enroll / Edit form opening beside it only when Add new member or Edit asks for it, and one member's history of orders and points.
 // The address keeps the search, Show inactive and the member open, so Back to members (and the browser's Back) return to them.
 const EMPTY = { id: null, firstName: "", lastName: "", email: "", phone: "" };
 const SEARCH_DELAY = 250; // ms after the last keystroke
@@ -38,7 +38,7 @@ function MemberForm({ form, setForm, msg, busy, onSave, onClear }) {
   const title = form.id ? "Edit member" : "Enroll member";
   const field = (label, key, type = "text", extra = {}) => html`<label className="pf"><b>${label}</b>
     <input className="field" type=${type} value=${form[key]} onChange=${(e) => set({ [key]: e.target.value })} ...${extra} /></label>`;
-  return html`<aside className="pform" aria-label=${title}>
+  return html`<aside className="pform pside" aria-label=${title}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       ${field("First name", "firstName", "text", { maxLength: 50 })}
@@ -56,9 +56,9 @@ function MemberForm({ form, setForm, msg, busy, onSave, onClear }) {
 function Members({ q, inactive, onFilters, onHistory }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [form, setForm] = useState(EMPTY);
-  const [msg, setMsg] = useState(null); // the form's message area
-  const [note, setNote] = useState(null); // what a row action did
+  const [form, setForm] = useState(null); // null: the form column is closed
+  const [msg, setMsg] = useState(null); // the form's message area: errors only
+  const [note, setNote] = useState(null); // above the table: what a save or row action did
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
   const latest = useRef(0); // only the newest search may fill the table
@@ -73,15 +73,16 @@ function Members({ q, inactive, onFilters, onHistory }) {
   // searched on the server, a moment after typing stops
   useEffect(() => { const t = setTimeout(load, data ? SEARCH_DELAY : 0); return () => clearTimeout(t); }, [load]);
 
-  const clear = () => { setForm(EMPTY); setMsg(null); };
-  const edit = (m) => { setForm({ id: m.id, firstName: m.firstName, lastName: m.lastName, email: m.email || "", phone: m.phone || "" }); setMsg(null); setNote(null); };
+  const clear = () => { setForm(null); setMsg(null); };
+  const show = (f) => { setForm(f); setMsg(null); setNote(null); };
+  const edit = (m) => show({ id: m.id, firstName: m.firstName, lastName: m.lastName, email: m.email || "", phone: m.phone || "" });
   const save = async () => {
     setBusy(true);
     try {
       const { id, ...body } = form;
       const out = await api(id ? `/rewards/members/${id}` : "/rewards/members", body);
-      setForm(EMPTY);
-      setMsg({ kind: "ok", text: out.message });
+      setNote({ kind: "ok", text: out.message });
+      clear();
       await load();
     } catch (e) { setMsg({ kind: "error", text: e.message }); }
     setBusy(false);
@@ -100,14 +101,15 @@ function Members({ q, inactive, onFilters, onHistory }) {
           <label className="check search">Search
             <input className="field" type="search" placeholder="Name, email or phone" value=${q} onChange=${(e) => onFilters({ q: e.target.value })} /></label>
           <label className="check"><input type="checkbox" checked=${inactive} onChange=${(e) => onFilters({ inactive: e.target.checked })} /> Show inactive</label>
+          <button className="pbtn" onClick=${() => show(EMPTY)}>Add new member</button>
         </div></header>
       ${note && html`<${Message} msg=${note} />`}
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
-        <${MemberTable} data=${data} busy=${busy} editingId=${form.id} onEdit=${edit} onHistory=${onHistory}
+        <${MemberTable} data=${data} busy=${busy} editingId=${form?.id} onEdit=${edit} onHistory=${onHistory}
           onAct=${(m, active) => (active ? setActive(m, true) : setConfirm(m))} />
         ${data.more && html`<p className="sub">Showing the first 100 members. Search to narrow the list.</p>`}<//>`}
     </section>
-    <${MemberForm} form=${form} setForm=${setForm} msg=${msg} busy=${busy} onSave=${save} onClear=${clear} />
+    ${form && html`<${MemberForm} form=${form} setForm=${setForm} msg=${msg} busy=${busy} onSave=${save} onClear=${clear} />`}
     ${confirm && html`<${Confirm} title=${`Deactivate ${confirm.firstName} ${confirm.lastName}?`}
       text="They won't be able to earn or redeem points at the register until they're reactivated. Their points and history are kept." label="Deactivate"
       onNo=${() => setConfirm(null)} onYes=${() => { const m = confirm; setConfirm(null); setActive(m, false); }} />`}

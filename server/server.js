@@ -14,6 +14,9 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
+// The customer iPad opens this URL; /customer redirects to the page
+app.get("/customer", (req, res) => res.redirect("/customer.html"));
+
 const VENDOR = {
   "react.js": "react/umd/react.production.min.js",
   "react-dom.js": "react-dom/umd/react-dom.production.min.js",
@@ -25,7 +28,8 @@ app.get("/vendor/:file", (req, res, next) => {
   res.sendFile(path.join(__dirname, "../node_modules", file), { maxAge: "1d" });
 });
 
-app.use("/api", express.json(), router);
+// Customer kiosk routes go before the router (which requires an employee session)
+app.use("/api", express.json(), require("./customers"), router);
 
 // Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
 const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };

@@ -258,10 +258,12 @@ router.post("/team/timecards/:id/edit", requirePermission(PERM_APPROVE), async (
   );
   if (!entry) throw new HttpError(409, "That timecard can't be edited. You can't edit your own; another manager has to.");
   const [[span]] = await pool.query(
-    "SELECT TIMESTAMPDIFF(MINUTE, CONVERT_TZ(?, ?, '+00:00'), CONVERT_TZ(?, ?, '+00:00')) AS minutes",
-    [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz]
+    `SELECT TIMESTAMPDIFF(MINUTE, CONVERT_TZ(?, ?, '+00:00'), CONVERT_TZ(?, ?, '+00:00')) AS minutes,
+            CONVERT_TZ(?, ?, '+00:00') > UTC_TIMESTAMP() AS future`,
+    [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz]
   );
   if (!(span.minutes > 0)) throw new HttpError(400, "Clock out must be after clock in.");
+  if (span.future) throw new HttpError(400, "A shift can't end in the future."); // clock in is earlier still
   if (brk > span.minutes) throw new HttpError(400, "Break can't be longer than the shift.");
 
   await pool.query(

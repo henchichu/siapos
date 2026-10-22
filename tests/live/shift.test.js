@@ -97,6 +97,8 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const edit = (body) => leo.call(`/team/timecards/${sam.id}/edit`, body);
   assert.equal((await edit({ clockIn: `${start}T09:00`, clockOut: `${start}T08:00`, breakMinutes: 0 })).status, 400, "out before in");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T09:00`, breakMinutes: 90 })).status, 400, "break longer than the shift");
+  const future = await edit({ clockIn: `${start}T08:00`, clockOut: "2999-01-01T09:00", breakMinutes: 0 });
+  assert.deepEqual([future.status, future.body.error], [400, "A shift can't end in the future."]);
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:30`, breakMinutes: 30 })).status, 200);
   const fixed = (await get("locationId=loc-downtown")).body.rows[0];
   assert.deepEqual([fixed.status, fixed.hours, fixed.breakMinutes], ["SUBMITTED", 8, 30], "an edited card goes back to Submitted");

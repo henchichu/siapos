@@ -89,14 +89,15 @@ function EditCard({ row, onClose, onSaved }) {
   const [clockOut, setClockOut] = useState(localInput(row.clockOutAt, tz));
   const [brk, setBrk] = useState(String(row.breakMinutes));
   const [msg, setMsg] = useState(null);
+  const now = localInput(new Date(), tz); // nothing later than this has happened yet
   const save = async () => {
     try { await api(`/team/timecards/${row.id}/edit`, { clockIn, clockOut, breakMinutes: brk }); onSaved(`Updated ${row.employee}'s timecard. It is waiting for approval.`); }
     catch (e) { setMsg({ kind: "error", text: e.message }); }
   };
   return html`<${Modal} title=${`Edit timecard: ${row.employee}`} onClose=${onClose}>
     <div className="editform">
-      <label>Clock in<input className="field" type="datetime-local" value=${clockIn} onChange=${(e) => setClockIn(e.target.value)} /></label>
-      <label>Clock out<input className="field" type="datetime-local" value=${clockOut} onChange=${(e) => setClockOut(e.target.value)} /></label>
+      <label>Clock in<input className="field" type="datetime-local" max=${now} value=${clockIn} onChange=${(e) => setClockIn(e.target.value)} /></label>
+      <label>Clock out<input className="field" type="datetime-local" max=${now} value=${clockOut} onChange=${(e) => setClockOut(e.target.value)} /></label>
       <label>Break (minutes)<input className="field" inputMode="numeric" value=${brk} onChange=${(e) => setBrk(e.target.value.replace(/\D/g, ""))} /></label>
       <${Message} msg=${msg} dashed />
       <div className="btns"><button className="btn primary" onClick=${save}>Save</button><button className="btn" onClick=${onClose}>Cancel</button></div>

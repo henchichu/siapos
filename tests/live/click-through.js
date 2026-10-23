@@ -96,6 +96,9 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
 
   await click(byText(".pay button", "Card")); await click(byText(".pay button", "18%"));
   check("tip separate, with Total with tip", /Tip\s*\$/.test(text()) && /Total with tip/.test(text()) && /can't be refunded/.test(text()));
+  await type($("input[aria-label='Card number']"), "4242 4242 4242 4242");
+  await type($("input[aria-label='Card expiry']"), "12/49");
+  await type($("input[aria-label='Card security code']"), "123");
   await click(byText("button", "Cancel"), 150);
   check("Cancel returns to the simple cart view", !!byText("button", "Checkout") && !/Subtotal/.test(text()));
   await click(byText("button", "Checkout"), 400);

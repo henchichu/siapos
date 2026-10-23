@@ -80,7 +80,9 @@ VALUES
     (1, 'CASH', TRUE),
     (2, 'CARD', TRUE),
     (3, 'GIFT_CARD', TRUE),
-    (4, 'OTHER', TRUE)
+    (4, 'OTHER', TRUE),
+    (5, 'APPLE_PAY', TRUE),
+    (6, 'GOOGLE_PAY', TRUE)
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description),
     Active = VALUES(Active);

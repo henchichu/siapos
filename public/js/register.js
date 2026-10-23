@@ -1,5 +1,6 @@
 const REASONS = ["Regular", "Employee", "Complaint", "Damaged"];
-const METHODS = [["cash", "Cash"], ["card", "Card"], ["gift", "Gift card"]];
+const METHODS = [["cash", "Cash"], ["card", "Card"], ["apple", "Apple Pay"], ["google", "Google Pay"], ["gift", "Gift card"]];
+const TIPPED = ["card", "apple", "google"]; // the methods that go through the (mock) processor, where a tip can be added
 
 const unitOf = (line) => line.variant.priceCents + line.modifiers.reduce((a, m) => a + m.deltaCents, 0);
 const lineKey = (variantId, modifiers) => `${variantId}|${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -229,7 +230,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
   }
 
   const t = priced || NO_TOTALS;
-  const tipCents = order.method === "card" && t.totalCents > 0 ? Math.round(Number(tipOf(order, priced) || 0) * 100) : 0;
+  const tipCents = TIPPED.includes(order.method) && t.totalCents > 0 ? Math.round(Number(tipOf(order, priced) || 0) * 100) : 0;
   const tipText = order.tipPct == null ? order.tip : order.tipPct ? tipOf(order, priced) : "";
   return html`<aside className="order expanded" aria-label="Current order">
     ${head}
@@ -256,7 +257,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
         <div className="row total"><span>Total with tip</span><span>${money(t.totalCents + tipCents)}</span></div>
         <p className="sub">The tip isn't taxed, isn't part of the sale and can't be refunded.</p><//>`}
       ${order.discount && html`<button className="btn slim" onClick=${onRemoveDiscount}>Remove discount</button>`}
-      ${order.method === "card" && t.totalCents > 0 && html`<div className="group" role="group" aria-label="Tip"><div>Tip</div>
+      ${TIPPED.includes(order.method) && t.totalCents > 0 && html`<div className="group" role="group" aria-label="Tip"><div>Tip</div>
         <div className="pay">${TIPS.map(([label, pct]) => html`<button key=${label}
           aria-pressed=${order.tipPct === pct || (pct === 0 && order.tipPct == null && !order.tip)}
           onClick=${() => setOrder({ tipPct: pct, tip: "" })}>${label}</button>`)}</div>
@@ -265,6 +266,15 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
       <div className="group"><div>Payment method</div>
         <div className="pay">${METHODS.map(([v, label]) => html`<button key=${v} aria-pressed=${order.method === v}
           onClick=${() => setOrder({ method: v })}>${label}</button>`)}</div></div>
+      ${order.method === "card" && html`<div className="group">
+        <p className="sub">Test mode: nothing is charged for real. Use card 4242 4242 4242 4242, a future expiry and any 3-digit code.</p>
+        <input className="field" inputMode="numeric" autoComplete="off" placeholder="Card number" aria-label="Card number" value=${order.card.number}
+          onChange=${(e) => setOrder({ card: { ...order.card, number: e.target.value } })} />
+        <input className="field" autoComplete="off" placeholder="Expiry, MM/YY" aria-label="Card expiry" value=${order.card.expiry}
+          onChange=${(e) => setOrder({ card: { ...order.card, expiry: e.target.value } })} />
+        <input className="field" inputMode="numeric" autoComplete="off" placeholder="Security code" aria-label="Card security code" value=${order.card.cvc}
+          onChange=${(e) => setOrder({ card: { ...order.card, cvc: e.target.value } })} /></div>`}
+      ${(order.method === "apple" || order.method === "google") && html`<p className="sub">Test mode: the wallet payment is approved at once, and nothing is charged for real.</p>`}
       ${order.method === "gift" && html`<label>Gift card code
         <input className="field" autoComplete="off" value=${order.giftCode} onChange=${(e) => setOrder({ giftCode: e.target.value })} /></label>`}
       <${Message} msg=${msg || (pricingError && { kind: "error", text: pricingError })} />
@@ -276,7 +286,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
   </aside>`;
 }
 
-const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "" };
+const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "", card: { number: "", expiry: "", cvc: "" } };
 
 function App() {
   const me = useMe();
@@ -362,7 +372,7 @@ function App() {
         discount: order.discount?.terms,
         approvalToken: order.discount?.token,
         customerId: order.member?.id,
-        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", giftCardCode: order.giftCode },
+        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", giftCardCode: order.giftCode, card: order.method === "card" ? order.card : undefined },
       });
       resetOrder();
       setNotice(`Sale complete: order ${done.orderNumber}, ${money(done.totalCents)}${done.tipCents ? ` + ${money(done.tipCents)} tip` : ""}.`);

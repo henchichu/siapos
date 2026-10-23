@@ -1,7 +1,7 @@
 // Needs the dev database. Adds one real test sale and refunds it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp } = require("./env");
+const { start, client, pool, pickUp, TEST_CARD } = require("./env");
 const { mondayOf, shiftPay } = require("../../server/overtime");
 
 let env, maya, leo, sam;
@@ -275,7 +275,7 @@ test("a sale counts today, and its refund comes off today", async () => {
   const latteBefore = await latte();
   const tipsBefore = (await live(maya, { location: "loc-downtown" })).cards.tips;
 
-  const sale = await sam.call("/register/orders", { items: [{ key: "a", variantId: "var-latte-l", quantity: 1 }], payment: { method: "card", tip: "1.00" } });
+  const sale = await sam.call("/register/orders", { items: [{ key: "a", variantId: "var-latte-l", quantity: 1 }], payment: { method: "card", card: TEST_CARD, tip: "1.00" } });
   assert.equal(sale.status, 200);
   assert.equal(sale.body.totalCents, 579, "a large latte: $5.25 and $0.54 tax");
   const sold = await report(maya, q);

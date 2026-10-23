@@ -8,3 +8,6 @@ services:
       SIAPOS_DEV: "1"
     volumes:
       - ./sql/dev:/sql-dev:ro
+  pos-app:
+    environment:
+      KIOSK_LOCATION_ID: loc-campus   # the demo café the customer iPad orders at

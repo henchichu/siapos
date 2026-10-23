@@ -64,4 +64,7 @@ async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
     [stockItemId, locationId, atLeast - Number(row.qty), row.cost]);
 }
 
-module.exports = { start, client, pool, unlock, pickUp, removeCatalog, topUp };
+// The mock processor (server/mockpay.js) approves this one; its expiry is far enough ahead not to age out
+const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" };
+
+module.exports = { start, client, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD };

@@ -1,13 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool } = require("./env");
+const { start, client, pool, TEST_CARD } = require("./env");
 
+process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
 let env, wasOpen;
 const LINE = { key: "a", variantId: "var-amer-s", quantity: 2, modifierIds: ["mod-caramel"] };
-const order = (c, extra = {}) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Card", guestName: "Test", items: [LINE], ...extra });
+const order = (c, extra = {}) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Test", items: [LINE], ...extra });
 const row = async (id) => (await pool.query("SELECT OrderStatusCode AS status, ChannelCode AS channel, CustomerID AS customer, Total AS total FROM Orders WHERE OrderID = ?", [id]))[0][0];
 
+test.beforeEach(() => require("../../server/customers").resetOrderLimit()); // the limit is per minute; each test starts clear
 test.before(async () => {
   env = await start();
   [[{ wasOpen }]] = await pool.query("SELECT AcceptsOnlineOrders AS wasOpen FROM Location WHERE LocationID = 'loc-campus'");
@@ -19,7 +21,7 @@ test.after(async () => {
   await pool.end();
 });
 
-test("a guest order is saved as pending payment, with no payment taken", async () => {
+test("a cash order is saved as pending payment, with no payment taken", async () => {
   const r = await order(client(env.base));
   assert.equal(r.status, 200);
   const o = await row(r.body.orderId);
@@ -96,6 +98,37 @@ test("customers see only their own orders, and staff pages stay closed to them",
   assert.equal((await ben.call("/customer/my-orders")).status, 401);
 });
 
+const paidOf = async (orderId) => (await pool.query(
+  "SELECT PaymentMethodCode AS method, Amount AS amount, PaymentStatusCode AS status, TipAmount AS tip FROM Payment WHERE OrderID = ?", [orderId]))[0];
+const history = async (orderId) => (await pool.query("SELECT OrderStatusCode AS s FROM OrderStatusHistory WHERE OrderID = ? ORDER BY ChangedAt, OrderStatusCode", [orderId]))[0].map((r) => r.s);
+
+test("a card or wallet order is mock-paid on the kiosk and confirmed for the kitchen", async () => {
+  for (const [paymentMethod, code, card] of [["Card", 2, TEST_CARD], ["Apple Pay", 5], ["Google Pay", 6]]) {
+    const r = await order(client(env.base), { paymentMethod, card });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.paid, true);
+    const o = await row(r.body.orderId);
+    assert.equal(o.status, 2, "confirmed, so the kitchen sees it");
+    const [p] = await paidOf(r.body.orderId);
+    assert.deepEqual([p.method, p.status, Number(p.amount), Number(p.tip)], [code, 3, Number(o.total), 0], paymentMethod);
+    assert.deepEqual(await history(r.body.orderId), [1, 2]);
+  }
+});
+
+test("a declined or bad card leaves no order behind, and the same order can be tried again", async () => {
+  const [{ n: before }] = (await pool.query("SELECT COUNT(*) AS n FROM Orders"))[0];
+  const c = client(env.base);
+  const key = crypto.randomUUID();
+  const declined = await order(c, { idempotencyKey: key, paymentMethod: "Card", card: { ...TEST_CARD, number: "4000000000000002" } });
+  assert.deepEqual([declined.status, declined.body.error], [402, "Your card was declined."]);
+  assert.equal((await order(c, { paymentMethod: "Card", card: { ...TEST_CARD, number: "5555555555554444" } })).status, 400, "not a test card");
+  assert.equal((await order(c, { paymentMethod: "Card" })).status, 400, "no card details");
+  assert.equal((await order(c, { paymentMethod: "Card", card: { ...TEST_CARD, expiry: "01/20" } })).status, 400, "expired");
+  assert.equal((await pool.query("SELECT COUNT(*) AS n FROM Orders"))[0][0].n, before, "nothing was created");
+  const retry = await order(c, { idempotencyKey: key, paymentMethod: "Card", card: TEST_CARD });
+  assert.equal(retry.status, 200, "the same order with a good card");
+});
+
 test("genuine online orders remain blocked while counter checkout works", async () => {
   await assert.rejects(pool.tx((conn) => conn.query(
     "INSERT INTO Orders (OrderID, LocationID, BusinessID, ChannelCode) VALUES (?, 'loc-campus', 'biz-brewbean', 2)",
@@ -119,4 +152,37 @@ test("failed stock deduction rolls the entire checkout back", async () => {
   assert.notEqual(r.status, 200);
   const [[after]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   assert.equal(after.n, before.n);
+});
+test("a customer is signed out after 5 idle minutes, and a touch restarts the clock", async () => {
+  const MIN = 60 * 1000, real = Date.now, base = real();
+  const at = (m) => { Date.now = () => base + m * MIN; };
+  try {
+    const ben = client(env.base);
+    assert.equal((await ben.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
+    at(4); assert.equal((await ben.call("/customer/session")).body.signedIn, true);
+    assert.equal((await ben.call("/customer/touch", {})).status, 200);
+    at(8); assert.equal((await ben.call("/customer/session")).body.signedIn, true, "4 minutes after the touch");
+    at(14); assert.equal((await ben.call("/customer/session")).body.signedIn, false, "6 minutes after it");
+    assert.equal((await ben.call("/customer/my-orders")).status, 401);
+  } finally { Date.now = real; }
+});
+
+test("without KIOSK_LOCATION_ID a two-café database refuses to guess", async () => {
+  const id = process.env.KIOSK_LOCATION_ID;
+  delete process.env.KIOSK_LOCATION_ID;
+  try {
+    const r = await client(env.base).call("/customer/context");
+    assert.equal(r.status, 503);
+    assert.match(r.body.error, /KIOSK_LOCATION_ID/);
+  } finally { process.env.KIOSK_LOCATION_ID = id; }
+  assert.equal((await client(env.base).call("/customer/context")).status, 200);
+});
+
+// last, because it uses up this address's orders for a minute
+test("order spam is slowed down", async () => {
+  const c = client(env.base);
+  const codes = [];
+  for (let i = 0; i < 25; i++) codes.push((await c.call("/customer/orders", { items: [] })).status);
+  assert.ok(codes.includes(429), codes.join());
+  assert.equal(codes[0], 400, "a bad order is refused as before, until the limit");
 });

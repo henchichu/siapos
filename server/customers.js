@@ -7,6 +7,9 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { priceCart, cents, dollars } = require("./pricing");
 const { notify } = require("./kitchen");
+const { addOrderLines, fingerprint } = require("./orderlines");
+const { charge } = require("./mockpay");
+const path = require("path");
 const { label } = require("./labels");
 
 const router = express.Router();
@@ -14,11 +17,14 @@ const router = express.Router();
 // shortcut: customer sessions are in memory; a restart signs customers out. Move to a table for several servers.
 const sessions = new Map();
 const SESSION_MS = 2 * 60 * 60 * 1000;
+// A shared iPad: the page signs the customer out after 2 minutes of no touches (public/js/customer.js), and the server
+// ends the session itself after 5, in case the page was closed. Only POST /customer/touch counts, not pages polling.
+const IDLE_MS = 5 * 60 * 1000;
 const tokenOf = (req) => /(?:^|;\s*)customer_session=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
 
 function signIn(res, customerId) {
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, { customerId, expires: Date.now() + SESSION_MS });
+  sessions.set(token, { customerId, expires: Date.now() + SESSION_MS, active: Date.now() });
   res.cookie("customer_session", token, { httpOnly: true, sameSite: "strict", maxAge: SESSION_MS, secure: process.env.COOKIE_SECURE === "1" });
 }
 
@@ -26,49 +32,28 @@ function currentCustomer(req) {
   const token = tokenOf(req);
   const s = token && sessions.get(token);
   if (!s) return null;
-  if (s.expires < Date.now()) { sessions.delete(token); return null; }
+  if (over(s)) { sessions.delete(token); return null; }
   return s;
 }
 
+const over = (s) => s.expires < Date.now() || Date.now() - s.active >= IDLE_MS;
 setInterval(() => {
-  for (const [token, s] of sessions) if (s.expires < Date.now()) sessions.delete(token);
+  for (const [token, s] of sessions) if (over(s)) sessions.delete(token);
 }, 60 * 60 * 1000).unref();
 
-// The business and location this iPad is set up for: KIOSK_LOCATION_ID, or else the first active location
+// The business and location this iPad is set up for: KIOSK_LOCATION_ID. Without it, only a database with a single
+// active location can say, so a second café can't have its orders silently go to the first.
 async function kiosk() {
-  const [[k]] = process.env.KIOSK_LOCATION_ID
-    ? await pool.query(
-        `SELECT l.LocationID, l.BusinessID, l.Name AS locationName, b.Name AS businessName, r.RegisterID
-           FROM Location l JOIN Business b ON b.BusinessID = l.BusinessID
-           LEFT JOIN Register r ON r.LocationID = l.LocationID AND r.RegStatusCode = 1
-          WHERE l.LocationID = ? AND l.Active ORDER BY r.Name LIMIT 1`, [process.env.KIOSK_LOCATION_ID])
-    : await pool.query(
-        `SELECT l.LocationID, l.BusinessID, l.Name AS locationName, b.Name AS businessName, r.RegisterID
-           FROM Location l JOIN Business b ON b.BusinessID = l.BusinessID
-           LEFT JOIN Register r ON r.LocationID = l.LocationID AND r.RegStatusCode = 1
-          WHERE l.Active ORDER BY l.Name, r.Name LIMIT 1`);
+  const id = process.env.KIOSK_LOCATION_ID;
+  const [rows] = await pool.query(
+    `SELECT l.LocationID, l.BusinessID, l.Name AS locationName, b.Name AS businessName, r.RegisterID
+       FROM Location l JOIN Business b ON b.BusinessID = l.BusinessID
+       LEFT JOIN Register r ON r.LocationID = l.LocationID AND r.RegStatusCode = 1
+      WHERE l.Active ${id ? "AND l.LocationID = ?" : ""} ORDER BY l.Name, r.Name`, id ? [id] : []);
+  const k = rows[0];
   if (!k) throw new HttpError(503, "This kiosk has no location set up yet.");
+  if (!id && rows.some((r) => r.LocationID !== k.LocationID)) throw new HttpError(503, "This kiosk doesn't know which café it is in. Set KIOSK_LOCATION_ID.");
   return k;
-}
-
-// Stock to take for one line, the same way the register does it: the recipe, less any substitutions, plus additions
-const thousandths = (s) => Math.round(parseFloat(s) * 1000);
-async function components(conn, line) {
-  const [recipe] = await conn.query("SELECT StockItemID, QuantityPerUnit FROM VariantRecipe WHERE VariantID = ?", [line.variantId]);
-  const used = new Map(recipe.map((r) => [r.StockItemID, thousandths(r.QuantityPerUnit)]));
-  const modIds = line.modifiers.map((m) => m.id);
-  if (modIds.length) {
-    const [subs] = await conn.query("SELECT FromStockItemID, ToStockItemID FROM ModifierSubstitution WHERE ModifierID IN (?)", [modIds]);
-    for (const s of subs) {
-      if (!used.has(s.FromStockItemID)) continue;
-      const amount = used.get(s.FromStockItemID);
-      used.delete(s.FromStockItemID);
-      if (s.ToStockItemID) used.set(s.ToStockItemID, (used.get(s.ToStockItemID) || 0) + amount);
-    }
-    const [adds] = await conn.query("SELECT StockItemID, Quantity FROM ModifierAddition WHERE ModifierID IN (?)", [modIds]);
-    for (const a of adds) used.set(a.StockItemID, (used.get(a.StockItemID) || 0) + thousandths(a.Quantity));
-  }
-  return [...used].map(([stockItemId, perUnit]) => [stockItemId, perUnit * line.quantity]);
 }
 
 // Customer-facing wording for the database's statuses. Customers never change these.
@@ -82,7 +67,17 @@ const statusLabel = (description) => CUSTOMER_STATUS[description] || label(descr
 
 router.get("/customer/context", async (req, res) => {
   const k = await kiosk();
-  res.json({ businessName: k.businessName, locationName: k.locationName });
+  res.json({ businessName: k.businessName, locationName: k.locationName, phoneSignIn: !req.publicKiosk });
+});
+
+// A product's picture, for the kiosk page (the staff route needs a staff sign-in). Only products on sale here.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, "../uploads");
+router.get("/customer/products/:id/photo", async (req, res) => {
+  const k = await kiosk();
+  const [[p]] = await pool.query("SELECT ImageKey FROM Product WHERE ProductID = ? AND BusinessID = ? AND Active AND NOT IsGiftCard AND ImageKey IS NOT NULL",
+    [String(req.params.id), k.BusinessID]);
+  if (!p) throw new HttpError(404, "No photo.");
+  res.sendFile(path.resolve(UPLOAD_DIR, p.ImageKey), (err) => { if (err && !res.headersSent) res.status(404).json({ error: "No photo." }); });
 });
 
 // Products for sale here, with their variants (sizes) and modifier groups (milk, extras)
@@ -129,6 +124,7 @@ router.get("/customer/catalog", async (req, res) => {
 // Phone-number sign-in. Only the phone is needed, so the limiter below stops guessing numbers.
 const loginLimit = require("./ratelimit")(20, 60 * 1000);
 router.post("/customer/login", loginLimit, async (req, res) => {
+  if (req.publicKiosk) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
   const k = await kiosk();
   const digits = String(req.body.phone || "").replace(/\D/g, "").slice(-10);
   if (digits.length !== 10) return res.status(400).json({ error: "Enter a 10-digit phone number." });
@@ -173,6 +169,13 @@ router.get("/customer/session", async (req, res) => {
   res.json({ signedIn: true, ...(await me(s.customerId)) });
 });
 
+// The page calls this when the customer touches it, which restarts the idle clock
+router.post("/customer/touch", (req, res) => {
+  const s = currentCustomer(req);
+  if (s) s.active = Date.now();
+  res.json({});
+});
+
 // Only the lines reach the pricer: a customer can't send their own promotion or discount (those need staff approval)
 const cartOf = (body) => ({ items: Array.isArray(body.items) ? body.items.map((i) => ({ key: i.key, variantId: i.variantId, quantity: i.quantity, modifierIds: i.modifierIds })) : [] });
 
@@ -185,10 +188,15 @@ router.post("/customer/price", async (req, res) => {
 
 // Orders are submitted once per idempotencyKey: a retry with the same key and body gets the first receipt back.
 // shortcut: remembered in memory per process; a retry after a restart could create a second order.
+// The key counts only for the address that sent it, so nobody else can ask for someone's receipt back.
 const submitted = new Map();
-router.post("/customer/orders", async (req, res) => {
-  const key = String(req.body.idempotencyKey || "");
-  const body = JSON.stringify({ ...req.body, idempotencyKey: undefined });
+// Nothing is paid yet but stock is already taken, so a script must not be able to place orders without end.
+// shortcut: this only slows it down; stock should be taken when the order is paid, not when it is placed.
+const orderLimit = require("./ratelimit")(20, 60 * 1000);
+router.resetOrderLimit = orderLimit.reset;
+router.post("/customer/orders", orderLimit, async (req, res) => {
+  const key = req.body.idempotencyKey ? `${req.ip}|${req.body.idempotencyKey}` : "";
+  const body = fingerprint({ ...req.body, idempotencyKey: undefined });
   let receipt = key && submitted.get(key)?.body === body ? submitted.get(key).receipt : null;
   if (!receipt) {
     receipt = placeOrder(req);
@@ -201,77 +209,52 @@ router.post("/customer/orders", async (req, res) => {
   res.json(await receipt);
 });
 
-// Customer orders wait for payment at the counter: they go in as PENDING_PAYMENT and are not paid here.
+// Paying here is a mock payment (server/mockpay.js): the order is paid and confirmed at once, and goes to the kitchen.
+// Cash waits for the counter: that order goes in as PENDING_PAYMENT, and nothing on the staff side takes the payment yet.
+const PAID_HERE = { "Card": [2, "card"], "Apple Pay": [5, "apple"], "Google Pay": [6, "google"] }; // payment method code, mock kind
 async function placeOrder(req) {
   const k = await kiosk();
   const s = currentCustomer(req);
   const customerId = s?.customerId || null;
   const payWith = String(req.body.paymentMethod || "");
-  if (!["Cash", "Card", "Apple Pay", "Google Pay"].includes(payWith)) throw new HttpError(400, "Choose how you'll pay at the counter.");
+  if (payWith !== "Cash" && !PAID_HERE[payWith]) throw new HttpError(400, "Choose how you'll pay.");
+  const paidHere = PAID_HERE[payWith];
   const name = customerId ? null : String(req.body.guestName || "").trim().slice(0, 50);
   if (!customerId && !name) throw new HttpError(400, "Enter a name for the order.");
   const note = String(req.body.note || "").trim().slice(0, 120);
   const priced = await priceCart(pool, { businessId: k.BusinessID, locationId: k.LocationID }, cartOf(req.body));
   // shortcut: promotionId and discount are not accepted from customers; staff-only pricing features are stripped by cartOf
+  if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card); // before the order exists, so a decline leaves nothing behind
 
   return pool.tx(async (conn) => {
     const orderId = crypto.randomUUID();
     // KIOSK (3) has no staffed register and is independent of online ordering.
     // The note holds the name and payment choice, as the schema has no columns for them
-    const customerNote = [name && `Name: ${name}`, `Pay at counter: ${payWith}`, note].filter(Boolean).join(" | ");
+    const customerNote = [name && `Name: ${name}`, paidHere ? `Paid: ${payWith}` : `Pay at counter: ${payWith}`, note].filter(Boolean).join(" | ");
     await conn.query(
       `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, CustomerNote)
        VALUES (?, ?, ?, NULL, NULL, ?, 3, ?)`,
       [orderId, k.LocationID, k.BusinessID, customerId, customerNote]);
 
-    const takeStock = new Map();
-    for (const l of priced.lines) {
-      const itemId = crypto.randomUUID();
-      await conn.query(
-        `INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
-                                DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-        [itemId, orderId, l.variantId, k.BusinessID, l.quantity, dollars(l.unitCents), dollars(l.lineCents),
-         l.taxCategoryId, l.rate, dollars(l.taxCents)]);
-      for (const m of l.modifiers)
-        await conn.query("INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta) VALUES (?, ?, ?, ?)",
-          [itemId, m.id, k.BusinessID, dollars(m.deltaCents)]);
-
-      // Stock and cost come from the same inventory tables the register uses
-      const used = await components(conn, l);
-      if (!used.length) continue;
-      const [costs] = await conn.query(
-        `SELECT i.StockItemID, i.AverageUnitCost, s.StockUnitCode FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID
-          WHERE i.LocationID = ? AND i.StockItemID IN (?)`, [k.LocationID, used.map(([id]) => id)]);
-      for (const [stockItemId, t] of used) {
-        const c = costs.find((x) => x.StockItemID === stockItemId);
-        if (!c || c.AverageUnitCost == null) throw new HttpError(409, `${l.productName} can't be ordered right now.`);
-        await conn.query(
-          `INSERT INTO OrderItemComponent (OrderItemID, StockItemID, BusinessID, QuantityUsed, StockUnitCode, UnitCost)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [itemId, stockItemId, k.BusinessID, (t / 1000).toFixed(3), c.StockUnitCode, c.AverageUnitCost]);
-        takeStock.set(stockItemId, { t: (takeStock.get(stockItemId)?.t || 0) + t, cost: c.AverageUnitCost });
-      }
-      await conn.query(
-        `UPDATE OrderItem oi SET oi.UnitCost = (SELECT ROUND(SUM(c.QuantityUsed * c.UnitCost) / oi.Quantity, 6)
-                                                  FROM OrderItemComponent c WHERE c.OrderItemID = oi.OrderItemID),
-                                 oi.LineCost = ROUND(oi.Quantity * oi.UnitCost, 6)
-          WHERE oi.OrderItemID = ?`, [itemId]);
-    }
-    for (const [stockItemId, { t, cost }] of takeStock)
-      await conn.query(
-        `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
-                                           QuantityChange, UnitCost, TransactionTypeCode, OrderID)
-         VALUES (UUID(), ?, ?, ?, NULL, ?, ?, 2, ?)`,
-        [k.BusinessID, stockItemId, k.LocationID, (-t / 1000).toFixed(3), cost, orderId]);
+    await addOrderLines(conn, { orderId, businessId: k.BusinessID, locationId: k.LocationID, employeeId: null, priced,
+      unavailable: (l) => `${l.productName} can't be ordered right now.` });
 
     await conn.query("UPDATE Orders SET Subtotal = ?, Tax = ?, Total = ? WHERE OrderID = ?",
       [dollars(priced.subtotalCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
-    await conn.query(
-      "INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt) VALUES (UUID(), ?, ?, 1, UTC_TIMESTAMP())",
-      [orderId, k.BusinessID]);
+    const history = (status) => conn.query(
+      "INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt) VALUES (UUID(), ?, ?, ?, UTC_TIMESTAMP())",
+      [orderId, k.BusinessID, status]);
+    await history(1);
+    if (paidHere) {
+      if (priced.totalCents > 0)
+        await conn.query(
+          "INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, PaymentStatusCode) VALUES (UUID(), ?, ?, ?, 3)",
+          [orderId, paidHere[0], dollars(priced.totalCents)]);
+      await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);
+      await history(2);
+    }
     const [[o]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
-    return { orderId, orderNumber: o.OrderNumber, totalCents: priced.totalCents };
+    return { orderId, orderNumber: o.OrderNumber, totalCents: priced.totalCents, paid: !!paidHere };
   }).then((receipt) => { notify(k.LocationID); return receipt; });
 }
 

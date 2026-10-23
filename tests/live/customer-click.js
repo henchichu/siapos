@@ -5,6 +5,7 @@ const { start, pool } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
+process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
 const app = fs.readFileSync(path.join(root, "public/js/customer.js"), "utf8");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
@@ -80,12 +81,24 @@ function kiosk(base) {
     await k.click("Place order");
     check("a payment method is required", /Choose how you'll pay/.test(k.text()));
     await k.click("Card");
+    const field = (placeholder) => [...k.w.document.querySelectorAll(".checkout-overlay input")].find((i) => i.placeholder === placeholder);
+    check("Card asks for the card details, in test mode", !!field("4242 4242 4242 4242") && /Test mode/.test(k.text()));
+    await k.click("Place order");
+    check("empty card details are refused", /Enter the card number/.test(k.text()), k.text().match(/Enter[^.]*\./)?.[0]);
+    await k.type(field("4242 4242 4242 4242"), "4000 0000 0000 0002");
+    await k.type(field("12/30"), "12/49");
+    await k.type(field("123"), "123");
+    const [[{ before }]] = await pool.query("SELECT COUNT(*) AS `before` FROM Orders");
+    await k.click("Place order"); await sleep(500);
+    check("a declined test card says so and makes no order", /Your card was declined/.test(k.text()) && !/Order received/.test(k.text()));
+    check("nothing was saved", (await pool.query("SELECT COUNT(*) AS n FROM Orders"))[0][0].n === before);
+    await k.type(field("4242 4242 4242 4242"), "4242 4242 4242 4242");
     await k.click("Place order"); await sleep(600);
     check("confirmation shows the order", /Order received/.test(k.text()) && /#\d+/.test(k.text()));
-    check("choosing Card is not a payment", /payment pending/.test(k.text()) && /did not charge/.test(k.text()));
+    check("a test card is paid on the kiosk", /Paid — your order is being prepared/.test(k.text()) && /nothing was charged for real/.test(k.text()) && !/payment pending/.test(k.text()));
     const number = k.text().match(/#(\d+)/)[1];
-    const [[saved]] = await pool.query("SELECT OrderStatusCode AS status, CustomerNote AS note, (SELECT COUNT(*) FROM Payment p WHERE p.OrderID = o.OrderID) AS payments FROM Orders o WHERE OrderNumber = ? AND BusinessID = 'biz-brewbean'", [number]);
-    check("saved as pending payment with no payment", saved.status === 1 && saved.payments === 0, JSON.stringify(saved));
+    const [[saved]] = await pool.query("SELECT OrderStatusCode AS status, CustomerNote AS note, (SELECT COUNT(*) FROM Payment p WHERE p.OrderID = o.OrderID AND p.PaymentStatusCode = 3) AS payments FROM Orders o WHERE OrderNumber = ? AND BusinessID = 'biz-brewbean'", [number]);
+    check("saved as confirmed with its payment", saved.status === 2 && saved.payments === 1, JSON.stringify(saved));
     check("the note is saved with the order", /Extra hot/.test(saved.note), saved.note);
 
     await k.click("Back to menu");
@@ -116,6 +129,34 @@ function kiosk(base) {
     await k.type(k.$(".checkout-overlay input"), "Sam");
     await k.click("Place order"); await sleep(600);
     check("guest order goes through", /Thanks, Sam/.test(k.text()) && /Order received/.test(k.text()));
+    check("a cash order still waits for the counter", /payment pending/.test(k.text()) && /Pay the cashier/.test(k.text()));
+
+    // an unattended iPad signs the customer out: 30 seconds after an order, 2 minutes otherwise
+    const real = k.w.Date.now, ahead = (ms) => { const t = real() + ms; k.w.Date.now = () => t; };
+    await sleep(1200);
+    check("the confirmation is still there while the guest is present", /Order received/.test(k.text()));
+    ahead(31 * 1000); await sleep(1500);
+    check("30 seconds after an order, the kiosk is back at the entry page", /How would you like to order\?/.test(k.text()), k.text().slice(0, 120));
+    k.w.Date.now = real;
+    await k.type(k.$("input"), "(312) 555-0177");
+    await k.click("Log In");
+    check("Chloe signs in again", /Hi, Chloe!/.test(k.text()));
+    ahead(60 * 1000); await sleep(1500);
+    check("a minute of no touches is still signed in", /Hi, Chloe!/.test(k.text()));
+    ahead(3 * 60 * 1000); await sleep(1500);
+    check("after 2 minutes idle, signed out", /How would you like to order\?/.test(k.text()) && !/Chloe/.test(k.text()));
+    check("and the server session is gone", (await (await k.w.fetch("/api/customer/session")).json()).signedIn === false);
+
+    // the public address (server/kiosk.js): guests only, with no phone sign-in to offer
+    const pub = await new Promise((r) => { const sv = require("../../server/kiosk").listen(0, () => r(sv)); });
+    try {
+      const g = kiosk(`http://127.0.0.1:${pub.address().port}`);
+      await sleep(900);
+      check("the public kiosk offers guest ordering only", /Continue as a guest to place an order/.test(g.text()) && !/Customer login/.test(g.text()) && !g.button("Log In") && !!g.button("Order as Guest"), g.text().slice(0, 160));
+      await g.click("Order as Guest");
+      check("and its menu opens for a guest", /Welcome, Guest!/.test(g.text()) && !g.button("Your Orders"));
+      check("the public kiosk page reported no errors", g.w.errors.length === 0, g.w.errors.slice(0, 2).join(" | "));
+    } finally { pub.close(); }
 
     check("React reported no errors", k.w.errors.length === 0, k.w.errors.slice(0, 3).join(" | "));
   } finally {

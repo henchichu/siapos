@@ -2,7 +2,7 @@
 // one stays in the database as a walk-in sale, as the other tests' sales do. Diego is enrolled and then put back as he was.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, topUp } = require("./env");
+const { start, client, pool, pickUp, topUp, TEST_CARD } = require("./env");
 
 let env, maya, leo, ana, sam, jordan;
 let enrolled = 0;
@@ -167,7 +167,7 @@ test("history: paid orders, total spent less refunds, points per order, adjustme
   const r = await enroll({ phone: phoneOf(6) });
   const id = r.body.id;
   const [[acct]] = await pool.query("SELECT LoyaltyAccountID AS id FROM LoyaltyAccount WHERE CustomerID = ?", [id]);
-  const sale = await sam.call("/register/orders", { customerId: id, items: [{ key: "a", variantId: "var-croissant", quantity: 2 }], payment: { method: "card" } });
+  const sale = await sam.call("/register/orders", { customerId: id, items: [{ key: "a", variantId: "var-croissant", quantity: 2 }], payment: { method: "card", card: TEST_CARD } });
   assert.equal(sale.status, 200, sale.body.error);
   await pickUp(sale.body.orderNumber);
   const found = await sam.call(`/refunds/order?q=${sale.body.orderNumber}`);

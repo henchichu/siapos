@@ -23,7 +23,7 @@ async function post(path, body) {
 }
 
 //  Entry screen
-function Entry({ businessName, locationName, onGuest, onSignedIn }) {
+function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn }) {
   const [phone, setPhone] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,10 +47,10 @@ function Entry({ businessName, locationName, onGuest, onSignedIn }) {
           <div className="hero">
             <h1>${businessName}</h1>
             <h2>How would you like to order?</h2>
-            <p>Log in to your account or continue as a guest.</p>
+            <p>${phoneSignIn ? "Log in to your account or continue as a guest." : "Continue as a guest to place an order."}</p>
           </div>
           <div className="cards">
-            <section className="card">
+            ${phoneSignIn && html`<section className="card">
               <div>
                 <h3>Customer login</h3>
                 <p className="sub">Use your customer account to order.</p>
@@ -62,7 +62,7 @@ function Entry({ businessName, locationName, onGuest, onSignedIn }) {
               ${msg && html`<p className="alert" role="alert">${msg}</p>`}
               <button className="login" disabled=${busy} onClick=${logIn}>Log In</button>
               <button className="restart" onClick=${() => { setPhone(""); setMsg(""); }}>Start Over</button>
-            </section>
+            </section>`}
             <section className="card">
               <div>
                 <h3>Continue as a guest</h3>
@@ -228,6 +228,7 @@ function HeaderActions({ mode, onOpenOrders, onExit }) {
 function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, onBack, onOrderPlaced }) {
   const [guestName, setGuestName] = useState("");
   const [payMethod, setPayMethod] = useState(null);
+  const [card, setCard] = useState({ number: "", expiry: "", cvc: "" }); // a test card: this kiosk takes mock payments
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null); // receipt after submit
@@ -245,13 +246,14 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
   const taxCents = priced ? priced.taxCents : null;
 
   const place = async () => {
-    if (!payMethod) { setMsg("Choose how you'll pay at the counter."); return; }
+    if (!payMethod) { setMsg("Choose how you'll pay."); return; }
     if (mode === "guest" && !guestName.trim()) { setMsg("Enter a name for the order."); return; }
     setBusy(true); setMsg("");
     try {
       const d = await post("/customer/orders", {
         idempotencyKey: idempKey.current,
         paymentMethod: payMethod,
+        card: payMethod === "Card" ? card : undefined,
         guestName: mode === "guest" ? guestName : undefined,
         note,
         items: cart.map((it) => ({ key: it.key, variantId: it.variantId, quantity: it.qty, modifierIds: it.modifierIds || [] })),
@@ -301,12 +303,21 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
 
           <div className="section gap3 bordered">
             <h3>3. Payment</h3>
-            <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>Pay with the cashier or on the terminal.</p>
+            <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>Test mode: Card, Apple Pay and Google Pay are not charged for real. Cash is paid at the counter.</p>
             <div className="methods">
               ${["Cash","Card","Apple Pay","Google Pay"].map((m) => html`
                 <button key=${m} className=${"method" + (payMethod === m ? " on" : "")}
                   onClick=${() => setPayMethod(m)}>${m}</button>`)}
             </div>
+            ${payMethod === "Card" && html`<div className="gap3">
+              <div className="label maxw">Card number
+                <input inputMode="numeric" autoComplete="off" placeholder="4242 4242 4242 4242" value=${card.number}
+                  onChange=${(e) => setCard({ ...card, number: e.target.value })} /></div>
+              <div className="label maxw">Expiry (MM/YY)
+                <input autoComplete="off" placeholder="12/30" value=${card.expiry} onChange=${(e) => setCard({ ...card, expiry: e.target.value })} /></div>
+              <div className="label maxw">Security code
+                <input inputMode="numeric" autoComplete="off" placeholder="123" value=${card.cvc} onChange=${(e) => setCard({ ...card, cvc: e.target.value })} /></div>
+            </div>`}
           </div>
         </section>
 
@@ -331,7 +342,7 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
           <button className="place" disabled=${busy || !cart.length} onClick=${place}>
             ${busy ? "Placing order…" : "Place order"}
           </button>
-          <p className="hint">Any remaining payment will be completed at the counter.</p>
+          <p className="hint">${payMethod === "Cash" ? "You'll pay at the counter." : "Test mode: nothing is charged for real."}</p>
         </aside>
       </div>
     </div>`;
@@ -339,7 +350,7 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
 
 //  Confirmation 
 function Confirmation({ receipt, onBack }) {
-  const { cart, note, payMethod, guestName, mode, memberInfo, orderNumber, orderId, totalCents } = receipt;
+  const { cart, note, payMethod, guestName, mode, memberInfo, orderNumber, orderId, totalCents, paid } = receipt;
   const name = mode === "guest" ? guestName : (memberInfo && memberInfo.firstName) || "there";
   return html`
     <div className="confirm-overlay screen">
@@ -351,7 +362,7 @@ function Confirmation({ receipt, onBack }) {
         <section className="card">
           <p className="where">ClockIt Cafe · Pickup at this counter</p>
           <h1>Order received</h1>
-          <p className="thanks">Thanks, ${name}. We'll prepare your order after payment.</p>
+          <p className="thanks">Thanks, ${name}. ${paid ? "We're preparing your order." : "We'll prepare your order after payment."}</p>
           <div className="lines">
             ${cart.map((it) => html`
               <div className="line" key=${it.key}>
@@ -369,13 +380,15 @@ function Confirmation({ receipt, onBack }) {
             <div className="row"><dt>Order number</dt><dd>#${orderNumber}</dd></div>
           </dl>
           <div className="pending-box">
-            <p className="ttl">Order submitted — payment pending</p>
-            <p className="sub">Selecting ${payMethod} did not charge the order. Complete payment with the cashier or terminal.</p>
+            ${paid ? html`<${React.Fragment}><p className="ttl">Paid — your order is being prepared</p>
+              <p className="sub">Paid with ${payMethod}. This is test mode, so nothing was charged for real.</p><//>`
+              : html`<${React.Fragment}><p className="ttl">Order submitted — payment pending</p>
+              <p className="sub">Pay the cashier at the counter, and we'll start your order.</p><//>`}
           </div>
           ${mode === "signed-in" && memberInfo && memberInfo.member && html`
             <div className="pts-row">
-              <p>Points to be earned once paid: ~${Math.floor((totalCents || 0) / 100)} pts</p>
-              <span className="badge">Pending</span>
+              <p>${paid ? "Points you'll earn at pickup" : "Points to be earned once paid"}: ~${Math.floor((totalCents || 0) / 100)} pts</p>
+              <span className="badge">${paid ? "At pickup" : "Pending"}</span>
             </div>`}
         </section>
       </div>
@@ -478,7 +491,7 @@ function Menu({ mode, memberInfo, locationName, products, categories, cart, onAd
           <div className="grid">
             ${visible.map((p, i) => html`
               <article key=${p.id} className="tile">
-                <img src=${p.hasPhoto ? `/api/products/${p.id}/photo` : productImg(i)}
+                <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(i)}
                   alt=${p.name} loading="lazy" />
                 <h3>${p.name}</h3>
                 <p className="desc">${p.description || ""}</p>
@@ -638,6 +651,9 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
 }
 
 //  App shell 
+// This iPad is shared: with no touches for IDLE_MS (30 seconds once an order has been placed) the customer is signed out
+// and the cart cleared. The server ends the session after 5 minutes by itself (server/customers.js).
+const IDLE_MS = 2 * 60 * 1000, IDLE_AFTER_ORDER_MS = 30 * 1000, TOUCH_EVERY_MS = 20 * 1000;
 function App() {
   const [ctx, setCtx] = useState(null);  // { businessName, locationName }
   const [catalog, setCatalog] = useState(null);
@@ -661,10 +677,24 @@ function App() {
     }).catch((e) => setLoadErr(e.message));
   }, []);
 
+  const idleLimit = useRef(IDLE_MS);
   const signOut = async () => {
+    idleLimit.current = IDLE_MS;
     await post("/customer/logout", {}).catch(() => {});
     setMode(null); setMemberInfo(null); setCart([]); setView("entry"); setOpenOrderId(null);
   };
+
+  const touchedAt = useRef(Date.now()), lastTouch = useRef(0);
+  useEffect(() => {
+    const touch = () => {
+      touchedAt.current = Date.now();
+      if (mode === "signed-in" && Date.now() - lastTouch.current >= TOUCH_EVERY_MS) { lastTouch.current = Date.now(); post("/customer/touch", {}).catch(() => {}); }
+    };
+    const events = ["pointerdown", "keydown", "wheel"];
+    events.forEach((e) => document.addEventListener(e, touch, true));
+    const t = setInterval(() => { if (view !== "entry" && Date.now() - touchedAt.current >= idleLimit.current) signOut(); }, 1000);
+    return () => { events.forEach((e) => document.removeEventListener(e, touch, true)); clearInterval(t); };
+  }, [view, mode]);
 
   const onSignedIn = (info) => { setMode("signed-in"); setMemberInfo(info); setView("menu"); };
   const onGuest = () => { setMode("guest"); setMemberInfo(null); setView("menu"); };
@@ -688,7 +718,7 @@ function App() {
 
   if (view === "entry") return html`
     <${Entry} businessName=${ctx.businessName} locationName=${ctx.locationName}
-      onGuest=${onGuest} onSignedIn=${onSignedIn} />`;
+      phoneSignIn=${ctx.phoneSignIn} onGuest=${onGuest} onSignedIn=${onSignedIn} />`;
 
   if (view === "history") return html`
     <${OrderHistory} memberInfo=${memberInfo}
@@ -710,7 +740,7 @@ function App() {
       cart=${cart}
       onAddItem=${addItem}
       onChangeQty=${changeQty}
-      onOrderPlaced=${() => setCart([])}
+      onOrderPlaced=${() => { setCart([]); idleLimit.current = IDLE_AFTER_ORDER_MS; }}
       onOpenOrders=${() => setView("history")}
       onExit=${signOut} />`;
 }

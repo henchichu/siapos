@@ -28,7 +28,9 @@ services:
   pos-app:
     build: .
     ports:
-      - "3000:3000"
+      - "3000:3000"       # the staff side: the tills and the owner (over an SSH tunnel when away)
+    expose:
+      - "3001"            # the public kiosk side, reachable only by other containers (the ngrok service below)
     environment:
       PORT: 3000
       DB_HOST: mysql-db
@@ -40,6 +42,7 @@ services:
       UPLOAD_DIR: /app/uploads
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
       TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
+      KIOSK_LOCATION_ID: ${KIOSK_LOCATION_ID:-}   # the café the customer iPad orders at; required with more than one café
     volumes:
       - uploads:/app/uploads
     secrets:
@@ -48,6 +51,19 @@ services:
     depends_on:
       mysql-db:
         condition: service_healthy
+
+  # The only way in from the internet: ngrok forwards to the kiosk side only. Off by default:
+  #   put NGROK_AUTHTOKEN and NGROK_DOMAIN (your free static domain) in a .env file, then
+  #   docker compose --profile tunnel up -d
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["http", "pos-app:3001", "--url=${NGROK_DOMAIN:-}"]   # older ngrok versions call --url --domain
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    depends_on:
+      - pos-app
 
 volumes:
   mysql_data:

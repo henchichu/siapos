@@ -8,7 +8,7 @@ const signIn = async (number, pin) => { const c = client(env.base); const r = aw
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const MGR = { managerNumber: "10420002", managerPin: "222222" };
 const search = (q = {}) => leo.call(`/orders?${new URLSearchParams(q)}`);
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Chicago" }); // the demo cafés' day, not UTC's
 
 async function sale(n = 2) {
   const made = await sam.call("/register/orders", { items: [{ key: "a", variantId: "var-croissant", quantity: n }], payment: { method: "cash" } });

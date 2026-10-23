@@ -1,7 +1,7 @@
 // Needs the dev database. Each run adds a few real test sales to it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock, pickUp } = require("./env");
+const { start, client, pool, unlock, pickUp, TEST_CARD } = require("./env");
 
 const DENIED = "Unauthorized. Supervisor or Owner credentials required to override.";
 let env, sam;
@@ -32,7 +32,7 @@ test("staff discount: no manager under the limit, a manager over it", async () =
 });
 
 test("a tip is separate from the sale and is never refunded", async () => {
-  const sale = await sam.call("/register/orders", { items: [{ key: "a", variantId: "var-croissant", quantity: 2 }], payment: { method: "card", tip: "1.25" } });
+  const sale = await sam.call("/register/orders", { items: [{ key: "a", variantId: "var-croissant", quantity: 2 }], payment: { method: "card", card: TEST_CARD, tip: "1.25" } });
   assert.equal(sale.status, 200);
   assert.equal(sale.body.totalCents, 772); // 7.00 + 10.25% tax, no tip in it
   assert.equal(sale.body.tipCents, 125);
@@ -77,7 +77,7 @@ test("five wrong gift card codes stop further guesses", async () => {
 test("a $0 sale can't carry a tip", async () => {
   const discount = { applyTo: "order", type: "percent", value: 100, reason: "Complaint" };
   const auth = await sam.call("/register/discount/authorize", { discount, managerNumber: "10420002", managerPin: "222222", items: [croissant] });
-  const r = await sam.call("/register/orders", { items: [croissant], discount, approvalToken: auth.body.approvalToken, payment: { method: "card", tip: "1.00" } });
+  const r = await sam.call("/register/orders", { items: [croissant], discount, approvalToken: auth.body.approvalToken, payment: { method: "card", card: TEST_CARD, tip: "1.00" } });
   assert.equal(r.status, 400);
 });
 
@@ -103,4 +103,27 @@ test("a sale that failed can be tried again with the same id", async () => {
   assert.equal((await sam.call("/register/orders", sale)).status, 400, "answered again, not remembered as a receipt");
   const paid = await sam.call("/register/orders", { ...sale, payment: { method: "cash" } });
   assert.equal(paid.status, 200);
+});
+
+test("card, Apple Pay and Google Pay are mock-paid at the register, with a tip", async () => {
+  for (const [method, code, card] of [["card", 2, TEST_CARD], ["apple", 5], ["google", 6]]) {
+    const sale = await sam.call("/register/orders", { items: [croissant], payment: { method, card, tip: "0.75" } });
+    assert.equal(sale.status, 200, `${method} ${JSON.stringify(sale.body)}`);
+    assert.equal(sale.body.tipCents, 75, method);
+    const [[p]] = await pool.query(
+      "SELECT p.PaymentMethodCode AS method, p.PaymentStatusCode AS status, p.TipAmount AS tip FROM Payment p JOIN Orders o ON o.OrderID = p.OrderID WHERE o.OrderNumber = ? AND o.BusinessID = 'biz-brewbean'", [sale.body.orderNumber]);
+    assert.deepEqual([p.method, p.status, Number(p.tip)], [code, 3, 0.75], method);
+  }
+});
+
+test("a declined or bad card at the register makes no sale", async () => {
+  const count = async () => (await pool.query("SELECT COUNT(*) AS n FROM Orders WHERE EmployeeID = 'emp-sam'"))[0][0].n;
+  const before = await count();
+  const pay = (card) => sam.call("/register/orders", { items: [croissant], payment: { method: "card", card } });
+  const declined = await pay({ ...TEST_CARD, number: "4000 0000 0000 9995" });
+  assert.deepEqual([declined.status, declined.body.error], [402, "Your card has insufficient funds."]);
+  assert.equal((await pay({ ...TEST_CARD, number: "5555 5555 5555 4444" })).status, 400, "a real card number is refused");
+  assert.equal((await pay(undefined)).status, 400, "no card details");
+  assert.equal(await count(), before);
+  assert.equal((await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } })).status, 200, "cash needs no card");
 });

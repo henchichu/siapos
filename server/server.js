@@ -4,8 +4,11 @@ const router = require("./router");
 const session = require("./session");
 const pool = require("./database/connection");
 const { hasPermission } = require("./pin");
+const { handleErrors } = require("./errors");
+const kiosk = require("./kiosk");
 
 const PORT = process.env.PORT || 3000;
+const KIOSK_PORT = process.env.KIOSK_PORT || 3001;
 const HOST = "0.0.0.0";
 
 const app = express();
@@ -17,16 +20,7 @@ app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" 
 // The customer iPad opens this URL; /customer redirects to the page
 app.get("/customer", (req, res) => res.redirect("/customer.html"));
 
-const VENDOR = {
-  "react.js": "react/umd/react.production.min.js",
-  "react-dom.js": "react-dom/umd/react-dom.production.min.js",
-  "htm.js": "htm/dist/htm.umd.js",
-};
-app.get("/vendor/:file", (req, res, next) => {
-  const file = VENDOR[req.params.file];
-  if (!file) return next();
-  res.sendFile(path.join(__dirname, "../node_modules", file), { maxAge: "1d" });
-});
+app.use(require("./vendor"));
 
 // Customer kiosk routes go before the router (which requires an employee session)
 app.use("/api", express.json(), require("./customers"), router);
@@ -56,17 +50,12 @@ app.use((req, res, next) => {
 app.use(express.static(path.resolve(__dirname, "../public")));
 
 app.use((req, res) => res.status(404).type("text").send("Page not found"));
-app.use((err, req, res, next) => {
-  if (err.status) return res.status(err.status).json({ error: err.message });
-  // a rule the database enforces itself (SQLSTATE 45000): its message is written for people
-  if (err.sqlState === "45000") return res.status(409).json({ error: err.sqlMessage });
-  if (err.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "That name or SKU is already in use." });
-  console.error(err);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(handleErrors);
 
 if (require.main === module) {
   app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
+  // the only part meant for the internet, through a tunnel: see server/kiosk.js
+  kiosk.listen(KIOSK_PORT, HOST, () => console.log(`Customer kiosk (public side) at http://localhost:${KIOSK_PORT}`));
 }
 
 module.exports = app;

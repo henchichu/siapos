@@ -11,7 +11,7 @@ for f in "${@:-[0-9]*.sh}"; do
     # 03-privileges is left out: it would REVOKE app_user's grants on the real database
     {
       echo "DROP DATABASE IF EXISTS $DB; CREATE DATABASE $DB;"
-      cat ../init_scripts/01-*.sql ../init_scripts/02-*.sql ../init_scripts/04-*.sql | sed "s/\bminiworld\b/$DB/g"
+      cat ../init_scripts/01-*.sql ../init_scripts/02-*.sql ../init_scripts/04-*.sql | sed "s/miniworld/$DB/g"
     } | root || {
       echo "build failed"
       exit 1

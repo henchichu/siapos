@@ -55,7 +55,8 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO OrderChannel (ChannelCode, Description, Active) 
 VALUES 
     (1, 'POS', TRUE),
-    (2, 'ONLINE', TRUE)
+    (2, 'ONLINE', TRUE),
+    (3, 'KIOSK', TRUE)
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description),
     Active = VALUES(Active);

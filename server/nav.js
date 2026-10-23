@@ -1,28 +1,9 @@
-// What each kind of role may open. Decided once at sign-in and kept, frozen, in the session.
-const ALL = ["Register", "Kitchen", "Needs attention", "Orders", "Rewards", "Products", "Inventory", "Reports", "Employees", "My shift"];
-const SERVER = ["Register", "Kitchen", "Rewards", "Products", "My shift"];
-const KITCHEN = ["Kitchen", "My shift"];
-
-// Home dashboard tiles, in the wireframe's order: the role's menu items, plus Sign out for everyone.
-// Settings has no menu item, so only full access gets it.
-const TILES = ["Inventory", "Rewards", "Employees", "Needs attention", "Products", "Settings", "Kitchen", "Orders", "Sign out", "Reports", "Register", "My shift"];
-const tilesFor = (names) => Object.freeze(TILES.filter((t) => t === "Sign out" || names.includes(t)));
-
-// Roles are named by each business, so they are matched by name; anything unrecognised gets the least access
-function byRole({ RoleName, IsOwner, OpensTo }, destinations) {
-  const name = RoleName.toLowerCase();
-  if (IsOwner || name.includes("manager")) return { nav: ALL, tiles: tilesFor(TILES), home: destinations[OpensTo] || "/register.html" };
-  if (name.includes("server")) return { nav: SERVER, tiles: tilesFor(SERVER), home: "/register.html" };
-  if (/barista|kitchen|chef/.test(name)) return { nav: KITCHEN, tiles: tilesFor(KITCHEN), home: "/kitchen.html" };
-  return { nav: ["My shift"], tiles: tilesFor(["My shift"]), home: "/shift.html" };
-}
-
-// Reports, Employees and Rewards follow the permissions, not the role's name: a menu item and tile only for a role that
-// may see reports (granted.reports), manage staff (granted.staff) or look up members (granted.members). Owners hold every permission.
+const PAGE_PERMISSIONS = { Register: [1], Kitchen: [5], "Needs attention": [14,17,3], Orders: [16], Rewards: [9], Products: [11], Inventory: [14], Reports: [20], Employees: [19], Settings: [21,22], "My shift": [] };
+const TILES = ["Inventory","Rewards","Employees","Needs attention","Products","Settings","Kitchen","Orders","Sign out","Reports","Register","My shift"];
 function access(emp, destinations, granted) {
-  const out = byRole(emp, destinations);
-  const keep = (n) => (n !== "Reports" || granted.reports) && (n !== "Employees" || granted.staff) && (n !== "Rewards" || granted.members);
-  return { ...out, nav: out.nav.filter(keep), tiles: Object.freeze(out.tiles.filter(keep)) };
+ const nav = Object.entries(PAGE_PERMISSIONS).filter(([, codes]) => emp.IsOwner || !codes.length || codes.some(c => granted.includes(c))).map(([name]) => name);
+ const paths = { Register: '/register.html', Kitchen: '/kitchen.html', 'My shift': '/shift.html' };
+ const available = nav.map(n => paths[n]).filter(Boolean);
+ return { nav, tiles: TILES.filter(n => n === 'Sign out' || nav.includes(n)), home: available.includes(destinations[emp.OpensTo]) ? destinations[emp.OpensTo] : available[0] || '/shift.html' };
 }
-
-module.exports = { access };
+module.exports = { access, PAGE_PERMISSIONS };

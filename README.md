@@ -45,3 +45,20 @@ A sign-in lasts at most 8 hours, and ends sooner after 15 minutes without activi
 `npm test` (or `sql/tests/run.sh`) builds the schema into a throwaway database inside the running `posdb` container and runs every database rule test as `app_user`. Run it before rebuilding the volume, so schema errors show up there first. It also runs the pricing unit tests (`tests/unit`, no database needed).
 
 `npm run test:live` starts the app against the dev database and runs the API tests (`tests/live/api.test.js`) and a browser-page click-through (`tests/live/click-through.js`). It needs the dev data above and adds a few test sales to it each run.
+
+## Settings
+
+Sign in again after rebuilding, then open Settings from Home or the sidebar. General requires permission 21; Roles and permissions requires permission 22. Owners have both implicitly. A manager without these permissions will not see Settings.
+
+General saves business details, tax inclusion, refund limits, categories, locations, location tax percentages and register names. Blank refund limits disable that limit. Existing registers are retained. Reassign active staff before deactivating a location or role.
+
+Role names do not determine navigation. Permission checkboxes determine available pages. The Owner role is locked; only owners can manage senior roles. Saving a role signs its staff out so access is refreshed at their next login.
+
+Settings smoke checks run against the running development app and demo owner account, from the project root:
+
+```sh
+node tests/live/settings-ui-smoke.cjs
+node tests/live/settings-write-smoke.cjs
+```
+
+The write check creates temporary records and removes them afterward. Keep local secrets, node_modules and any personal .gitignore out of commits using .git/info/exclude.

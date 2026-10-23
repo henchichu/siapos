@@ -30,7 +30,7 @@ async function powers(session) {
   const owner = await isOwner(session.employeeId);
   // a "senior" role is one that manages staff itself: the owner role, and any role holding permission 19
   const [roles] = await pool.query(
-    `SELECT r.RoleID AS id, r.Name AS name, (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = ?)) AS senior
+    `SELECT r.RoleID AS id, r.Name AS name, (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp WHERE rp.RoleID = r.RoleID AND rp.PermissionCode IN (?, 22))) AS senior
        FROM Role r WHERE r.BusinessID = ? AND r.Active ORDER BY r.IsOwner DESC, r.Name`, [PERM_MANAGE_STAFF, session.businessId]);
   const [all] = await pool.query("SELECT LocationID AS id, Name AS name FROM Location WHERE BusinessID = ? AND Active ORDER BY Name", [session.businessId]);
   const mine = owner ? all.map((l) => l.id) : await myLocations(session.employeeId);

@@ -26,6 +26,12 @@ app.get("/vendor/:file", (req, res, next) => {
 });
 
 app.use("/api", express.json(), router);
+app.get("/settings.html", async (req, res, next) => {
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (await hasPermission(pool, s.employeeId, 21) || await hasPermission(pool, s.employeeId, 22)) return next();
+  res.redirect(s.info.home);
+});
 
 // Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
 const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };

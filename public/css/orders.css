@@ -1,0 +1,41 @@
+/* Orders and Order details. Spacing and type from the ClockIt wireframes (nodes 178:565 and 178:2122); tables, fields and buttons come from shift.css and products.css */
+.ohead { display: flex; align-items: center; gap: 12px; flex: none; padding: 24px 24px 0; flex-wrap: wrap; }
+.ohead h2 { flex: 1; font-size: 20px; font-weight: 600; min-width: 0; }
+a.pbtn { display: inline-block; text-decoration: none; }
+a.pbtn.outline { color: var(--ink); }
+
+.osearch { padding: 0 24px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.ofilters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; width: 100%; }
+.ofield { display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 500; min-width: 0; }
+.ofield .select { width: 100%; }
+
+.results { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 24px; }
+.results header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.results h3 { font-size: 20px; font-weight: 600; }
+.table.clickable tbody tr { cursor: pointer; }
+.table.clickable tbody tr:hover { background: #f4f4f4; }
+.table a { color: var(--ink); text-decoration: none; }
+.table a:hover, .table a:focus-visible { text-decoration: underline; }
+.table td .opts { display: block; color: var(--muted); margin-top: 2px; }
+
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; padding: 0 24px; }
+.metric { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.metric span { color: var(--muted); }
+.metric b { font-size: 28px; font-weight: 600; overflow-wrap: anywhere; }
+
+.odetail { display: flex; gap: 24px; align-items: flex-start; padding: 0 24px 24px; flex-wrap: wrap; }
+.oleft { flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.oside { flex: 0 0 302px; max-width: 100%; display: flex; flex-direction: column; gap: 24px; }
+.osec { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.osec h3 { font-size: 18px; font-weight: 600; }
+.facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.totals { align-self: flex-end; width: min(264px, 100%); margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.totals div { display: flex; gap: 12px; justify-content: space-between; }
+.totals dt, .totals dd { margin: 0; }
+.totals .grand { border-top: 2px solid var(--ink); padding-top: 8px; font-weight: 600; }
+
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .ohead, .osearch, .results, .metrics, .odetail { padding-left: 0; padding-right: 0; }
+  .results .table, .osec .table { min-width: 560px; }
+  .results, .osec { overflow-x: auto; }
+}

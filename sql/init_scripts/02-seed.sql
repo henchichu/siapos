@@ -2,15 +2,34 @@ USE miniworld;
 
 START TRANSACTION;
 
-INSERT INTO EmployeeRole (RoleCode, Description, Active) 
-VALUES 
-    (1, 'OWNER', TRUE),
-    (2, 'MANAGER', TRUE),
-    (3, 'CASHIER', TRUE),
-    (4, 'EMPLOYEE', TRUE)
+INSERT INTO Permission (PermissionCode, Name, GroupName)
+VALUES
+    (1,  'Use the register', 'Selling'),
+    (2,  'Refund an order', 'Selling'),
+    (3,  'Sign refund overrides', 'Selling'),
+    (4,  'Approve discounts', 'Selling'),
+    (5,  'See the kitchen display', 'Kitchen'),
+    (6,  'Start and finish tickets', 'Kitchen'),
+    (7,  'Mark orders picked up', 'Kitchen'),
+    (8,  'Report a stock loss', 'Kitchen'),
+    (9,  'Look up and enroll members', 'Rewards'),
+    (10, 'Edit and deactivate members', 'Rewards'),
+    (11, 'See products and prices', 'Products'),
+    (12, 'Edit products, prices and options', 'Products'),
+    (13, 'See costs and margins', 'Products'),
+    (14, 'See inventory', 'Stock and orders'),
+    (15, 'Restock and adjust stock', 'Stock and orders'),
+    (16, 'Search orders', 'Stock and orders'),
+    (17, 'See team timecards', 'People'),
+    (18, 'Approve timecards', 'People'),
+    (19, 'Manage employees and pay rates', 'People'),
+    (20, 'See reports', 'Business'),
+    (21, 'Change settings', 'Business'),
+    (22, 'Manage roles', 'Business'),
+    (23, 'Manage gift cards', 'Selling')
 ON DUPLICATE KEY UPDATE
-    Description = VALUES(Description),
-    Active = VALUES(Active);
+    Name = VALUES(Name),
+    GroupName = VALUES(GroupName);
     
 INSERT INTO TimeEntryStatus
     (TimeEntryStatusCode, Description, Active)
@@ -36,7 +55,8 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO OrderChannel (ChannelCode, Description, Active) 
 VALUES 
     (1, 'POS', TRUE),
-    (2, 'ONLINE', TRUE)
+    (2, 'ONLINE', TRUE),
+    (3, 'KIOSK', TRUE)
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description),
     Active = VALUES(Active);
@@ -60,7 +80,9 @@ VALUES
     (1, 'CASH', TRUE),
     (2, 'CARD', TRUE),
     (3, 'GIFT_CARD', TRUE),
-    (4, 'OTHER', TRUE)
+    (4, 'OTHER', TRUE),
+    (5, 'APPLE_PAY', TRUE),
+    (6, 'GOOGLE_PAY', TRUE)
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description),
     Active = VALUES(Active);
@@ -83,8 +105,67 @@ VALUES
     (1, 'RESTOCK'),
     (2, 'SALE'),
     (3, 'RETURN'),
-    (4, 'ADJUSTMENT')
+    (4, 'ADJUSTMENT'),
+    (5, 'DAMAGED'),
+    (6, 'EXPIRED'),
+    (7, 'THEFT'),
+    (8, 'COUNT_CORRECTION')
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description);
+
+INSERT INTO UnitOfMeasure
+    (UnitCode, Symbol, Description, BaseUnitCode, ToBaseFactor, AllowsFraction, Active)
+VALUES      -- base units come before the units that convert to them
+    (1, 'each',  'Each',            1, 1.000000,   FALSE, TRUE),
+    (2, 'g',     'Gram',            2, 1.000000,   TRUE,  TRUE),
+    (3, 'kg',    'Kilogram',        2, 1000.000000, TRUE, TRUE),
+    (4, 'lb',    'Pound',           2, 453.592370, TRUE,  TRUE),
+    (5, 'oz',    'Ounce',           2, 28.349523,  TRUE,  TRUE),
+    (6, 'ml',    'Millilitre',      6, 1.000000,   TRUE,  TRUE),
+    (7, 'l',     'Litre',           6, 1000.000000, TRUE, TRUE),
+    (8, 'fl oz', 'US fluid ounce',  6, 29.573530,  TRUE,  TRUE)
+ON DUPLICATE KEY UPDATE
+    Symbol = VALUES(Symbol),
+    Description = VALUES(Description),
+    BaseUnitCode = VALUES(BaseUnitCode),
+    ToBaseFactor = VALUES(ToBaseFactor),
+    AllowsFraction = VALUES(AllowsFraction),
+    Active = VALUES(Active);
+
+INSERT INTO DiscountType (DiscountTypeCode, Description, Active)
+VALUES
+    (1, 'PERCENT', TRUE),
+    (2, 'FIXED', TRUE)
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description),
+    Active = VALUES(Active);
+
+INSERT INTO GiftCardTransactionType (GiftCardTransactionTypeCode, Description)
+VALUES
+    (1, 'ISSUE'),
+    (2, 'REDEEM'),
+    (3, 'REFUND'),
+    (4, 'CANCEL'),
+    (5, 'ADJUST')
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description);
+
+INSERT INTO LoyaltyTransactionType (LoyaltyTransactionTypeCode, Description, Active)
+VALUES
+    (1, 'EARN', TRUE),
+    (2, 'REDEEM', TRUE),
+    (3, 'ADJUST', TRUE)
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description),
+    Active = VALUES(Active);
+
+INSERT INTO RefundStatus (RefundStatusCode, Description, Active)
+VALUES
+    (1, 'PENDING', TRUE),
+    (2, 'COMPLETED', TRUE),
+    (3, 'FAILED', TRUE)
+ON DUPLICATE KEY UPDATE
+    Description = VALUES(Description),
+    Active = VALUES(Active);
 
 COMMIT;

@@ -1,94 +1,64 @@
-const http = require("http");
-const fs = require("fs/promises");
 const path = require("path");
+const express = require("express");
+const router = require("./router");
+const session = require("./session");
+const pool = require("./database/connection");
+const { hasPermission } = require("./pin");
+const { handleErrors } = require("./errors");
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
-const publicDirectory = path.resolve(__dirname, "../public");
 
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-};
+const app = express();
+// Behind an HTTPS proxy every request comes from the proxy: trust its forwarded address, or the sign-in limit counts the whole shop as one
+if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
-async function handleRequest(request, response) {
-  const requestUrl = new URL(
-    request.url,
-    `http://${request.headers.host || "localhost"}`
-  );
+app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-  // Docker and deployment health check
-  if (request.method === "GET" && requestUrl.pathname === "/health") {
-    response.writeHead(200, {
-      "Content-Type": "application/json; charset=utf-8",
-    });
+// The staff side always starts at the sign-in page. The phones' order page is a separate server (server/kiosk.js).
+app.get("/", (req, res) => res.redirect("/login.html"));
 
-    response.end(
-      JSON.stringify({
-        status: "ok",
-        application: "SIAPOS",
-      })
-    );
+app.use(require("./vendor"));
 
-    return;
-  }
+app.use("/api", express.json(), router);
+app.get("/settings.html", async (req, res, next) => {
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (await hasPermission(pool, s.employeeId, 21) || await hasPermission(pool, s.employeeId, 22)) return next();
+  res.redirect(s.info.home);
+});
 
-  if (request.method !== "GET") {
-    response.writeHead(405, {
-      "Content-Type": "application/json; charset=utf-8",
-    });
+// Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
+const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };
+app.get(Object.keys(LIVE), async (req, res, next) => {
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (await hasPermission(pool, s.employeeId, LIVE[req.path])) return next();
+  console.warn(`access violation: ${s.info.employeeName} (${s.info.roleName}) tried ${req.path}`);
+  res.redirect(s.info.home);
+});
 
-    response.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
-  }
+// Each page opens only for a role that has it in its menu; anyone else goes back to their own home
+const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention", "/orders.html": "Orders", "/order.html": "Orders" };
+app.use((req, res, next) => {
+  const need = PAGE_NAV[req.path];
+  if (need === undefined) return next();
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (!need || s.info.nav.includes(need)) return next(); // Home needs only a sign-in
+  console.warn(`access violation: ${s.info.employeeName} (${s.info.roleName}) tried ${req.path}`);
+  res.redirect(s.info.home);
+});
 
-  const requestedPage =
-    requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+app.use(express.static(path.resolve(__dirname, "../public")));
 
-  const relativePath = decodeURIComponent(requestedPage).replace(/^\/+/, "");
-  const filePath = path.resolve(publicDirectory, relativePath);
+app.use((req, res) => res.status(404).type("text").send("Page not found"));
+app.use(handleErrors);
 
-  // Prevent requests from accessing files outside public/
-  if (
-    filePath !== publicDirectory &&
-    !filePath.startsWith(`${publicDirectory}${path.sep}`)
-  ) {
-    response.writeHead(403);
-    response.end("Forbidden");
-    return;
-  }
-
-  try {
-    const file = await fs.readFile(filePath);
-    const extension = path.extname(filePath).toLowerCase();
-
-    response.writeHead(200, {
-      "Content-Type":
-        contentTypes[extension] || "application/octet-stream",
-    });
-
-    response.end(file);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      response.writeHead(404, {
-        "Content-Type": "text/plain; charset=utf-8",
-      });
-      response.end("Page not found");
-      return;
-    }
-
-    console.error(error);
-    response.writeHead(500, {
-      "Content-Type": "text/plain; charset=utf-8",
-    });
-    response.end("Internal server error");
-  }
+if (require.main === module) {
+  app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
+  require("./kioskorders").startExpiry(); // cancels kiosk orders nobody paid for, which puts their stock back
+  require("./watchers").startPolling(pool); // tells open kitchen screens about orders the public server took
 }
 
-const server = http.createServer(handleRequest);
-
-server.listen(PORT, HOST, () => {
-  console.log(`SIAPOS is running at http://localhost:${PORT}`);
-});
+module.exports = app;

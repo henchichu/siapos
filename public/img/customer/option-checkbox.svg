@@ -1,0 +1,7 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Checkbox">
+<rect x="0.5" y="0.5" width="12" height="12" rx="1.5" fill="#222222"/>
+<rect x="0.5" y="0.5" width="12" height="12" rx="1.5" stroke="#767676"/>
+<path id="Selected state" d="M2 6.23077L3.46512 4.83077L5.45349 6.98462L9.63953 3L11 4.50769L5.45349 10L2 6.23077Z" fill="white"/>
+</g>
+</svg>

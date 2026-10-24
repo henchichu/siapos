@@ -1,0 +1,74 @@
+/* Products. Spacing and type from the ClockIt wireframes (nodes 168:123, 168:212, 174:814, 174:978, 174:1580); tabs, tables and buttons come from shift.css */
+.pview { display: flex; flex-direction: column; gap: 24px; padding: 24px; min-width: 0; }
+.pview h2, .pform h2 { font-size: 20px; font-weight: 600; }
+.pview h3, .pform h3 { font-size: 16px; font-weight: 600; }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pfilters { display: flex; gap: 12px; align-items: center; }
+.pfilters .select { width: 144px; } .pfilters .field { width: 200px; }
+.field, .select { height: 44px; min-height: 44px; }
+.act { white-space: nowrap; }
+.phead .select { width: auto; min-width: 157px; }
+.field::placeholder { color: #757575; }
+.field.date { padding: 8px; font-size: 13px; }
+.sub { color: var(--muted); font-size: 14px; }
+
+.split { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.split > .grow, .grow { flex: 1 1 0; min-width: 0; }
+.split > .grow.pview { min-width: 320px; }
+.stack { display: flex; flex-direction: column; gap: 24px; }
+.pform { padding: 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* The right-hand column is only mounted while an action needs it, and slides in as the register's order panel does */
+.pside { width: 278px; flex: none; animation: slide-in 0.25s ease-out; }
+.pside.wide { width: 440px; }
+@media (prefers-reduced-motion: reduce) { .pside { animation: none; } }
+.status { padding: 0 24px; }
+
+.pf { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.pf > b { font-weight: 500; }
+.row2 { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.row2.center { align-items: center; }
+.row2 > .grow { flex: 1 1 140px; min-width: 0; } .w200 { width: 200px; max-width: 100%; }
+.check { display: flex; gap: 12px; align-items: center; font-size: 14px; }
+.check input { width: 13px; height: 13px; accent-color: var(--ink); flex: none; }
+.thumb { width: 96px; height: 96px; object-fit: cover; border: 1px solid var(--ink); }
+
+/* Buttons: 16px semibold, 12/20 padding; the dark one is primary */
+.pbtn { background: var(--ink); color: #fff; border: 1px solid var(--ink); padding: 12px 20px; font-size: 16px; font-weight: 600; }
+.pbtn:hover:not(:disabled) { background: #444; }
+.pbtn.outline { background: #fff; color: var(--ink); font-weight: 400; }
+.pbtn.outline:hover { background: #f4f4f4; }
+.pbtn.block { width: 100%; }
+.pbtn.upload { width: 170px; }
+.pbtn:disabled { background: #aaa; border-color: #aaa; }
+.pactions { display: flex; gap: 12px; } .pactions .pbtn { flex: 1; }
+
+.table.ro th, .table.ro td { padding-right: 16px; }
+.table.ro th { padding-bottom: 14px; } .table.ro td { padding-top: 14px; padding-bottom: 14px; height: auto; }
+.table .r { text-align: right; }
+.table.mg td, .table.mg th { padding-right: 8px; } .table.mg td { padding-top: 8px; padding-bottom: 8px; }
+.table td.strong { font-weight: 600; }
+.table tr.off td { color: #757575; }
+.table tr.sel td { background: #f4f4f4; }
+.tag { font-size: 11px; border: 1px solid #757575; padding: 0 5px; margin-left: 4px; }
+.addrow { display: flex; gap: 8px; align-items: center; } .addrow.wrap { flex-wrap: wrap; }
+.addrow .qty { width: 72px; } .w126 { width: 126px; } .w74 { width: 74px; }
+.addrow .select.grow, .addrow .grow { flex: 1 1 120px; }
+.costline { display: flex; justify-content: space-between; gap: 12px; font-size: 16px; font-weight: 600; border-top: 2px solid var(--ink); padding-top: 16px; }
+
+.segs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab.small { padding: 12px 10px; font-size: 14px; }
+
+/* A dropdown holding checkboxes */
+.multi { position: relative; }
+.multi summary { list-style: none; display: flex; align-items: center; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.multi summary::-webkit-details-marker { display: none; }
+.multi .menu { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid var(--ink); max-height: 240px; overflow-y: auto; padding: 8px 13px; display: flex; flex-direction: column; gap: 8px; }
+.multi .menu label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .pview, .pform { padding: 0; width: 100%; }
+  .pside, .pside.wide { width: 100%; animation: none; }
+  .pview.grow, .pform.grow { flex-basis: 100%; }
+  .pfilters { flex-wrap: wrap; } .pfilters .select, .pfilters .field { flex: 1; }
+  .table { min-width: 560px; } .pview { overflow-x: auto; }
+}

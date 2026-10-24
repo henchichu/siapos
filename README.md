@@ -76,14 +76,6 @@ Reach the staff side from elsewhere over a private network (Tailscale or a VPN, 
 
 **Rate limits** (public side, in memory): a café's phones share one address, so the limits are layered. Per address: 1,500 requests a minute (menu pictures not counted) and 60 orders a minute, high enough for a rush. Per phone (a `device` cookie): 5 orders and 10 sign-ins a minute, which stops one script without touching the other phones. An address that goes over its limit in 3 different minutes within 10 is blocked for 15 minutes. Staff sign-in is limited to 30 a minute per address, and an account locks for 15 minutes after 5 wrong PINs.
 
-**Existing database?** The init scripts only run on a fresh volume. To add what this version needs to a database you already have, once:
-```sh
-docker compose exec mysql-db sh /docker-entrypoint-initdb.d/06-kiosk-user.sh   # creates kiosk_user (needs sql/secrets/kiosk_user_password.txt)
-docker exec posdb sh -c 'mysql -uroot -p"$(cat /run/secrets/db_root_password)" miniworld -e "
-  ALTER TABLE Customer ADD COLUMN PhoneDigits VARCHAR(10) GENERATED ALWAYS AS (RIGHT(REGEXP_REPLACE(Phone, \"[^0-9]\", \"\"), 10)) STORED AFTER Phone, ADD INDEX IX_Customer_PhoneDigits (BusinessID, PhoneDigits);
-  ALTER TABLE Orders ADD INDEX IX_Orders_Location_Status (LocationID, OrderStatusCode)"'
-```
-
 To put the order page on the internet from a VM (Azure or any other):
 1. Create the VM (Ubuntu LTS, at least 2 GB of memory, SSH key login) with a fixed public IP and a name for it: your own domain pointed at the IP, or the cloud's DNS label. In its network rules allow port 22 only from your own address, ports 80 and 443 from anywhere, and nothing else.
 2. Install Docker and the Compose plugin, clone this repo, and do the Setup steps above (the secret files).

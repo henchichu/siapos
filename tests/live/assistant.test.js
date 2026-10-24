@@ -80,7 +80,7 @@ test("Needs attention: stock and timecards, but not refunds waiting for an overr
   assert.equal(r.status, 200);
   for (const k of ["losses", "low", "timecards"]) assert.ok(r.body[k] && Array.isArray(r.body[k].rows), k);
   assert.equal(r.body.refunds, null);
-  assert.equal(r.body.canSwitch, false);
+  assert.equal((await ana.call("/session")).body.canSwitch, false);
   assert.equal((await ana.call("/refunds/waiting")).status, 403);
 });
 

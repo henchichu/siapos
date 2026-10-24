@@ -20,7 +20,25 @@ async function signOut() {
   window.location.replace("/login.html");
 }
 
+// The overlay menu: an owner picks another of their locations and the whole page follows it
+function PickLocation({ onClose, onPicked }) {
+  const [data, setData] = useState(null);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => { api("/locations").then(setData).catch((e) => setMsg({ kind: "error", text: e.message })); }, []);
+  const pick = async (l) => {
+    if (l.id === data.current) return onClose();
+    try { await api("/locations/switch", { locationId: l.id }); onPicked(); } catch (e) { setMsg({ kind: "error", text: e.message }); }
+  };
+  return html`<${Modal} title="Switch location" onClose=${onClose}>
+    <ul className="places">${(data?.locations || []).map((l) => html`<li key=${l.id}>
+      <button className=${`btn block ${l.id === data.current ? "primary" : ""}`} aria-current=${l.id === data.current ? "true" : undefined} onClick=${() => pick(l)}>${l.name}</button></li>`)}</ul>
+    <${Message} msg=${msg} dashed />
+    <div className="btns"><button className="btn" onClick=${onClose}>Cancel</button></div>
+  <//>`;
+}
+
 function Sidebar({ me, current, onSignOut = signOut }) {
+  const [places, setPlaces] = useState(false);
   return html`<nav className="nav" aria-label="Main">
     <div>
       <h1><a href="/home.html">ClockIt</a></h1>
@@ -30,9 +48,12 @@ function Sidebar({ me, current, onSignOut = signOut }) {
     </div>
     <div className="who">
       <span>${me?.employeeName} ·</span>
-      <span>${me?.roleName} · ${me?.locationName}</span>
+      ${me?.canSwitch
+        ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
+        : html`<span>${me?.roleName} · ${me?.locationName}</span>`}
       <button className="link" onClick=${onSignOut}>Sign out</button>
     </div>
+    ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
   </nav>`;
 }
 

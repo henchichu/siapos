@@ -51,29 +51,11 @@ function ReviewRefunds({ onClose, onChanged }) {
   <//>`;
 }
 
-// The overlay menu: pick another of your locations and the whole page follows it
-function PickLocation({ onClose, onPicked }) {
-  const [data, setData] = useState(null);
-  const [msg, setMsg] = useState(null);
-  useEffect(() => { api("/locations").then(setData).catch((e) => setMsg({ kind: "error", text: e.message })); }, []);
-  const pick = async (l) => {
-    if (l.id === data.current) return onClose();
-    try { await api("/locations/switch", { locationId: l.id }); onPicked(); } catch (e) { setMsg({ kind: "error", text: e.message }); }
-  };
-  return html`<${Modal} title="Switch location" onClose=${onClose}>
-    <ul className="places">${(data?.locations || []).map((l) => html`<li key=${l.id}>
-      <button className=${`btn block ${l.id === data.current ? "primary" : ""}`} aria-current=${l.id === data.current ? "true" : undefined} onClick=${() => pick(l)}>${l.name}</button></li>`)}</ul>
-    <${Message} msg=${msg} dashed />
-    <div className="btns"><button className="btn" onClick=${onClose}>Cancel</button></div>
-  <//>`;
-}
-
 function App() {
   const me = useMe();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [review, setReview] = useState(false);
-  const [places, setPlaces] = useState(false);
   const load = useCallback(() => api("/attention").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
@@ -82,9 +64,7 @@ function App() {
     <${Sidebar} me=${me} current="Needs attention" />
     <section className="main scrolls" aria-label="Needs attention">
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
-        <header className="phead heading"><h2>Needs attention</h2>${data.canSwitch
-            ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${data.location} · today</button>`
-            : html`<span className="sub">${data.location} · today</span>`}</header>
+        <header className="phead heading"><h2>Needs attention</h2><span className="sub">${data.location} · today</span></header>
         <div className="attention">
           ${losses && html`<${Panel} title="Stock losses reported today" count=${losses.count} empty="No losses reported today."
             action=${html`<a className="pbtn outline" href="/inventory.html">Open inventory</a>`}>
@@ -107,7 +87,6 @@ function App() {
               ${refunds.rows.map((r, i) => html`<tr key=${i}><td>${r.orderNumber}</td><td className="r">${fromDollars(r.amount)}</td><td>${r.askedBy}</td><td>${r.why}</td></tr>`)}<//>
           <//>`}
         </div>
-        ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
         ${review && html`<${ReviewRefunds} onClose=${() => { setReview(false); load(); }} onChanged=${load} />`}
       <//>`}
     </section>

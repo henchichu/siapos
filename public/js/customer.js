@@ -221,9 +221,9 @@ function Customize({ product, cart, headerActions, onAdd, onCancel }) {
     </div>`;
 }
 //  Shared header actions 
-function HeaderActions({ mode, onOpenOrders, onExit }) {
+function HeaderActions({ canOpenOrders, onOpenOrders, onExit }) {
   return html`<div className="actions">
-    ${mode === "signed-in" && html`<button onClick=${onOpenOrders}>Your Orders</button>`}
+    ${canOpenOrders && html`<button onClick=${onOpenOrders}>Your Orders</button>`}
     <button className="exit" onClick=${onExit}>Back to Customer Login</button>
   </div>`;
 }
@@ -367,6 +367,7 @@ function Confirmation({ receipt, onBack }) {
     return () => { stop = true; clearInterval(t); };
   }, [orderId]);
   const code = live?.statusCode;
+  const stepIdx = code != null ? (STEP_OF[code] ?? -1) : paid ? 0 : -1; // -1: waiting for payment
   const [title, sub] = code === 6 ? ["Order cancelled", "This order was cancelled, for example because it wasn't paid in time. Place a new one any time."]
     : code === 4 ? ["Ready for pickup", "Your order is ready. Collect it at the counter."]
     : code === 5 || code === 7 ? ["Picked up", "Enjoy!"]
@@ -404,6 +405,13 @@ function Confirmation({ receipt, onBack }) {
             <p className="ttl">${title}</p>
             <p className="sub">${sub}</p>
           </div>
+          ${code !== 6 && html`
+            <div className="steps">
+              ${STATUS_STEPS.map((s, i) => html`
+                <div key=${s} className=${"step" + (i < stepIdx ? " done" : i === stepIdx ? " current" : "")}>
+                  <p className="lbl">${s}</p>
+                </div>`)}
+            </div>`}
           ${mode === "signed-in" && memberInfo && memberInfo.member && html`
             <div className="pts-row">
               <p>${paid ? "Points you'll earn at pickup" : "Points to be earned once paid"}: ~${Math.floor((totalCents || 0) / 100)} pts</p>
@@ -444,20 +452,21 @@ function RewardsPage({ memberInfo, onBrowseMenu, headerActions }) {
 }
 
 
-function Menu({ mode, memberInfo, locationName, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
+function Menu({ mode, memberInfo, hasOrders, locationName, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
   const [showRewards, setShowRewards] = useState(false);
   const [cat, setCat] = useState("All");
   const [customizing, setCustomizing] = useState(null);
   const [note, setNote] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState(null);
+  const [cartOpen, setCartOpen] = useState(false); // phones only: the cart is a full-screen sheet
 
   const visible = products.filter((p) => (cat === "All" || p.category === cat) && p.variants.some((v) => v.available));
   const cartTotal = cart.reduce((a, it) => a + it.unitCents * it.qty, 0);
 
   const addItem = (item) => { onAddItem(item); setCustomizing(null); };
 
-  const headerActions = html`<${HeaderActions} mode=${mode} onOpenOrders=${onOpenOrders} onExit=${onExit} />`;
+  const headerActions = html`<${HeaderActions} canOpenOrders=${mode === "signed-in" || hasOrders} onOpenOrders=${onOpenOrders} onExit=${onExit} />`;
 
   if (showRewards) {
     return html`<${RewardsPage} memberInfo=${memberInfo} headerActions=${headerActions} onBrowseMenu=${() => setShowRewards(false)} />`;
@@ -472,7 +481,7 @@ function Menu({ mode, memberInfo, locationName, products, categories, cart, onAd
     return html`<${Checkout} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
-      onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(); setNote(""); }} />`;
+      onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
   }
 
   if (lastOrder) {
@@ -522,8 +531,16 @@ function Menu({ mode, memberInfo, locationName, products, categories, cart, onAd
           </div>
         </section>
 
-        <aside className="cart">
-          <h2>Your order</h2>
+        ${cart.length > 0 && html`
+          <button className="cart-bar" onClick=${() => setCartOpen(true)}>
+            <span>View order · ${cart.reduce((a, it) => a + it.qty, 0)} items</span><span>${money(cartTotal)}</span>
+          </button>`}
+
+        <aside className=${"cart" + (cartOpen ? " open" : "")}>
+          <div className="cart-head">
+            <h2>Your order</h2>
+            <button className="cart-close" onClick=${() => setCartOpen(false)}>Keep browsing</button>
+          </div>
           <div className="items">
             ${cart.length === 0 ? html`<p className="empty">Your order is empty.</p>`
               : cart.map((it) => html`
@@ -553,14 +570,16 @@ function Menu({ mode, memberInfo, locationName, products, categories, cart, onAd
 }
 
 //  Order history 
-function OrderHistory({ memberInfo, onBackToMenu, onExit, onOpenOrder }) {
+function OrderHistory({ memberInfo, guestIds, onBackToMenu, onExit, onOpenOrder }) {
   const [orders, setOrders] = useState(null);
   const [err, setErr] = useState("");
   useEffect(() => {
-    api("/customer/my-orders").then((d) => setOrders(d.orders)).catch((e) => setErr(e.message));
+    if (memberInfo) return void api("/customer/my-orders").then((d) => setOrders(d.orders)).catch((e) => setErr(e.message));
+    // a guest has no account: each order of this visit is looked up by its unguessable id
+    Promise.all(guestIds.map((id) => api(`/customer/orders/${id}`).catch(() => null))).then((all) => setOrders(all.filter(Boolean)));
   }, []);
 
-  const ACTIVE = new Set(["Confirmed","Preparing","Ready"]);
+  const ACTIVE = new Set(["Confirmed","Preparing","Ready for pickup"]);
   const sorted = orders ? [...orders].sort((a, b) => {
     const aa = ACTIVE.has(a.status), bb = ACTIVE.has(b.status);
     if (aa !== bb) return aa ? -1 : 1;
@@ -571,12 +590,12 @@ function OrderHistory({ memberInfo, onBackToMenu, onExit, onOpenOrder }) {
     <div className="history screen">
       <div className="header">
         <h1>ClockIt Cafe</h1>
-        ${html`<${HeaderActions} mode="signed-in" onOpenOrders=${() => {}} onExit=${onExit} />`}
+        ${html`<${HeaderActions} canOpenOrders=${false} onExit=${onExit} />`}
         <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
       </div>
       <div className="body">
         <div className="intro">
-          <p>${memberInfo.firstName} · Signed-in order history</p>
+          <p>${memberInfo ? `${memberInfo.firstName} · Signed-in order history` : "Orders you placed on this phone this visit"}</p>
           <h2>Your Orders</h2>
         </div>
         ${err && html`<p className="alert" role="alert">${err}</p>`}
@@ -585,7 +604,7 @@ function OrderHistory({ memberInfo, onBackToMenu, onExit, onOpenOrder }) {
           <div className="empty-state">
             <div>
               <h3>No orders yet</h3>
-              <p>Orders placed with this phone number will appear here.</p>
+              <p>${memberInfo ? "Orders placed with this phone number will appear here." : "Orders you place will appear here."}</p>
               <button onClick=${onBackToMenu}>Start an order</button>
             </div>
           </div>`}
@@ -593,11 +612,11 @@ function OrderHistory({ memberInfo, onBackToMenu, onExit, onOpenOrder }) {
           <button key=${o.id} className="order-card" onClick=${() => onOpenOrder(o.id)}>
             <div className="main">
               <div className="top"><h3>Order #${o.orderNumber}</h3><span className="badge">${o.status}</span></div>
-              <p className="meta">${fmt(o.placedAt, o.timeZone)}</p>
+              <p className="meta">${fmt(o.placedAt, o.tz)}</p>
             </div>
             <div className="right">
               <p>${money(Math.round(o.total * 100))}</p>
-              ${o.earned > 0 ? html`<p className="pts">${o.earned} pts earned</p>` : html`<p className="pts">Points pending</p>`}
+              ${memberInfo && (o.earned > 0 ? html`<p className="pts">${o.earned} pts earned</p>` : html`<p className="pts">Points pending</p>`)}
             </div>
           </button>`)}
       </div>
@@ -606,6 +625,7 @@ function OrderHistory({ memberInfo, onBackToMenu, onExit, onOpenOrder }) {
 
 //  Order details (status) 
 const STATUS_STEPS = ["Confirmed","Preparing","Ready","Picked up"];
+const STEP_OF = { 2: 0, 3: 1, 4: 2, 5: 3, 7: 3 }; // the order's status code -> its step; the status wording changes ("Ready for pickup"), the code does not
 function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onExit }) {
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState("");
@@ -621,13 +641,13 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
   if (err) return html`<div className="error-page"><h2>Could not load order</h2><p>${err}</p><button onClick=${load}>Try again</button></div>`;
   if (!order) return html`<div className="loading">Loading…</div>`;
 
-  const stepIdx = STATUS_STEPS.indexOf(order.status);
+  const stepIdx = STEP_OF[order.statusCode] ?? -1; // -1: waiting for payment, or cancelled
 
   return html`
     <div className="details screen">
       <div className="header">
         <h1>ClockIt Cafe</h1>
-        ${html`<${HeaderActions} mode="signed-in" onOpenOrders=${onBackToHistory} onExit=${onExit} />`}
+        ${html`<${HeaderActions} canOpenOrders=${!!onBackToHistory} onOpenOrders=${onBackToHistory} onExit=${onExit} />`}
         <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
       </div>
       <div className="body">
@@ -636,12 +656,12 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
           <div className="num-row">
             <h2>Order #${order.orderNumber}</h2>
           </div>
-          <div className="steps">
+          ${order.statusCode === 6 ? html`<p className="thanks">This order was cancelled.</p>` : html`<div className="steps">
             ${STATUS_STEPS.map((s, i) => html`
               <div key=${s} className=${"step" + (i < stepIdx ? " done" : i === stepIdx ? " current" : "")}>
                 <p className="lbl">${s}</p>
               </div>`)}
-          </div>
+          </div>`}
         </div>
 
         <div className="card">
@@ -675,7 +695,11 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
 const IDLE_MS = 2 * 60 * 1000, IDLE_AFTER_ORDER_MS = 30 * 1000, TOUCH_EVERY_MS = 20 * 1000;
 // Only on a shared screen (the server says so with KIOSK_SHARED_DEVICE=1). On a customer's own phone nobody is signed out while
 // they wait for their order.
+const GUEST_KEY = "guestOrders"; // ids of the orders a guest placed in this browser tab; the tab's session storage forgets them when it closes
+const savedGuestOrders = () => { try { return JSON.parse(sessionStorage.getItem(GUEST_KEY)) || []; } catch (e) { return []; } };
+const saveGuestOrders = (ids) => { try { sessionStorage.setItem(GUEST_KEY, JSON.stringify(ids)); } catch (e) { /* storage can be blocked */ } };
 function App() {
+  const [guestOrders, setGuestOrders] = useState(savedGuestOrders);
   const [ctx, setCtx] = useState(null);  // { businessName, locationName }
   const [catalog, setCatalog] = useState(null);
   const [view, setView] = useState("entry"); // entry | menu | history | order
@@ -704,6 +728,11 @@ function App() {
     idleLimit.current = IDLE_MS;
     await post("/customer/logout", {}).catch(() => {});
     setMode(null); setMemberInfo(null); setCart([]); setView("entry"); setOpenOrderId(null);
+    if (ctx?.sharedDevice) { setGuestOrders([]); saveGuestOrders([]); } // the next person on a shared screen must not see these
+  };
+  const orderPlaced = (r) => {
+    setCart([]); idleLimit.current = IDLE_AFTER_ORDER_MS;
+    if (mode === "guest" && r?.orderId) setGuestOrders((prev) => { const next = [r.orderId, ...prev]; saveGuestOrders(next); return next; });
   };
 
   const shared = !!ctx?.sharedDevice;
@@ -744,26 +773,26 @@ function App() {
       phoneSignIn=${ctx.phoneSignIn} onGuest=${onGuest} onSignedIn=${onSignedIn} />`;
 
   if (view === "history") return html`
-    <${OrderHistory} memberInfo=${memberInfo}
+    <${OrderHistory} memberInfo=${memberInfo} guestIds=${guestOrders}
       onBackToMenu=${() => setView("menu")}
       onExit=${signOut}
       onOpenOrder=${(id) => { setOpenOrderId(id); setView("order"); }} />`;
 
   if (view === "order") return html`
     <${OrderDetails} orderId=${openOrderId} memberInfo=${memberInfo}
-      onBackToHistory=${mode === "signed-in" ? () => setView("history") : null}
+      onBackToHistory=${() => setView("history")}
       onBackToMenu=${() => setView("menu")}
       onExit=${signOut} />`;
 
   return html`
     <${Menu}
-      mode=${mode} memberInfo=${memberInfo}
+      mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0}
       locationName=${ctx.locationName}
       products=${catalog.products} categories=${catalog.categories}
       cart=${cart}
       onAddItem=${addItem}
       onChangeQty=${changeQty}
-      onOrderPlaced=${() => { setCart([]); idleLimit.current = IDLE_AFTER_ORDER_MS; }}
+      onOrderPlaced=${orderPlaced}
       onOpenOrders=${() => setView("history")}
       onExit=${signOut} />`;
 }

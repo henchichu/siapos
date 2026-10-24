@@ -33,7 +33,7 @@ a Simple Industry Agnostic Point Of Sale System
    | `KIOSK_PHONE_SIGNIN` | off | a demo with made-up customers (`1`: phone-number sign-in on the public address; the dev compose file sets it) |
 
    None of the `.env` variables is needed for local development. Everything else (database host and logins, ports, pool sizes, uploads folder) is set in `docker-compose.yaml`.
-2. Start everything: `docker compose up -d` (for development with the demo shop, see below). MySQL listens on `127.0.0.1:3306` only, the staff app (`pos-api`) on `127.0.0.1:3000`, and the public order server (`kiosk-api`) on its own container port 3001, reached through Caddy (see Containers).
+2. Start everything: `docker compose up -d` (for development with the demo shop, see below). MySQL listens on `127.0.0.1:3306` only and the staff app (`pos-api`) on `127.0.0.1:3000`. The public order server (`kiosk-api`) is reached through Caddy, which only starts with `--profile public` (see Containers); the dev compose file also publishes it on `127.0.0.1:3001`, so the demo shop's order page opens at `http://127.0.0.1:3001/order/loc-campus`.
 
 The scripts in `sql/init_scripts/` run only when the database volume is empty. After changing them, rebuild the database (this **deletes all its data**):
 
@@ -63,7 +63,7 @@ Each café has its own QR code that opens `https://<KIOSK_HOST>/order/<café id>
 
 ## Containers and the public address (Azure VM)
 
-Three services plus the proxy, one image:
+Three services plus the proxy; the two app services are built from the same image:
 
 | Service | What it is | Reachable | Database login |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Three services plus the proxy, one image:
 | `mysql-db` | MySQL 8.4 | `127.0.0.1:3306` only | |
 | `caddy` (`--profile public`) | HTTPS for `KIOSK_HOST`, forwards to `kiosk-api` | ports 80 and 443 | |
 
-Reach the staff side from elsewhere over a private network (Tailscale or a VPN, or an SSH tunnel: `ssh -L 3000:localhost:3000 <user>@<host>`), not the internet. Kitchen screens learn about orders from the other container because `pos-api` checks the database every 2 seconds, only for cafés that have a kitchen screen open. Phone sign-in is off on the public side unless `KIOSK_PHONE_SIGNIN=1` (a demo with made-up customers: `docker-compose.dev.yaml` sets it).
+Reach the staff side from elsewhere over a private network (Tailscale or a VPN, or an SSH tunnel: `ssh -L 3000:localhost:3000 <user>@<host>`), not the internet. Kitchen screens learn about orders from the other container because `pos-api` checks the database every 2 seconds, only for cafés that have a kitchen screen open.
 
 **Rate limits** (public side, in memory): a café's phones share one address, so the limits are layered. Per address: 1,500 requests a minute (menu pictures not counted) and 60 orders a minute, high enough for a rush. Per phone (a `device` cookie): 5 orders and 10 sign-ins a minute, which stops one script without touching the other phones. An address that goes over its limit in 3 different minutes within 10 is blocked for 15 minutes. Staff sign-in is limited to 30 a minute per address, and an account locks for 15 minutes after 5 wrong PINs.
 
@@ -106,11 +106,11 @@ Known limits: every order takes the business's order-number counter for the leng
 
 ## Mock payments
 
-There is no real card processor. `server/mockpay.js` stands in for one at the registers and on the customer kiosk: Card, Apple Pay and Google Pay are approved or declined by the mock, no money moves, and no card detail is stored or logged. Apple Pay and Google Pay always succeed. For Card, only test numbers are accepted (any other number, including a real card, is refused): `4242 4242 4242 4242` approves, `4000 0000 0000 0002` is declined, `4000 0000 0000 9995` has insufficient funds, `4000 0000 0000 0069` is expired, and `4000 0000 0000 0119` is a processor error. Use any expiry that hasn't passed (like `12/49`) and any 3 or 4 digit code. A decline makes no order. A database made before this needs the `APPLE_PAY` (5) and `GOOGLE_PAY` (6) rows in `PaymentMethod`, which `02-seed.sql` adds to a fresh one.
+There is no real card processor. `server/mockpay.js` stands in for one at the registers and on the phone order page: Card, Apple Pay and Google Pay are approved or declined by the mock, no money moves, and no card detail is stored or logged. Apple Pay and Google Pay always succeed. For Card, only test numbers are accepted (any other number, including a real card, is refused): `4242 4242 4242 4242` approves, `4000 0000 0000 0002` is declined, `4000 0000 0000 9995` has insufficient funds, `4000 0000 0000 0069` is expired, and `4000 0000 0000 0119` is a processor error. Use any expiry that hasn't passed (like `12/49`) and any 3 or 4 digit code. A decline makes no order.
 
 ## Going live
 
-Passwords and PINs cross the network, so serve the app over HTTPS: put a reverse proxy with a certificate in front of it, and publish the app's port to the proxy only (`127.0.0.1:3000:3000` in `docker-compose.yaml`), not to the café network. Then set `COOKIE_SECURE=1` (the session cookie is only sent over HTTPS) and `TRUST_PROXY=1` (the sign-in limit counts each person's own address, not the proxy's) in a `.env` file next to `docker-compose.yaml`. Both default to off, which is right for `localhost` development.
+The public order page is already behind HTTPS (Caddy). The staff side listens on `127.0.0.1:3000` only, so reach it through a tunnel or private network (see Containers), which encrypts it. If you ever put the staff side on a network some other way, passwords and PINs would cross it, so serve it over HTTPS first: a reverse proxy with a certificate in front, then `COOKIE_SECURE=1` (the session cookie is only sent over HTTPS) and `TRUST_PROXY=1` (the sign-in limit counts each person's own address, not the proxy's) in a `.env` file next to `docker-compose.yaml`. Both default to off, which is right for `localhost` development.
 
 ## Signing out
 
@@ -118,9 +118,9 @@ A sign-in lasts at most 8 hours, and ends sooner after 15 minutes without activi
 
 ## Tests
 
-`npm test` (or `sql/tests/run.sh`) builds the schema into a throwaway database inside the running `posdb` container and runs every database rule test as `app_user`. Run it before rebuilding the volume, so schema errors show up there first. It also runs the pricing unit tests (`tests/unit`, no database needed).
+`npm test` (or `sql/tests/run.sh`) builds the schema into a throwaway database inside the running `posdb` container and runs every database rule test as `app_user`. Run it before rebuilding the volume, so schema errors show up there first. It also runs the unit tests (`tests/unit`: pricing, sessions, form validation, rate limits, dates, mock payments; no database needed).
 
-`npm run test:live` starts the app against the dev database and runs the API tests (`tests/live/api.test.js`) and a browser-page click-through (`tests/live/click-through.js`). It needs the dev data above and adds a few test sales to it each run.
+`npm run test:live` starts the apps against the dev database and runs the API tests (`tests/live/*.test.js`) and the browser-page click-throughs (`tests/live/*-click.js`, in jsdom). It needs the dev data above, the database port from the dev compose file, and `sql/secrets/kiosk_user_password.txt` (one test starts the public server as `kiosk_user`). It adds test sales and orders to the dev data each run. `tests/load/run.js` is the load test (see Capacity).
 
 ## Settings
 

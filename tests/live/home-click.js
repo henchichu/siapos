@@ -34,7 +34,7 @@ async function home(base, number, pin) {
   check("sign-in lands on Home", owner.redirect === "/home.html");
   check("owner sees every tile, in the wireframe's order", owner.names === ALL, owner.names);
   const manager = await home(base, "10420002", "222222");
-  check("manager sees every tile", manager.names === ALL, manager.names);
+  check("manager sees permitted tiles without Settings", manager.names === ALL.replace("Settings|", ""), manager.names);
   const waiter = await home(base, "10420003", "333333");
   check("server sees only Register, Kitchen, Rewards, Products, My shift and Sign out", waiter.names === "Rewards|Products|Kitchen|Sign out|Register|My shift", waiter.names);
   const barista = await home(base, "10420005", "555555");

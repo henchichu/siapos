@@ -5,7 +5,7 @@ const session = require("./session");
 const rateLimit = require("./ratelimit");
 const { access } = require("./nav");
 
-const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html" };
+const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html", SHIFT: "/shift.html" };
 const PERM_REPORTS = 20;
 const PERM_MANAGE_STAFF = 19;
 const PERM_MEMBERS = 9;
@@ -40,8 +40,8 @@ router.post("/login/pin", async (req, res) => {
   const { emp } = result;
   const place = await workplace(emp.EmployeeID);
   if (!place) return res.status(403).json({ error: "You aren't assigned to a café. Ask an owner to add you to one." });
-  const can = (code) => hasPermission(pool, emp.EmployeeID, code);
-  const granted = { reports: await can(PERM_REPORTS), staff: await can(PERM_MANAGE_STAFF), members: await can(PERM_MEMBERS) };
+  const granted = [];
+  for (let code = 1; code <= 22; code++) if (await hasPermission(pool, emp.EmployeeID, code)) granted.push(code);
   const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
   session.create(res, {
     employeeId: emp.EmployeeID,
@@ -117,6 +117,7 @@ router.use(require("./attention"));
 router.use(require("./reports"));
 router.use(require("./employees"));
 router.use(require("./orders"));
+router.use(require("./settings"));
 router.use(require("./rewards"));
 
 module.exports = router;

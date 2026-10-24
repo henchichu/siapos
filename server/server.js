@@ -22,8 +22,14 @@ app.get("/customer", (req, res) => res.redirect("/customer.html"));
 
 app.use(require("./vendor"));
 
-// Customer kiosk routes go before the router (which requires an employee session)
+// Customer kiosk routes precede employee authentication.
 app.use("/api", express.json(), require("./customers"), router);
+app.get("/settings.html", async (req, res, next) => {
+  const s = session.fromRequest(req);
+  if (!s) return res.redirect("/login.html");
+  if (await hasPermission(pool, s.employeeId, 21) || await hasPermission(pool, s.employeeId, 22)) return next();
+  res.redirect(s.info.home);
+});
 
 // Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
 const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };

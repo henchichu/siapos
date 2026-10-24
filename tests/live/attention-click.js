@@ -70,7 +70,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("neither is listed any more", !card(first) && !card(second));
   await click(byText("dialog button", "Close"), 600);
   check("the panel's count went down by two", count("Refunds waiting for an override") === startCount - 2 && !refundRows().some((t) => asked.some((n) => t.includes(String(n)))));
-  check("a manager's location is plain text, not a menu", !$(".where") && /Brewbean Campus · today/.test($(".heading").textContent));
+  check("a manager's location is plain text, not a menu", !$(".nav .where") && /Brewbean Campus/.test($(".nav .who").textContent));
 
   // the owner's page: the location opens a menu of their locations
   const owner = await call("10420001", "111111");
@@ -80,8 +80,8 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   ow.eval(lib("react/umd/react.development.js")); ow.eval(lib("react-dom/umd/react-dom.development.js")); ow.eval(lib("htm/dist/htm.umd.js"));
   ow.eval(app);
   await sleep(1000);
-  const where = ow.document.querySelector(".where");
-  check("the owner's location is a button", !!where && /Brewbean Campus · today/.test(where.textContent));
+  const where = ow.document.querySelector(".nav .where");
+  check("the owner's location in the sidebar is a button", !!where && /Brewbean Campus/.test(where.textContent) && !ow.document.querySelector(".heading .where"));
   where.click(); await sleep(600);
   const places = [...ow.document.querySelectorAll("dialog .places button")];
   check("clicking it opens a menu of their locations, current one marked", places.map((b) => b.textContent).join("|") === "Brewbean Campus|Brewbean Downtown" && places[0].getAttribute("aria-current") === "true");

@@ -1,7 +1,7 @@
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
-const { hasPermission, isOwner } = require("./pin");
+const { hasPermission } = require("./pin");
 const { myLocations } = require("./locations");
 const { waitingRefunds } = require("./refunds");
 
@@ -19,7 +19,7 @@ router.get("/attention", async (req, res) => {
   const [inventory, team, signer] = await Promise.all([PERM_SEE_INVENTORY, PERM_SEE_TEAM, PERM_SIGN_REFUNDS].map((p) => hasPermission(pool, employeeId, p)));
   if (!inventory && !team && !signer) throw new HttpError(403, "Your role can't do this.");
   const [[place]] = await pool.query("SELECT Name AS name, TimeZone AS timeZone FROM Location WHERE LocationID = ?", [locationId]);
-  const out = { canSwitch: await isOwner(employeeId), location: place.name, timeZone: place.timeZone, losses: null, low: null, timecards: null, refunds: null };
+  const out = { location: place.name, timeZone: place.timeZone, losses: null, low: null, timecards: null, refunds: null };
 
   if (inventory) {
     // "today" is the café's local day, so the cut-off is local midnight converted back to UTC

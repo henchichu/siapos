@@ -72,7 +72,7 @@ router.post("/logout", (req, res) => {
 
 router.use(session.requireSession);
 
-router.get("/session", (req, res) => res.json(req.session.info));
+router.get("/session", async (req, res) => res.json({ ...req.session.info, canSwitch: await isOwner(req.session.employeeId) }));
 // The page calls this when the person does something, which restarts the idle clock
 router.post("/session/touch", (req, res) => { req.session.active = Date.now(); res.json({}); });
 

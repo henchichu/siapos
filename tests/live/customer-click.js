@@ -113,6 +113,13 @@ function kiosk(base) {
     [...k.w.document.querySelectorAll(".order-card")].find((c) => c.textContent.includes(`#${number}`)).click(); await sleep(500);
     check("an order opens with its status", new RegExp(`Order #${number}`).test(k.text()) && /What you ordered/.test(k.text()));
     check("no Advance status control", !k.button("Advance status"));
+    const stage = () => [...k.w.document.querySelectorAll(".step")].map((x) => x.className.replace("step", "").trim() || "-").join(",");
+    check("Confirmed is the current step", stage() === "current,-,-,-", stage());
+    // the customer wording for a ready order is "Ready for pickup"; the step must follow the status, not the wording
+    await pool.query("UPDATE Orders SET OrderStatusCode = 4 WHERE OrderNumber = ? AND BusinessID = 'biz-brewbean'", [number]);
+    await k.click("Back to order history");
+    k.$(".order-card").click(); await sleep(500);
+    check("Ready lights the third step, with the two before it done", stage() === "done,done,current,-", stage());
     await k.click("Back to order history");
     check("back to history", /Signed-in order history/.test(k.text()));
 
@@ -145,8 +152,21 @@ function kiosk(base) {
     const real = k.w.Date.now, ahead = (ms) => { const t = real() + ms; k.w.Date.now = () => t; };
     await sleep(1200);
     check("the confirmation is still there while the guest is present", /Order received/.test(k.text()));
+
+    // a guest has no account, but can reopen the orders of this visit
+    const guestNumber = k.text().match(/Order number#(\d+)/)?.[1];
+    await k.click("Back to menu");
+    check("a guest who has ordered gets Your Orders", !!k.button("Your Orders"));
+    await k.click("Your Orders"); await sleep(800);
+    check("it lists the order from this visit", new RegExp(`Order #${guestNumber}`).test(k.text()) && /Orders you placed on this phone/.test(k.text()), k.text().slice(0, 200));
+    k.$(".order-card").click(); await sleep(800);
+    check("and reopens its tracking screen", /This order was cancelled/.test(k.text()) && /What you ordered/.test(k.text()));
+
     ahead(31 * 1000); await sleep(1500);
     check("30 seconds after an order, the kiosk is back at the entry page", /How would you like to order\?/.test(k.text()), k.text().slice(0, 120));
+    await k.click("Order as Guest");
+    check("on a shared screen the next guest doesn't see those orders", !k.button("Your Orders"));
+    ahead(31 * 1000 + 2 * 60 * 1000 + 1000); await sleep(1500); // idle again: back to the entry page
     k.w.Date.now = real;
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");

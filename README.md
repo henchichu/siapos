@@ -14,6 +14,8 @@ a Simple Industry Agnostic Point Of Sale System
    openssl rand -base64 24 > sql/secrets/kiosk_user_password.txt
    openssl rand -base64 24 > sql/secrets/giftcard_secret.txt
    ```
+   The database container reads these files as another user, so they must be world-readable: run `chmod 644 sql/secrets/*.txt` if a file is private (mode 600). Otherwise MySQL restarts in a loop with `Permission denied` and the app containers never start.
+
    Everything to set before the first start:
 
    | Secret file (`sql/secrets/`) | Used by | Notes |
@@ -33,12 +35,13 @@ a Simple Industry Agnostic Point Of Sale System
    | `KIOSK_PHONE_SIGNIN` | off | a demo with made-up customers (`1`: phone-number sign-in on the public address; the dev compose file sets it) |
 
    None of the `.env` variables is needed for local development. Everything else (database host and logins, ports, pool sizes, uploads folder) is set in `docker-compose.yaml`.
+
 2. Start everything: `docker compose up -d` (for development with the demo shop, see below). MySQL listens on `127.0.0.1:3306` only and the staff app (`pos-api`) on `127.0.0.1:3000`. The public order server (`kiosk-api`) is reached through Caddy, which only starts with `--profile public` (see Containers); the dev compose file also publishes it on `127.0.0.1:3001`, so the demo shop's order page opens at `http://127.0.0.1:3001/order/loc-campus`.
 
 The scripts in `sql/init_scripts/` run only when the database volume is empty. After changing them, rebuild the database (this **deletes all its data**):
 
 ```sh
-docker compose down -v && docker compose up -d
+docker compose down -v && docker compose up -d 
 ```
 
 If `posdb` stays `unhealthy`, an init script failed: check `docker logs posdb`.
@@ -46,7 +49,7 @@ If `posdb` stays `unhealthy`, an init script failed: check `docker logs posdb`.
 The demo shop and the known dev PINs live in `sql/dev/` and are **not** loaded by default. `05-dev-seed.sql` is a demo coffee shop (Brewbean Coffee: two cafés, two weeks of orders, staff shifts) and `06-dev-credentials.sql` gives its staff PINs (owner Maya `111111`, manager Leo `222222`, servers Sam `333333` and Priya `444444`, barista Jordan `555555`, assistant manager Ana `666666`; their employee numbers are `10420001` to `10420006` in that order). Load them for development with:
 
 ```sh
-docker compose down -v
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml down -v 
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 ```
 
@@ -75,24 +78,6 @@ Three services plus the proxy; the two app services are built from the same imag
 Reach the staff side from elsewhere over a private network (Tailscale or a VPN, or an SSH tunnel: `ssh -L 3000:localhost:3000 <user>@<host>`), not the internet. Kitchen screens learn about orders from the other container because `pos-api` checks the database every 2 seconds, only for cafés that have a kitchen screen open.
 
 **Rate limits** (public side, in memory): a café's phones share one address, so the limits are layered. Per address: 1,500 requests a minute (menu pictures not counted) and 60 orders a minute, high enough for a rush. Per phone (a `device` cookie): 5 orders and 10 sign-ins a minute, which stops one script without touching the other phones. An address that goes over its limit in 3 different minutes within 10 is blocked for 15 minutes. Staff sign-in is limited to 30 a minute per address, and an account locks for 15 minutes after 5 wrong PINs.
-
-
-**Existing database?** The init scripts only run on a fresh volume. To add what this version needs to a database you already have, once:
-```sh
-docker compose exec mysql-db sh /docker-entrypoint-initdb.d/06-kiosk-user.sh   # creates kiosk_user (needs sql/secrets/kiosk_user_password.txt)
-docker exec posdb sh -c 'mysql -uroot -p"$(cat /run/secrets/db_root_password)" miniworld -e "
-  ALTER TABLE Customer ADD COLUMN PhoneDigits VARCHAR(10) GENERATED ALWAYS AS (RIGHT(REGEXP_REPLACE(Phone, \"[^0-9]\", \"\"), 10)) STORED AFTER Phone, ADD INDEX IX_Customer_PhoneDigits (BusinessID, PhoneDigits);
-  ALTER TABLE Orders ADD INDEX IX_Orders_Location_Status (LocationID, OrderStatusCode)"'
-```
-
-To put the order page on the internet from a VM (Azure or any other):
-1. Create the VM (Ubuntu LTS, at least 2 GB of memory, SSH key login) with a fixed public IP and a name for it: your own domain pointed at the IP, or the cloud's DNS label. In its network rules allow port 22 only from your own address, ports 80 and 443 from anywhere, and nothing else.
-2. Install Docker and the Compose plugin, clone this repo, and do the Setup steps above (the secret files).
-3. Put `KIOSK_HOST=<your public hostname>` in a `.env` file next to `docker-compose.yaml` (and `BUSINESS_ID` if the database holds more than one business). For a demo with the demo shop, add `-f docker-compose.dev.yaml` to the command below: it loads the dev data and turns on phone sign-in for the demo customers.
-4. `docker compose --profile public up -d --build`. Caddy gets the HTTPS certificate for the hostname by itself, so the hostname must already point at the VM and ports 80 and 443 must be open.
-5. Open Settings > Locations, copy each café's order link, and make its QR code. On your own machine `KIOSK_HOST` can stay `localhost`: Caddy then makes its own certificate, and the browser warns about it.
-
-Nothing backs up the database or the `uploads` volume yet: take a `mysqldump` and a copy of the volume, or disk snapshots, before the data matters. Anyone with the address can still place unpaid cash orders, which take stock for up to 15 minutes, so share it only for testing.
 
 ## Capacity
 

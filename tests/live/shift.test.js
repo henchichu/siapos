@@ -8,8 +8,17 @@ const signIn = async (number, pin) => { const c = client(env.base); const r = aw
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 
+// The pay periods these tests build each start where the last one ended, so leaving them behind walks the start date
+// forward until it reaches the 2026 cut-off in the queries below. They are removed afterwards (a closed one is reopened first).
+const made = [];
+const tidy = async () => {
+  if (!made.length) return;
+  await pool.query("UPDATE PayPeriod SET Closed = FALSE WHERE PayPeriodID IN (?)", [made]);
+  await pool.query("DELETE FROM TimeEntry WHERE PayPeriodID IN (?)", [made]);
+  await pool.query("DELETE FROM PayPeriod WHERE PayPeriodID IN (?)", [made]);
+};
 test.before(async () => { env = await start(); });
-test.after(async () => { env.server.close(); await pool.end(); });
+test.after(async () => { await tidy(); env.server.close(); await pool.end(); });
 
 test("the menu and the pages a role may open follow its role, fixed at sign-in", async () => {
   const menus = {
@@ -70,6 +79,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-t-${start}`;
   await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  made.push(id);
   const shift = (who, place, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, ?, 'biz-brewbean', ?, CONVERT_TZ(? + INTERVAL 1 DAY + INTERVAL 13 HOUR, '+00:00', '+00:00'), ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 30, 2)`,
@@ -125,6 +135,7 @@ test("nobody approves or edits their own timecard, except an owner", async () =>
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-own-${start}`;
   await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  made.push(id);
   const card = (who, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, 'loc-campus', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,

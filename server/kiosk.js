@@ -13,7 +13,9 @@ app.set("trust proxy", 1); // only the proxy reaches this port: its forwarded ad
 app.use((req, res, next) => { req.noPhoneSignIn = process.env.KIOSK_PHONE_SIGNIN !== "1"; next(); });
 
 app.get(["/", "/customer"], (req, res) => res.redirect("/customer.html"));
-app.use("/api", express.json(), customers); // customers has no catch-all, so anything else under /api is a 404 below
+// Every route costs a database query and the pool is shared with the registers, so one address can't hold it: the page
+// itself makes about 25 calls to load (menu pictures included) and a few a minute after, so this leaves room for a whole café's wifi.
+app.use("/api", require("./ratelimit")(300, 60 * 1000), express.json(), customers); // customers has no catch-all, so anything else under /api is a 404 below
 app.use(require("./vendor"));
 // exactly the files the page loads, and nothing else from public/
 for (const file of ["customer.html", "css/customer.css", "js/customer.js"]) app.get(`/${file}`, (req, res) => res.sendFile(path.join(PUBLIC, file)));

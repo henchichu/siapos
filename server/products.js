@@ -4,6 +4,7 @@ const path = require("path");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
+const check = require("./validate");
 const { hasPermission } = require("./pin");
 const { requirePermission } = require("./session");
 
@@ -22,10 +23,7 @@ const uuid = () => crypto.randomUUID();
 // ---- small validators -------------------------------------------------------------------------------------------
 
 const text = (v, label, max, required = true) => {
-  const s = typeof v === "string" ? v.trim() : "";
-  if (required && !s) throw new HttpError(400, `Enter the ${label}.`);
-  if (s.length > max) throw new HttpError(400, `The ${label} is too long.`);
-  return s;
+  return check.label(v, label, max, { required });
 };
 const money = (v, label) => {
   const n = Number(v);
@@ -113,7 +111,7 @@ router.get("/products/list", see, async (req, res) => {
 
 const productFields = async (req) => ({
   name: text(req.body.name, "name", 150),
-  description: text(req.body.description, "description", 5000, false) || null,
+  description: check.note(req.body.description, "description", 5000) || null, // may run to several lines
   categoryId: await categoryOrNull(req.session.businessId, req.body.categoryId),
   active: req.body.active !== false,
 });

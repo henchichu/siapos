@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
+const check = require("./validate");
 const { hasPermission } = require("./pin");
 const { requirePermission } = require("./session");
 const { myLocations } = require("./locations");
@@ -118,8 +119,7 @@ router.post("/inventory/change", change, async (req, res) => {
   const hasQty = !blank(b.quantity), hasThreshold = !blank(b.threshold);
   if (!hasQty && !hasThreshold) throw new HttpError(400, "Enter a quantity or a new reorder threshold.");
   const threshold = hasThreshold ? decimals(b.threshold, 3, "reorder threshold", { allowZero: true }) : null;
-  const note = typeof b.note === "string" && b.note.trim() ? b.note.trim() : null;
-  if (note && note.length > 255) throw new HttpError(400, "The note is too long.");
+  const note = check.note(b.note, "note", 255) || null;
 
   let entry = null; // what goes in the ledger
   if (hasQty && b.type === "restock") {
@@ -158,9 +158,7 @@ router.post("/inventory/item", change, async (req, res) => {
   const { businessId } = req.session;
   const b = req.body;
   const locationId = await placeOf(req, b.locationId);
-  const name = typeof b.name === "string" ? b.name.trim() : "";
-  if (!name) throw new HttpError(400, "Enter the stock item's name.");
-  if (name.length > 150) throw new HttpError(400, "The name is too long.");
+  const name = check.label(b.name, "stock item's name", 150);
   const [[unit]] = await pool.query("SELECT UnitCode AS code FROM UnitOfMeasure WHERE UnitCode = ? AND Active", [Number(b.unitCode)]);
   if (!unit) throw new HttpError(400, "Choose the unit it is counted in.");
   const threshold = blank(b.threshold) ? 0 : decimals(b.threshold, 3, "reorder threshold", { allowZero: true });
@@ -193,16 +191,9 @@ router.post("/inventory/item", change, async (req, res) => {
 // A supplier can be added while receiving from a new one
 router.post("/inventory/supplier", change, async (req, res) => {
   const { businessId } = req.session;
-  const clean = (v, max, label) => {
-    const t = typeof v === "string" ? v.trim() : "";
-    if (t.length > max) throw new HttpError(400, `The ${label} is too long.`);
-    return t || null;
-  };
-  const name = clean(req.body.name, 100, "name");
-  if (!name) throw new HttpError(400, "Enter the supplier's name.");
-  const email = clean(req.body.email, 255, "email");
-  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
-  const phone = clean(req.body.phone, 30, "phone number");
+  const name = check.label(req.body.name, "supplier's name", 100);
+  const email = check.email(req.body.email);
+  const phone = check.phone(req.body.phone);
   const id = uuid();
   try {
     await pool.query("INSERT INTO Supplier (SupplierID, BusinessID, Name, ContactEmail, ContactPhone) VALUES (?, ?, ?, ?, ?)", [id, businessId, name, email, phone]);
@@ -230,8 +221,7 @@ router.post("/inventory/delivery", change, async (req, res) => {
             ? < DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', TimeZone)) - INTERVAL 1 YEAR AS old FROM Location WHERE LocationID = ?`, [b.deliveredOn, b.deliveredOn, locationId]);
   if (window.future) throw new HttpError(400, "The delivery date can't be in the future.");
   if (window.old) throw new HttpError(400, "The delivery date is more than a year ago. Check the year.");
-  const invoice = typeof b.invoice === "string" && b.invoice.trim() ? b.invoice.trim() : null;
-  if (invoice && invoice.length > 50) throw new HttpError(400, "The invoice number is too long.");
+  const invoice = check.label(b.invoice, "invoice number", 50, { required: false }) || null;
   const lines = Array.isArray(b.lines) ? b.lines : [];
   if (!lines.length) throw new HttpError(400, "Add at least one line.");
   const seen = new Set();
@@ -303,8 +293,7 @@ router.post("/inventory/count", change, async (req, res) => {
   const locationId = await placeOf(req, req.body.locationId);
   const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
   if (!counts.length) throw new HttpError(400, "Count at least one item.");
-  const note = typeof req.body.note === "string" && req.body.note.trim() ? req.body.note.trim() : null;
-  if (note && note.length > 255) throw new HttpError(400, "The note is too long.");
+  const note = check.note(req.body.note, "note", 255) || null;
   const seen = new Set();
   const clean = [];
   for (const c of counts) {

@@ -61,6 +61,7 @@ app.use(handleErrors);
 
 if (require.main === module) {
   app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
+  require("./kioskorders").startExpiry(); // cancels kiosk orders nobody paid for, which puts their stock back
   // the only part meant for the internet, through the Caddy proxy: see server/kiosk.js
   kiosk.listen(KIOSK_PORT, HOST, () => console.log(`Customer kiosk (public side) at http://localhost:${KIOSK_PORT}`));
 }

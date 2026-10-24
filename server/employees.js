@@ -3,6 +3,7 @@ const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { requirePermission, endSessionsOf } = require("./session");
+const check = require("./validate");
 const { hashSecret } = require("./auth");
 const { clearLockout, isOwner } = require("./pin");
 const { myLocations } = require("./locations");
@@ -118,10 +119,10 @@ function readForm(b, { adding, pay }) {
     pin: String(b.pin || ""),
   };
   const problems = [];
-  if (!f.firstName || f.firstName.length > 50) problems.push("Enter a first name (up to 50 characters).");
-  if (!f.lastName || f.lastName.length > 50) problems.push("Enter a last name (up to 50 characters).");
-  if (!/^\d{8}$/.test(f.number)) problems.push("The employee number must be 8 digits.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email) || f.email.length > 255) problems.push("Enter a valid email.");
+  f.firstName = check.collect(problems, () => check.personName(b.firstName, "first name")) ?? f.firstName;
+  f.lastName = check.collect(problems, () => check.personName(b.lastName, "last name")) ?? f.lastName;
+  if (!check.EMPLOYEE_NUMBER.test(f.number)) problems.push("The employee number must be 8 digits.");
+  f.email = check.collect(problems, () => check.email(b.email, { required: true })) ?? f.email;
   if (!f.roleId) problems.push("Choose a role.");
   if (!f.locationIds.length) problems.push("Choose at least one location.");
   if (pay) {
@@ -238,7 +239,7 @@ router.post("/employees/:id", async (req, res) => {
         [e.id, businessId, dollars(cents(f.rate)), f.startsOn]);
     }
   });
-  if (f.roleId !== e.roleId) endSessionsOf(e.id); // their menu and pages were fixed at sign-in; the next one reads the new role
+  if (f.roleId !== e.roleId || removed.length) endSessionsOf(e.id); // their menu, pages and café were fixed at sign-in; the next one reads the new ones
   const parts = [`Saved ${f.firstName} ${f.lastName}.`];
   if (newRate) parts.push(`New rate $${dollars(cents(f.rate))} from ${dayOf(f.startsOn)}.`);
   if (f.pin) parts.push("Their PIN has been reset.");

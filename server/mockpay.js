@@ -1,6 +1,7 @@
 // A stand-in for a card processor while there is no real one: no money moves, and no card detail is kept or logged.
 // Only test card numbers are accepted, so a real card typed into a mock form is refused. Apple Pay and Google Pay always succeed.
 const { HttpError } = require("./errors");
+const { luhn } = require("./validate");
 
 // Like a processor's test cards: null approves, anything else is the reason for the decline
 const TEST_CARDS = {
@@ -21,6 +22,7 @@ function charge(kind, card = {}) {
   if (!/^\d{13,19}$/.test(number)) throw new HttpError(400, "Enter the card number.");
   if (!expiry || Number(`20${expiry[2]}${expiry[1]}`) < new Date().getFullYear() * 100 + new Date().getMonth() + 1) throw new HttpError(400, "Enter a card expiry that hasn't passed, like 12/30.");
   if (!/^\d{3,4}$/.test(String(card.cvc || ""))) throw new HttpError(400, "Enter the card's 3 or 4 digit security code.");
+  if (!luhn(number)) throw new HttpError(400, "That card number isn't valid. Check each digit.");
   if (!(number in TEST_CARDS)) throw new HttpError(400, "Test mode: use a test card number, like 4242 4242 4242 4242.");
   if (TEST_CARDS[number]) throw new HttpError(402, TEST_CARDS[number]);
 }

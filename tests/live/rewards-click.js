@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 const TAG = String(Math.floor(Math.random() * 1e6)).padStart(6, "0");
-const LAST = `Clicker ${TAG}`;
+const LAST = `Clicker ${TAG.replace(/\d/g, (d) => "abcdefghij"[d])}`; // names are letters only
 let chloe; // her membership as it was before the run; the page is checked with her active
 const cleanup = async () => {
   if (chloe) await pool.query("UPDATE LoyaltyAccount SET Active = ? WHERE CustomerID = 'cus-chloe'", [chloe.active]);

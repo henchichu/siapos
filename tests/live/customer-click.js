@@ -51,6 +51,9 @@ function kiosk(base) {
     await k.type(k.$("input"), "123");
     await k.click("Log In");
     check("a short number is refused", /10-digit/.test(k.text()));
+    await k.type(k.$("input"), "(000) 000-0000");
+    await k.click("Log In");
+    check("a number that can't exist is refused before asking the server", /valid 10-digit US phone/.test(k.text()));
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");
     check("Chloe signs in by phone", /Hi, Chloe!/.test(k.text()));

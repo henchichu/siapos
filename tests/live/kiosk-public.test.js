@@ -70,3 +70,10 @@ test("a guest can browse, order and read their order back", async () => {
   assert.equal((await get("/api/customer/orders/not-a-real-id")).status, 404);
   assert.equal((await get("/api/customer/products/not-a-real-id/photo")).status, 404);
 });
+
+test("one address can't make endless requests, which would hold the database from the registers", async () => {
+  let blocked = 0;
+  for (let i = 0; i < 320 && !blocked; i++) if ((await post("/api/customer/touch", {})).status === 429) blocked = i;
+  assert.ok(blocked > 0 && blocked <= 300, `limited after ${blocked} requests`);
+  assert.equal((await get("/customer.html")).status, 200, "the page itself still loads");
+});

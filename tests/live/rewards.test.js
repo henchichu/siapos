@@ -8,13 +8,14 @@ let env, maya, leo, ana, sam, jordan;
 let enrolled = 0;
 let chloe; // her membership as it was before the run
 const tag = String(Math.floor(Math.random() * 1e6)).padStart(6, "0");
+const surname = `Member ${tag.replace(/\d/g, (d) => "abcdefghij"[d])}`; // names are letters only
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const search = async (c, q, inactive = false) => (await c.call(`/rewards/members?q=${encodeURIComponent(q)}&inactive=${inactive ? 1 : 0}`)).body;
 // a phone nobody has: 555 numbers with this run's digits
 const phoneOf = (n) => `(773) 555-${String((Number(tag) + n) % 10000).padStart(4, "0")}`;
 async function enroll(extra = {}) {
-  const body = { firstName: "Test", lastName: `Member ${tag}`, email: `rt-${tag}-${++enrolled}@example.com`, phone: "", ...extra };
+  const body = { firstName: "Test", lastName: surname, email: `rt-${tag}-${++enrolled}@example.com`, phone: "", ...extra };
   return leo.call("/rewards/members", body);
 }
 
@@ -33,7 +34,7 @@ test.before(async () => {
 // Everything this run enrolled goes, found by its last name; Ben and Diego go back to being customers without accounts
 test.after(async () => {
   try {
-    const [rows] = await pool.query("SELECT CustomerID AS id FROM Customer WHERE LastName = ? AND BusinessID = 'biz-brewbean'", [`Member ${tag}`]);
+    const [rows] = await pool.query("SELECT CustomerID AS id FROM Customer WHERE LastName = ? AND BusinessID = 'biz-brewbean'", [surname]);
     const ids = rows.map((r) => r.id);
     if (ids.length) {
       // redemptions first, so a balance never dips below zero on the way; then the sales become walk-ins
@@ -134,11 +135,11 @@ test("enrolling an existing customer makes them a member and keeps their details
 test("edit needs permission 10, and keeps contacts unique", async () => {
   const r = await enroll({ phone: phoneOf(4) });
   const id = r.body.id;
-  const body = { firstName: "Edited", lastName: `Member ${tag}`, email: `rt-${tag}-edited@example.com`, phone: phoneOf(4) };
+  const body = { firstName: "Edited", lastName: surname, email: `rt-${tag}-edited@example.com`, phone: phoneOf(4) };
   assert.equal((await sam.call(`/rewards/members/${id}`, body)).status, 403);
   const ok = await ana.call(`/rewards/members/${id}`, body);
   assert.equal(ok.status, 200, ok.body.error);
-  assert.equal(ok.body.message, `Saved Edited Member ${tag}.`);
+  assert.equal(ok.body.message, `Saved Edited ${surname}.`);
   assert.equal((await search(leo, `rt-${tag}-edited`)).members[0].firstName, "Edited");
   assert.equal((await ana.call(`/rewards/members/${id}`, { ...body, email: "chloe@example.com" })).body.error, "That email is already used by member Chloe Moreau.");
   assert.equal((await ana.call(`/rewards/members/${id}`, { ...body, email: "", phone: "" })).status, 400);

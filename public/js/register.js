@@ -18,7 +18,7 @@ const newSaleId = () => `${Date.now().toString(36)}-${Math.random().toString(36)
 const NO_TOTALS = { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCents: 0, totalCents: 0, taxRates: [] };
 const sizeLabel = (product, variant) => (product.variants.length > 1 ? `, ${variant.name}` : "");
 
-function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch, category, setCategory, onRefund, showRefund }) {
+function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch, category, setCategory, onRefund, showRefund, onKiosk }) {
   const q = search.trim().toLowerCase();
   const shown = catalog.products.filter((p) =>
     (!category || p.category === category) &&
@@ -29,6 +29,7 @@ function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch,
     <header>
       <h2>Products</h2>
       <div className="search">
+        ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders</button>`}
         ${showRefund && html`<button className="btn danger slim" onClick=${onRefund}>Refund</button>`}
         <label htmlFor="search">Search</label>
         <input id="search" className="field" placeholder="Name or SKU" value=${search}
@@ -288,6 +289,33 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
 
 const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "", card: { number: "", expiry: "", cvc: "" } };
 
+// Kiosk orders the customer chose to pay for in cash: take the cash to send them to the kitchen, or cancel to free their stock
+function KioskOrdersModal({ onClose }) {
+  const [orders, setOrders] = useState(null);
+  const [holdMinutes, setHoldMinutes] = useState(15);
+  const [msg, setMsg] = useState(null);
+  const load = () => api("/register/kiosk-orders").then((r) => { setOrders(r.orders); setHoldMinutes(r.holdMinutes); }).catch((err) => setMsg({ kind: "error", text: err.message }));
+  useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, []);
+  const act = async (o, what) => {
+    try {
+      await api(`/register/kiosk-orders/${o.id}/${what}`, {});
+      setMsg({ kind: "ok", text: what === "pay" ? `Order ${o.orderNumber} paid and sent to the kitchen.` : `Order ${o.orderNumber} cancelled.` });
+    } catch (err) { setMsg({ kind: "error", text: err.message }); }
+    load();
+  };
+  return html`<${Modal} title="Kiosk orders to pay" onClose=${onClose} wide>
+    <p className="hint">Customers who chose cash on the kiosk pay here. An order nobody pays within ${holdMinutes} minutes is cancelled.</p>
+    <${Message} msg=${msg} />
+    ${orders && !orders.length && html`<p>No kiosk orders are waiting for payment.</p>`}
+    ${(orders || []).map((o) => html`<div key=${o.id} className="row" style=${{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
+      <span>#${o.orderNumber}${o.name ? ` · ${o.name}` : ""} · ${money(o.totalCents)} · ${Math.ceil(o.secondsLeft / 60)} min left</span>
+      <span className="btns"><button className="btn primary slim" onClick=${() => act(o, "pay")}>Take cash</button>
+        <button className="btn slim" onClick=${() => act(o, "cancel")}>Cancel order</button></span>
+    </div>`)}
+    <div className="btns"><button className="btn" onClick=${onClose}>Close</button></div>
+  <//>`;
+}
+
 function App() {
   const me = useMe();
   const [catalog, setCatalog] = useState(null);
@@ -397,7 +425,7 @@ function App() {
           ${notice && html`<p className="status" role="status" style=${{ paddingTop: 12 }}>${notice}</p>`}
           <${Products} catalog=${catalog} selectedId=${selectedId} onPick=${pick} onCustomize=${(p) => setModal({ type: "customize", product: p })}
             search=${search} setSearch=${setSearch} category=${category} setCategory=${setCategory}
-            showRefund=${!cart.length} onRefund=${() => go("refund")} />
+            showRefund=${!cart.length} onRefund=${() => go("refund")} onKiosk=${() => setModal({ type: "kiosk" })} />
         </div>
         ${cart.length > 0 && html`<${Order} cart=${cart} setQty=${setQty} priced=${priced} pricingError=${pricingError}
           checkout=${checkout} setCheckout=${setCheckout} catalog=${catalog} order=${order} setOrder=${setOrder}
@@ -411,6 +439,7 @@ function App() {
     ${body}
     ${modal?.type === "customize" && html`<${CustomizeModal} product=${modal.product} onCancel=${() => setModal(null)}
       onAdd=${({ product, variant, modifiers, qty }) => { addLine(product, variant, modifiers, qty); setSelectedId(null); setModal(null); }} />`}
+    ${modal?.type === "kiosk" && html`<${KioskOrdersModal} onClose=${() => setModal(null)} />`}
     ${modal?.type === "discount" && html`<${DiscountModal} lines=${cart} priced=${priced} staffRules=${catalog.staffRules} promotionId=${order.promotionId} onClose=${() => setModal(null)}
       onApproved=${(discount) => { setOrder({ discount }); setModal(null); setMsg(null); }} />`}
   </div>`;

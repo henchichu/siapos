@@ -29,8 +29,8 @@ function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn })
   const [busy, setBusy] = useState(false);
 
   const logIn = async () => {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10) { setMsg("Enter a 10-digit phone number."); return; }
+    const digits = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""); // same rule as the server
+    if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) { setMsg("Enter a valid 10-digit US phone number."); return; }
     setBusy(true); setMsg("");
     try {
       const d = await post("/customer/login", { phone: digits });
@@ -56,7 +56,7 @@ function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn })
                 <p className="sub">Use your customer account to order.</p>
               </div>
               <label>Phone Number
-                <input inputMode="tel" autoComplete="tel" value=${phone}
+                <input inputMode="tel" autoComplete="tel" maxLength="20" value=${phone}
                   onChange=${(e) => { setPhone(e.target.value); setMsg(""); }} />
               </label>
               ${msg && html`<p className="alert" role="alert">${msg}</p>`}
@@ -383,7 +383,7 @@ function Confirmation({ receipt, onBack }) {
             ${paid ? html`<${React.Fragment}><p className="ttl">Paid — your order is being prepared</p>
               <p className="sub">Paid with ${payMethod}. This is test mode, so nothing was charged for real.</p><//>`
               : html`<${React.Fragment}><p className="ttl">Order submitted — payment pending</p>
-              <p className="sub">Pay the cashier at the counter, and we'll start your order.</p><//>`}
+              <p className="sub">Pay the cashier at the counter within 15 minutes, and we'll start your order.</p><//>`}
           </div>
           ${mode === "signed-in" && memberInfo && memberInfo.member && html`
             <div className="pts-row">

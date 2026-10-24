@@ -11,6 +11,7 @@ const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
 const path = require("path");
 const { label } = require("./labels");
+const check = require("./validate");
 
 const router = express.Router();
 
@@ -126,8 +127,8 @@ const loginLimit = require("./ratelimit")(20, 60 * 1000);
 router.post("/customer/login", loginLimit, async (req, res) => {
   if (req.noPhoneSignIn) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
   const k = await kiosk();
-  const digits = String(req.body.phone || "").replace(/\D/g, "").slice(-10);
-  if (digits.length !== 10) return res.status(400).json({ error: "Enter a 10-digit phone number." });
+  const digits = check.phoneDigits(req.body.phone);
+  if (!digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
   const [[c]] = await pool.query(
     `SELECT c.CustomerID AS id FROM Customer c
       WHERE c.BusinessID = ? AND c.Active AND RIGHT(REGEXP_REPLACE(c.Phone, '[^0-9]', ''), 10) = ?
@@ -191,7 +192,7 @@ router.post("/customer/price", async (req, res) => {
 // The key counts only for the address that sent it, so nobody else can ask for someone's receipt back.
 const submitted = new Map();
 // Nothing is paid yet but stock is already taken, so a script must not be able to place orders without end.
-// shortcut: this only slows it down; stock should be taken when the order is paid, not when it is placed.
+// Unpaid orders are cancelled after HOLD_MINUTES (server/kioskorders.js), which puts their stock back.
 const orderLimit = require("./ratelimit")(20, 60 * 1000);
 router.resetOrderLimit = orderLimit.reset;
 router.post("/customer/orders", orderLimit, async (req, res) => {
@@ -210,7 +211,8 @@ router.post("/customer/orders", orderLimit, async (req, res) => {
 });
 
 // Paying here is a mock payment (server/mockpay.js): the order is paid and confirmed at once, and goes to the kitchen.
-// Cash waits for the counter: that order goes in as PENDING_PAYMENT, and nothing on the staff side takes the payment yet.
+// Cash waits for the counter: that order goes in as PENDING_PAYMENT holding its stock, until the register takes the payment or
+// cancels it, or it goes unpaid for HOLD_MINUTES (server/kioskorders.js).
 const PAID_HERE = { "Card": [2, "card"], "Apple Pay": [5, "apple"], "Google Pay": [6, "google"] }; // payment method code, mock kind
 async function placeOrder(req) {
   const k = await kiosk();
@@ -219,12 +221,10 @@ async function placeOrder(req) {
   const payWith = String(req.body.paymentMethod || "");
   if (payWith !== "Cash" && !PAID_HERE[payWith]) throw new HttpError(400, "Choose how you'll pay.");
   const paidHere = PAID_HERE[payWith];
-  const name = customerId ? null : String(req.body.guestName || "").trim().slice(0, 50);
-  if (!customerId && !name) throw new HttpError(400, "Enter a name for the order.");
-  const note = String(req.body.note || "").trim().slice(0, 120);
+  const name = customerId ? null : check.personName(req.body.guestName, "name for the order");
+  const note = check.note(req.body.note, "note", 120);
   const priced = await priceCart(pool, { businessId: k.BusinessID, locationId: k.LocationID }, cartOf(req.body));
   // shortcut: promotionId and discount are not accepted from customers; staff-only pricing features are stripped by cartOf
-  if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card); // before the order exists, so a decline leaves nothing behind
 
   return pool.tx(async (conn) => {
     const orderId = crypto.randomUUID();
@@ -241,6 +241,9 @@ async function placeOrder(req) {
 
     await conn.query("UPDATE Orders SET Subtotal = ?, Tax = ?, Total = ? WHERE OrderID = ?",
       [dollars(priced.subtotalCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
+    // Charged only once the stock is taken, like the register: a decline, or stock that ran out meanwhile, rolls everything back.
+    // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
+    if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card);
     const history = (status) => conn.query(
       "INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt) VALUES (UUID(), ?, ?, ?, UTC_TIMESTAMP())",
       [orderId, k.BusinessID, status]);

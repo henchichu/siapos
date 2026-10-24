@@ -69,7 +69,9 @@ test("bad checkouts are refused", async () => {
   assert.equal((await order(c, { items: [] })).status, 400);
   assert.equal((await order(c, { items: [{ ...LINE, quantity: 0 }] })).status, 400);
   assert.equal((await order(c, { items: [{ ...LINE, modifierIds: ["mod-not-offered"] }] })).status, 400);
-  assert.equal((await c.call("/customer/login", { phone: "123" })).status, 400);
+  for (const phone of ["123", "000-000-0000", "123-123-1234", "(312) 055-0142", "99999 312 555 0142", "21 312 555 0142", "abc"])
+    assert.equal((await c.call("/customer/login", { phone })).status, 400, phone);
+  assert.equal((await c.call("/customer/login", { phone: "1 (312) 555-0142" })).status, 200, "a leading 1 is fine");
   assert.equal((await c.call("/customer/login", { phone: "2025550199" })).status, 404);
 });
 

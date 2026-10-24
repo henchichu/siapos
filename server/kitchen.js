@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
+const check = require("./validate");
 const { hasPermission } = require("./pin");
 const { requirePermission } = require("./session");
 
@@ -156,8 +157,7 @@ router.post("/kitchen/losses", requirePermission(PERM_REPORT_LOSS), async (req, 
   const type = LOSS_TYPES[reason];
   if (!type) throw new HttpError(400, "Choose a reason.");
   if (!(amount > 0) || amount > 100000 || Math.round(amount * 1000) / 1000 !== amount) throw new HttpError(400, "Enter how much was lost.");
-  const text = typeof note === "string" ? note.trim() : "";
-  if (text.length > 255) throw new HttpError(400, "The note is too long.");
+  const text = check.note(note, "note", 255);
 
   const [[item]] = await pool.query(
     `SELECT u.AllowsFraction AS fraction, i.AverageUnitCost AS cost FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID AND s.Active

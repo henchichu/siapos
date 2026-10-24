@@ -7,6 +7,8 @@ const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
 const { codeHash } = require("./giftcard");
 const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
+const kioskOrders = require("./kioskorders");
+const check = require("./validate");
 const { verifyOverride, findStaff, staffRules } = require("./override");
 const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk } = require("./session");
 
@@ -91,6 +93,11 @@ router.get("/register/member", async (req, res) => {
   res.json({ id: m.CustomerID, name: [m.FirstName, m.LastName].filter(Boolean).join(" "), tier: m.Tier, points: Number(m.Points) });
 });
 
+// Kiosk orders waiting to be paid at the counter: the cashier takes the cash, or cancels the order and its stock goes back
+router.get("/register/kiosk-orders", async (req, res) => res.json({ orders: await kioskOrders.pendingAt(req.session.locationId), holdMinutes: kioskOrders.HOLD_MINUTES }));
+router.post("/register/kiosk-orders/:id/pay", async (req, res) => { await kioskOrders.pay(req.session, String(req.params.id)); res.json({ ok: true }); });
+router.post("/register/kiosk-orders/:id/cancel", async (req, res) => { await kioskOrders.cancelAt(req.session, String(req.params.id)); res.json({ ok: true }); });
+
 const clientView = (p) => ({
   lines: p.lines.map((l) => ({ key: l.key, unitCents: l.unitCents, lineCents: l.lineCents, discountCents: l.lineDiscountCents })),
   promotion: p.promotion,
@@ -173,16 +180,16 @@ async function completeSale(req) {
           [String(customerId), businessId]);
         if (!c) throw new HttpError(400, "That rewards member isn't available.");
       }
-      const tipCents = PROCESSED[methodCode] ? Math.round(Number(payment.tip || 0) * 100) : 0;
-      if (!Number.isInteger(tipCents) || tipCents < 0 || tipCents > 1000000) throw new HttpError(400, "Enter a valid tip.");
+      const tipCents = PROCESSED[methodCode] ? check.tipCents(payment.tip) : 0;
       if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
       // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
       if (PROCESSED[methodCode] && priced.totalCents > 0) charge(PROCESSED[methodCode], payment.card);
       let giftCardId = null;
       if (methodCode === 3) {
+        const code = check.giftCode(payment.giftCardCode); // a mistyped format isn't a guess, so it doesn't count against the limit
         if (!giftAllowed(req.session)) throw new HttpError(429, "Too many wrong gift card codes. Try again in a few minutes.");
         const [[g]] = await conn.query("SELECT GiftCardID FROM GiftCard WHERE BusinessID = ? AND CodeHash = ? AND Active",
-          [businessId, codeHash(String(payment.giftCardCode || "").trim())]);
+          [businessId, codeHash(code)]);
         if (!g) {
           giftFailed(req.session);
           throw new HttpError(400, "Gift card not found.");

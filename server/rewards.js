@@ -5,6 +5,7 @@ const { HttpError } = require("./errors");
 const { requirePermission } = require("./session");
 const { hasPermission } = require("./pin");
 const { label } = require("./labels");
+const check = require("./validate");
 
 const PERM_LOOK_UP = 9; // look up and enroll members
 const PERM_EDIT = 10; // edit and deactivate members
@@ -187,17 +188,11 @@ function readForm(b) {
     phone: String(b.phone || "").trim(),
   };
   const problems = [];
-  if (!f.firstName || f.firstName.length > 50) problems.push("Enter a first name (up to 50 characters).");
-  if (f.lastName.length > 50) problems.push("The last name can be up to 50 characters.");
+  f.firstName = check.collect(problems, () => check.personName(b.firstName, "first name")) ?? f.firstName;
+  f.lastName = check.collect(problems, () => check.personName(b.lastName, "last name", { required: false })) ?? f.lastName;
   if (!f.email && !f.phone) problems.push("Enter an email or a phone number (at least one).");
-  if (f.email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email) || f.email.length > 255)) problems.push("Enter a valid email, like name@example.com.");
-  if (f.phone) {
-    // US numbers: 10 digits, or 11 starting with 1; area code and exchange can't start with 0 or 1
-    let d = digitsOf(f.phone);
-    if (d.length === 11 && d[0] === "1") d = d.slice(1);
-    if (!/^[\d\s().+-]+$/.test(f.phone) || !/^[2-9]\d{2}[2-9]\d{6}$/.test(d)) problems.push("Enter a US phone number with 10 digits, like 312-555-0142.");
-    else f.phone = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-  }
+  f.email = check.collect(problems, () => check.email(b.email)) ?? f.email;
+  f.phone = check.collect(problems, () => check.phone(b.phone)) ?? f.phone;
   if (problems.length) throw new HttpError(400, problems.join(" "));
   f.email ||= null;
   f.phone ||= null;

@@ -70,8 +70,8 @@ test("wrong override PINs lock the cashier, not the manager", async () => {
 test("five wrong gift card codes stop further guesses", async () => {
   const jordanLike = await signIn("10420001", "111111");
   const pay = (code) => jordanLike.call("/register/orders", { items: [croissant], payment: { method: "gift", giftCardCode: code } });
-  for (let i = 0; i < 5; i++) assert.equal((await pay("wrong-" + i)).status, 400);
-  assert.equal((await pay("wrong-5")).status, 429);
+  for (let i = 0; i < 5; i++) assert.equal((await pay("wrong-code-" + i)).status, 400);
+  assert.equal((await pay("wrong-code-5")).status, 429);
 });
 
 test("a $0 sale can't carry a tip", async () => {

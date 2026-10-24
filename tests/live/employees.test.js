@@ -15,7 +15,7 @@ const number = () => `9999${String(Math.floor(Math.random() * 10000)).padStart(4
 // A complete, valid new employee
 async function person(extra = {}) {
   const n = extra.number || number();
-  const body = { firstName: "Test", lastName: `Person ${n}`, number: n, email: `t${n}@example.com`, roleId: "role-server",
+  const body = { firstName: "Test", lastName: `Person ${n.replace(/\d/g, (d) => "abcdefghij"[d])}`, number: n, email: `t${n}@example.com`, roleId: "role-server",
     locationIds: ["loc-campus"], rate: "15.00", startsOn: (await list()).today, pin: "246810", ...extra };
   const r = await maya.call("/employees", body);
   if (r.status === 200) made.push(r.body.id);
@@ -129,7 +129,7 @@ test("adding: every problem at once, then a new employee who can sign in with th
 
   const { r, body } = await person({ locationIds: ["loc-campus", "loc-downtown"] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.match(r.body.message, /^Added Test Person \d+ \(No\. 9999\d{4}\)\.$/);
+  assert.match(r.body.message, /^Added Test Person [a-j]+ \(No\. 9999\d{4}\)\.$/);
   const row = await byNumber(body.number);
   assert.deepEqual([row.status, row.rate, row.locations.length, row.role], ["Active", 15, 2, "Server"]);
 
@@ -190,6 +190,16 @@ test("editing: a blank PIN keeps it, a new one resets it; a new pay rate keeps t
   assert.equal((await edit({ rate: "16.00", startsOn: later, locationIds: ["loc-downtown"] })).status, 200);
   const [links] = await pool.query("SELECT LocationID AS id, Active AS active FROM EmployeeLocation WHERE EmployeeID = ? ORDER BY LocationID", [row.id]);
   assert.deepEqual(links.map((l) => [l.id, !!l.active]), [["loc-campus", false], ["loc-downtown", true]]);
+});
+
+test("taking someone off a café signs them out, but adding one doesn't", async () => {
+  const { r, body } = await person({ locationIds: ["loc-campus"] });
+  assert.equal(r.status, 200);
+  const worker = await signIn(body.number, "246810");
+  assert.equal((await maya.call(`/employees/${r.body.id}`, { ...body, locationIds: ["loc-campus", "loc-downtown"], pin: "" })).status, 200);
+  assert.equal((await worker.c.call("/session")).status, 200, "an added café leaves them signed in");
+  assert.equal((await maya.call(`/employees/${r.body.id}`, { ...body, locationIds: ["loc-downtown"], pin: "" })).status, 200);
+  assert.equal((await worker.c.call("/session")).status, 401, "their session was fixed to the café they no longer work at");
 });
 
 test("nobody changes their own role or deactivates themselves", async () => {

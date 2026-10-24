@@ -4,6 +4,7 @@ const { findEmployee, workplace, authenticate, isOwner, hasPermission } = requir
 const session = require("./session");
 const rateLimit = require("./ratelimit");
 const { access } = require("./nav");
+const { EMPLOYEE_NUMBER } = require("./validate");
 
 const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html", SHIFT: "/shift.html" };
 const PERM_REPORTS = 20;
@@ -18,6 +19,10 @@ router.use((req, res, next) => {
 
 const loginLimit = rateLimit(30, 60 * 1000);
 router.use("/login", loginLimit);
+
+// Employee numbers are 8 digits, so anything else is refused without a lookup (and without saying whether a number exists)
+router.use("/login", (req, res, next) =>
+  EMPLOYEE_NUMBER.test(String(req.body.employeeNumber)) ? next() : res.status(400).json({ error: "Employee numbers are 8 digits." }));
 
 router.post("/login/employee", async (req, res) => {
   const emp = await findEmployee(pool, String(req.body.employeeNumber));

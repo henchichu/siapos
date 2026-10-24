@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
+const check = require("./validate");
 const { cents, dollars } = require("./pricing");
 const { verifyOverride } = require("./override");
 const { requirePermission } = require("./session");
@@ -107,9 +108,8 @@ async function afterRefund(conn, { order, paymentId, remainingBefore, totalCents
 }
 
 function readRefundBody(body) {
-  const reason = String(body.reason || "").trim();
+  const reason = check.note(body.reason, "reason", 255, { required: true });
   const wanted = body.lines;
-  if (!reason || reason.length > 255) throw new HttpError(400, "Enter a reason (up to 255 characters).");
   if (!Array.isArray(wanted) || !wanted.length) throw new HttpError(400, "Tick at least one item to return.");
   for (const l of wanted)
     if (!Number.isInteger(l.qty) || l.qty < 1) throw new HttpError(400, "Quantity to return must be a whole number above zero.");

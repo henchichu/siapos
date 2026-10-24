@@ -8,7 +8,8 @@ services:
       SIAPOS_DEV: "1"
     volumes:
       - ./sql/dev:/sql-dev:ro
-  pos-app:
+  kiosk-api:
+    ports:
+      - "127.0.0.1:3001:3001"         # so tests and the load test can reach the public server from this machine
     environment:
-      KIOSK_LOCATION_ID: loc-campus   # the demo café the customer iPad orders at
       KIOSK_PHONE_SIGNIN: "1"         # the demo customers are made up, so the public address may offer phone sign-in

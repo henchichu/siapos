@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
-const { notify } = require("./kitchen");
+const { notify } = require("./watchers");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
 const { codeHash } = require("./giftcard");
 const { addOrderLines, fingerprint } = require("./orderlines");
@@ -86,8 +86,8 @@ router.get("/register/member", async (req, res) => {
        JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
        JOIN MembershipTier t ON t.TierID = la.TierID
       WHERE c.BusinessID = ? AND c.Active
-        AND (c.Email = ? OR REGEXP_REPLACE(c.Phone, '[^0-9]', '') = ?)`,
-    [req.session.businessId, q, q.replace(/\D/g, "") || "#"]
+        AND (c.Email = ? OR c.PhoneDigits = ?)`,
+    [req.session.businessId, q, q.replace(/\D/g, "").slice(-10) || "#"]
   );
   if (!m) return res.status(404).json({ error: "No rewards member found." });
   res.json({ id: m.CustomerID, name: [m.FirstName, m.LastName].filter(Boolean).join(" "), tier: m.Tier, points: Number(m.Points) });

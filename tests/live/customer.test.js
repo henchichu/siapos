@@ -1,17 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool, topUp, TEST_CARD } = require("./env");
+const { start, startKiosk, client, phone, pool, topUp, TEST_CARD } = require("./env");
 
-process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
-let env, wasOpen;
+process.env.KIOSK_PHONE_SIGNIN = "1"; // phone sign-in is a demo switch on the public server
+const customers = require("../../server/customers");
+let env, pub, wasOpen; // env: the staff server, pub: the public order page (its own server)
 const LINE = { key: "a", variantId: "var-amer-s", quantity: 2, modifierIds: ["mod-caramel"] };
 const order = (c, extra = {}) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Test", items: [LINE], ...extra });
 const row = async (id) => (await pool.query("SELECT OrderStatusCode AS status, ChannelCode AS channel, CustomerID AS customer, Total AS total FROM Orders WHERE OrderID = ?", [id]))[0][0];
 
-test.beforeEach(() => require("../../server/customers").resetOrderLimit()); // the limit is per minute; each test starts clear
+test.beforeEach(() => customers.resetOrderLimit()); // the limit is per minute; each test starts clear
 test.before(async () => {
   env = await start();
+  pub = await startKiosk();
   await topUp("stk-caramel", 2000); // the test order's caramel americano takes 15 syrup a cup, so a few runs empty the shelf
   [[{ wasOpen }]] = await pool.query("SELECT AcceptsOnlineOrders AS wasOpen FROM Location WHERE LocationID = 'loc-campus'");
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus'");
@@ -19,11 +21,12 @@ test.before(async () => {
 test.after(async () => {
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = ? WHERE LocationID = 'loc-campus'", [wasOpen]);
   env.server.close();
+  pub.server.close();
   await pool.end();
 });
 
 test("a cash order is saved as pending payment, with no payment taken", async () => {
-  const r = await order(client(env.base));
+  const r = await order(phone(pub.base));
   assert.equal(r.status, 200);
   const o = await row(r.body.orderId);
   assert.deepEqual([o.status, o.channel, o.customer], [1, 3, null]);
@@ -38,7 +41,7 @@ test("a cash order is saved as pending payment, with no payment taken", async ()
 });
 
 test("prices come from the server; a customer can't send their own discount", async () => {
-  const c = client(env.base);
+  const c = phone(pub.base);
   const plain = await c.call("/customer/price", { items: [LINE] });
   const r = await order(c, { discount: { applyTo: "order", type: "percent", value: 100, reason: "Regular" }, promotionId: "anything" });
   assert.equal(r.status, 200);
@@ -47,7 +50,8 @@ test("prices come from the server; a customer can't send their own discount", as
 });
 
 test("pressing Place order twice makes one order", async () => {
-  const c = client(env.base);
+  const c = phone(pub.base);
+  await c.call("/customer/context"); // loading the page is what gives the phone its device cookie
   const body = { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Twice", items: [LINE] };
   const [a, b] = await Promise.all([c.call("/customer/orders", body), c.call("/customer/orders", body)]);
   assert.deepEqual([a.status, b.status], [200, 200]);
@@ -63,7 +67,7 @@ test("pressing Place order twice makes one order", async () => {
 });
 
 test("bad checkouts are refused", async () => {
-  const c = client(env.base);
+  const c = phone(pub.base);
   assert.equal((await order(c, { paymentMethod: "Bitcoin" })).status, 400);
   assert.equal((await order(c, { guestName: " " })).status, 400);
   assert.equal((await order(c, { items: [] })).status, 400);
@@ -76,7 +80,7 @@ test("bad checkouts are refused", async () => {
 });
 
 test("customers see only their own orders, and staff pages stay closed to them", async () => {
-  const ben = client(env.base);
+  const ben = phone(pub.base);
   assert.equal((await ben.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
   const mine = await order(ben, { guestName: undefined });
   assert.equal((await row(mine.body.orderId)).customer !== null, true);
@@ -86,15 +90,15 @@ test("customers see only their own orders, and staff pages stay closed to them",
     [legacy.OrderID, (await row(mine.body.orderId)).customer]);
   assert.ok((await ben.call("/customer/my-orders")).body.orders.some((o) => o.id === legacy.OrderID));
   assert.equal((await ben.call(`/customer/orders/${legacy.OrderID}`)).status, 200, "existing online history remains accessible to its owner");
-  assert.equal((await client(env.base).call(`/customer/orders/${legacy.OrderID}`)).status, 404);
-  const guest = await order(client(env.base));
+  assert.equal((await phone(pub.base).call(`/customer/orders/${legacy.OrderID}`)).status, 404);
+  const guest = await order(phone(pub.base));
 
   assert.equal((await ben.call(`/customer/orders/${mine.body.orderId}`)).status, 200);
   assert.equal((await ben.call(`/customer/orders/${guest.body.orderId}`)).status, 404, "a guest's order");
-  assert.equal((await client(env.base).call(`/customer/orders/${mine.body.orderId}`)).status, 404, "a member's order, signed out");
+  assert.equal((await phone(pub.base).call(`/customer/orders/${mine.body.orderId}`)).status, 404, "a member's order, signed out");
   assert.ok((await ben.call("/customer/my-orders")).body.orders.some((o) => o.id === mine.body.orderId));
-  assert.equal((await client(env.base).call("/customer/my-orders")).status, 401);
-  assert.equal((await ben.call("/session")).status, 401, "a customer sign-in is not a staff sign-in");
+  assert.equal((await phone(pub.base).call("/customer/my-orders")).status, 401);
+  assert.equal((await fetch(env.base + "/api/session", { headers: { cookie: ben.cookie() } })).status, 401, "a customer sign-in is not a staff sign-in");
 
   await ben.call("/customer/logout", {});
   assert.equal((await ben.call("/customer/session")).body.signedIn, false);
@@ -107,7 +111,7 @@ const history = async (orderId) => (await pool.query("SELECT OrderStatusCode AS 
 
 test("a card or wallet order is mock-paid on the kiosk and confirmed for the kitchen", async () => {
   for (const [paymentMethod, code, card] of [["Card", 2, TEST_CARD], ["Apple Pay", 5], ["Google Pay", 6]]) {
-    const r = await order(client(env.base), { paymentMethod, card });
+    const r = await order(phone(pub.base), { paymentMethod, card });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.paid, true);
     const o = await row(r.body.orderId);
@@ -120,7 +124,7 @@ test("a card or wallet order is mock-paid on the kiosk and confirmed for the kit
 
 test("a declined or bad card leaves no order behind, and the same order can be tried again", async () => {
   const [{ n: before }] = (await pool.query("SELECT COUNT(*) AS n FROM Orders"))[0];
-  const c = client(env.base);
+  const c = phone(pub.base);
   const key = crypto.randomUUID();
   const declined = await order(c, { idempotencyKey: key, paymentMethod: "Card", card: { ...TEST_CARD, number: "4000000000000002" } });
   assert.deepEqual([declined.status, declined.body.error], [402, "Your card was declined."]);
@@ -136,57 +140,113 @@ test("genuine online orders remain blocked while counter checkout works", async 
   await assert.rejects(pool.tx((conn) => conn.query(
     "INSERT INTO Orders (OrderID, LocationID, BusinessID, ChannelCode) VALUES (?, 'loc-campus', 'biz-brewbean', 2)",
     [crypto.randomUUID()])), /not taking online orders/);
-  const r = await order(client(env.base), { channelCode: 2, locationId: "loc-downtown", businessId: "other" });
+  const r = await order(phone(pub.base), { channelCode: 2, locationId: "loc-downtown", businessId: "other" });
   assert.equal(r.status, 200);
   const [[saved]] = await pool.query("SELECT ChannelCode, LocationID, BusinessID FROM Orders WHERE OrderID = ?", [r.body.orderId]);
   assert.deepEqual(saved, { ChannelCode: 3, LocationID: "loc-campus", BusinessID: "biz-brewbean" });
 });
 
 test("customer sessions cannot use the employee register", async () => {
-  const c = client(env.base);
+  const c = phone(pub.base);
   assert.equal((await c.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
-  assert.equal((await c.call("/register/orders", { items: [LINE], payment: { method: "cash" } })).status, 401);
-  assert.equal((await c.call("/register/catalog")).status, 401);
+  const staff = (path, body) => fetch(env.base + "/api" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", cookie: c.cookie() }, body: body && JSON.stringify(body) });
+  assert.equal((await staff("/register/orders", { items: [LINE], payment: { method: "cash" } })).status, 401, "the staff server doesn't know a customer's cookie");
+  assert.equal((await staff("/register/catalog")).status, 401);
+  assert.equal((await c.call("/register/catalog")).status, 404, "and the public server has no register at all");
 });
 
 test("failed stock deduction rolls the entire checkout back", async () => {
   const [[before]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   // more caramel americanos than any shelf holds (50 lines of 99), so the stock check fails whatever the test top-ups left
-  const r = await order(client(env.base), { items: Array.from({ length: 50 }, (_, i) => ({ ...LINE, key: `k${i}`, quantity: 99 })) });
+  const r = await order(phone(pub.base), { items: Array.from({ length: 50 }, (_, i) => ({ ...LINE, key: `k${i}`, quantity: 99 })) });
   assert.notEqual(r.status, 200);
   const [[after]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   assert.equal(after.n, before.n);
 });
-test("a customer is signed out after 5 idle minutes, and a touch restarts the clock", async () => {
+test("on a shared screen a customer is signed out after 5 idle minutes, and a touch restarts the clock", async () => {
   const MIN = 60 * 1000, real = Date.now, base = real();
   const at = (m) => { Date.now = () => base + m * MIN; };
+  process.env.KIOSK_SHARED_DEVICE = "1";
   try {
-    const ben = client(env.base);
+    assert.equal((await phone(pub.base).call("/customer/context")).body.sharedDevice, true);
+    const ben = phone(pub.base);
     assert.equal((await ben.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
     at(4); assert.equal((await ben.call("/customer/session")).body.signedIn, true);
     assert.equal((await ben.call("/customer/touch", {})).status, 200);
     at(8); assert.equal((await ben.call("/customer/session")).body.signedIn, true, "4 minutes after the touch");
     at(14); assert.equal((await ben.call("/customer/session")).body.signedIn, false, "6 minutes after it");
     assert.equal((await ben.call("/customer/my-orders")).status, 401);
+  } finally { Date.now = real; delete process.env.KIOSK_SHARED_DEVICE; }
+});
+
+test("on a customer's own phone nobody is signed out while waiting, until the session's 2 hours end", async () => {
+  const MIN = 60 * 1000, real = Date.now, base = real();
+  const at = (m) => { Date.now = () => base + m * MIN; };
+  try {
+    assert.equal((await phone(pub.base).call("/customer/context")).body.sharedDevice, false);
+    const ben = phone(pub.base);
+    assert.equal((await ben.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
+    at(90); assert.equal((await ben.call("/customer/session")).body.signedIn, true, "90 minutes with no touch");
+    at(125); assert.equal((await ben.call("/customer/session")).body.signedIn, false, "the session's own limit");
   } finally { Date.now = real; }
 });
 
-test("without KIOSK_LOCATION_ID a two-café database refuses to guess", async () => {
-  const id = process.env.KIOSK_LOCATION_ID;
-  delete process.env.KIOSK_LOCATION_ID;
+test("the café comes from the link: a wrong, missing or closed café is refused, and another one works", async () => {
+  const ctx = (c) => c.call("/customer/context");
+  assert.deepEqual([(await ctx(phone(pub.base))).status, (await ctx(phone(pub.base))).body.locationName], [200, "Brewbean Campus"]);
+  assert.equal((await ctx(phone(pub.base, "loc-downtown"))).body.locationName, "Brewbean Downtown", "another café of the same business");
+  assert.equal((await ctx(phone(pub.base, "loc-nowhere"))).status, 404);
+  assert.equal((await ctx(client(pub.base))).status, 404, "no café given");
+  assert.match((await ctx(phone(pub.base, "loc-nowhere"))).body.error, /link isn't valid/);
+  const reset = customers.resetCaches;
+  await pool.query("INSERT INTO Location (LocationID, BusinessID, Name, TimeZone, Active) VALUES ('loc-test-closed', 'biz-brewbean', 'Closed café', 'America/Chicago', FALSE)");
   try {
-    const r = await client(env.base).call("/customer/context");
+    reset();
+    assert.equal((await ctx(phone(pub.base, "loc-test-closed"))).status, 404, "a closed café takes no orders");
+    assert.equal((await phone(pub.base, "loc-test-closed").call("/customer/catalog")).status, 404);
+    assert.equal((await order(phone(pub.base, "loc-test-closed"))).status, 404);
+  } finally { await pool.query("DELETE FROM Location WHERE LocationID = 'loc-test-closed'"); reset(); }
+});
+
+test("one business per app: a second business needs BUSINESS_ID, and a café of another business is refused", async () => {
+  await pool.query("INSERT INTO Business (BusinessID, Name) VALUES ('biz-test-other', 'Other Co')");
+  try {
+    customers.resetCaches();
+    const r = await phone(pub.base).call("/customer/context");
     assert.equal(r.status, 503);
-    assert.match(r.body.error, /KIOSK_LOCATION_ID/);
-  } finally { process.env.KIOSK_LOCATION_ID = id; }
-  assert.equal((await client(env.base).call("/customer/context")).status, 200);
+    assert.match(r.body.error, /BUSINESS_ID/);
+    process.env.BUSINESS_ID = "biz-brewbean";
+    customers.resetCaches();
+    assert.equal((await phone(pub.base).call("/customer/context")).status, 200, "it serves the business it is told to");
+    process.env.BUSINESS_ID = "biz-test-other";
+    customers.resetCaches();
+    assert.equal((await phone(pub.base).call("/customer/context")).status, 404, "and a café of any other business isn't served");
+  } finally { delete process.env.BUSINESS_ID; await pool.query("DELETE FROM Business WHERE BusinessID = 'biz-test-other'"); customers.resetCaches(); }
+  assert.equal((await phone(pub.base).call("/customer/context")).status, 200);
+});
+
+test("the menu is kept for 5 seconds, then shows changes", async () => {
+  const real = Date.now, base = real();
+  customers.resetCaches();
+  const seen = async () => (await phone(pub.base).call("/customer/catalog")).body.products.find((p) => p.id === pid)?.name;
+  const [[{ pid, name }]] = await pool.query("SELECT ProductID AS pid, Name AS name FROM Product WHERE BusinessID = 'biz-brewbean' AND Active AND NOT IsGiftCard ORDER BY Name LIMIT 1");
+  try {
+    assert.equal(await seen(), name);
+    await pool.query("UPDATE Product SET Name = ? WHERE ProductID = ?", [`${name} X`, pid]);
+    assert.equal(await seen(), name, "a second phone within 5 seconds is served the kept menu");
+    Date.now = () => base + 6000;
+    assert.equal(await seen(), `${name} X`, "after 5 seconds it is read again");
+  } finally { Date.now = real; await pool.query("UPDATE Product SET Name = ? WHERE ProductID = ?", [name, pid]); customers.resetCaches(); }
 });
 
 // last, because it uses up this address's orders for a minute
-test("order spam is slowed down", async () => {
-  const c = client(env.base);
+test("order spam is slowed down: one phone is capped, and so is a script with no cookie", async () => {
+  const c = phone(pub.base);
   const codes = [];
-  for (let i = 0; i < 25; i++) codes.push((await c.call("/customer/orders", { items: [] })).status);
-  assert.ok(codes.includes(429), codes.join());
-  assert.equal(codes[0], 400, "a bad order is refused as before, until the limit");
+  for (let i = 0; i < 8; i++) codes.push((await c.call("/customer/orders", { items: [] })).status);
+  assert.deepEqual(codes, [400, 400, 400, 400, 400, 429, 429, 429], "a bad order is refused as before, until this phone's 5 a minute");
+  assert.equal((await phone(pub.base).call("/customer/orders", { items: [] })).status, 400, "another phone on the same wifi isn't held up");
+  let blocked = 0; // no cookie kept, so only the address limit (60 a minute) can stop it
+  for (let i = 0; i < 70; i++) if ((await fetch(pub.base + "/api/customer/orders", { method: "POST", headers: { "content-type": "application/json" }, body: '{"items":[]}' })).status === 429) blocked++;
+  assert.ok(blocked > 0, "the address limit stops it");
 });

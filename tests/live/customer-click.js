@@ -1,23 +1,24 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool, topUp } = require("./env");
+const { startKiosk, pool, topUp } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
-process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
 const app = fs.readFileSync(path.join(root, "public/js/customer.js"), "utf8");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
+process.env.KIOSK_PHONE_SIGNIN = "1"; // the demo switch: these checks sign Chloe in by phone
+process.env.KIOSK_SHARED_DEVICE = "1"; // these checks are for the shared iPad; a phone is never signed out while it waits
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 function kiosk(base) {
-  let cookie = "";
-  const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/customer.html", pretendToBeVisual: true }).window;
+  const jar = new Map(); // a browser keeps every cookie it is given (session, device)
+  const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/order/loc-campus", pretendToBeVisual: true }).window;
   w.fetch = async (url, opts = {}) => {
+    const cookie = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
     const res = await fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } });
-    const set = res.headers.get("set-cookie");
-    if (set) cookie = set.split(";")[0];
+    for (const set of res.headers.getSetCookie()) { const [pair] = set.split(";"); const i = pair.indexOf("="); jar.set(pair.slice(0, i), pair.slice(i + 1)); }
     return res;
   };
   const { webcrypto } = require("crypto");
@@ -38,7 +39,7 @@ function kiosk(base) {
 }
 
 (async () => {
-  const { server, base } = await start();
+  const { server, base } = await startKiosk(); // the public order page is its own server
   await topUp("stk-caramel", 2000); // a caramel americano takes 15 syrup, so a few runs empty the shelf
   const [[{ open }]] = await pool.query("SELECT AcceptsOnlineOrders AS open FROM Location WHERE LocationID = 'loc-campus'");
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus'");
@@ -135,7 +136,12 @@ function kiosk(base) {
     check("guest order goes through", /Thanks, Sam/.test(k.text()) && /Order received/.test(k.text()));
     check("a cash order still waits for the counter", /payment pending/.test(k.text()) && /Pay the cashier/.test(k.text()));
 
-    // an unattended iPad signs the customer out: 30 seconds after an order, 2 minutes otherwise
+    // the page asks for the order's status by itself: here the counter never took the cash, so it is cancelled and says so
+    await require("../../server/kioskorders").expireStale(0);
+    await sleep(8500);
+    check("the phone shows the order was cancelled, without being asked", /Order cancelled/.test(k.text()) && !/payment pending/.test(k.text()), k.text().slice(0, 200));
+
+    // a shared iPad signs the customer out when unattended: 30 seconds after an order, 2 minutes otherwise
     const real = k.w.Date.now, ahead = (ms) => { const t = real() + ms; k.w.Date.now = () => t; };
     await sleep(1200);
     check("the confirmation is still there while the guest is present", /Order received/.test(k.text()));
@@ -153,6 +159,7 @@ function kiosk(base) {
 
     // the public address (server/kiosk.js): guests only, with no phone sign-in to offer
     const pub = await new Promise((r) => { const sv = require("../../server/kiosk").listen(0, () => r(sv)); });
+    delete process.env.KIOSK_PHONE_SIGNIN; // a real deployment has the demo switch off
     try {
       const g = kiosk(`http://127.0.0.1:${pub.address().port}`);
       await sleep(900);

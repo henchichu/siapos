@@ -7,22 +7,25 @@ const fs = require("fs");
 const app = require("../../server/server");
 const pool = require("../../server/database/connection");
 
+const kioskApp = require("../../server/kiosk");
+// The public order page is its own server (server/kiosk.js), separate from the staff one
+const startKiosk = () => new Promise((resolve) => { const s = kioskApp.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 const start = () => new Promise((resolve) => { const s = app.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 
 // Small client that keeps the session cookie
-function client(base) {
-  let cookie = "";
+function client(base, headers = {}) {
+  const jar = new Map(); // a browser keeps every cookie it is given (session, device...), not just the last
+  const cookie = () => [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
   const call = async (path, body) => {
     const res = await fetch(base + "/api" + path, {
       method: body === undefined ? "GET" : "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: cookie(), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const set = res.headers.get("set-cookie");
-    if (set) cookie = set.split(";")[0];
+    for (const set of res.headers.getSetCookie()) { const [pair] = set.split(";"); const i = pair.indexOf("="); jar.set(pair.slice(0, i), pair.slice(i + 1)); }
     return { status: res.status, body: await res.json().catch(() => ({})) };
   };
-  return { call, cookie: () => cookie };
+  return { call, cookie };
 }
 
 // A wrong-PIN test must not leave an account locked for the next run
@@ -67,4 +70,7 @@ async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
 // The mock processor (server/mockpay.js) approves this one; its expiry is far enough ahead not to age out
 const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" };
 
-module.exports = { start, client, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD };
+// A phone at the Campus café: the page sends the café it was opened for (its QR code) with every call
+const phone = (base, locationId = "loc-campus") => client(base, { "x-location-id": locationId });
+
+module.exports = { start, startKiosk, client, phone, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD };

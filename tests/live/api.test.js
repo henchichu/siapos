@@ -67,6 +67,16 @@ test("wrong override PINs lock the cashier, not the manager", async () => {
   await unlock("emp-priya");
 });
 
+test("a manager can't approve their own discount, an owner can", async () => {
+  const discount = { applyTo: "order", type: "percent", value: 10, reason: "Complaint" };
+  const ask = async (who, managerNumber, managerPin) => (await signIn(who[0], who[1])).call("/register/discount/authorize", { discount, managerNumber, managerPin, items: [croissant] });
+  const leo = await ask(["10420002", "222222"], "10420002", "222222");
+  assert.equal(leo.status, 403);
+  assert.match(leo.body.error, /Another manager has to approve this/);
+  assert.equal((await ask(["10420001", "111111"], "10420001", "111111")).status, 200, "an owner has no one above them");
+  assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and a manager can sign for someone else");
+});
+
 test("five wrong gift card codes stop further guesses", async () => {
   const jordanLike = await signIn("10420001", "111111");
   const pay = (code) => jordanLike.call("/register/orders", { items: [croissant], payment: { method: "gift", giftCardCode: code } });

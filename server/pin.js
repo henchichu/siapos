@@ -90,10 +90,23 @@ const hasPermission = (db, employeeId, code) =>
     )
     .then(([[r]]) => !!r.ok);
 
+// Every code 1-22 the person holds, in one query: what sign-in needs to build the menu
+const grantedCodes = (db, employeeId) =>
+  db
+    .query(
+      `SELECT p.PermissionCode AS code FROM Permission p
+        WHERE p.PermissionCode BETWEEN 1 AND 22
+          AND EXISTS (SELECT 1 FROM Employee e JOIN Role r ON r.RoleID = e.RoleID
+                       WHERE e.EmployeeID = ? AND e.Active AND r.Active
+                         AND (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = p.PermissionCode)))`,
+      [employeeId]
+    )
+    .then(([rows]) => rows.map((r) => r.code));
+
 // Read from the database each time, like hasPermission, so a demoted owner loses it at once
 const isOwner = async (employeeId) => {
   const [[row]] = await pool.query("SELECT r.IsOwner AS owner FROM Employee e JOIN Role r ON r.RoleID = e.RoleID WHERE e.EmployeeID = ?", [employeeId]);
   return !!row?.owner;
 };
 
-module.exports = { findEmployee, workplace, authenticate, hasPermission, isOwner, clearLockout };
+module.exports = { findEmployee, workplace, authenticate, hasPermission, grantedCodes, isOwner, clearLockout };

@@ -2,11 +2,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool, topUp } = require("./env");
+const { start, startKiosk, client, phone, pool, topUp } = require("./env");
 const { expireStale } = require("../../server/kioskorders");
 
-process.env.KIOSK_LOCATION_ID = "loc-campus";
-let env, wasOpen;
+let env, pub, wasOpen; // env: the staff server, pub: the public order page
 const LINE = { key: "a", variantId: "var-amer-s", quantity: 2, modifierIds: ["mod-caramel"] };
 const kiosk = (c, extra = {}) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Pat", items: [LINE], ...extra });
 const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
@@ -26,6 +25,7 @@ const settle = async () => { while (await expireStale()) {} }; // dev data holds
 test.beforeEach(() => require("../../server/customers").resetOrderLimit());
 test.before(async () => {
   env = await start();
+  pub = await startKiosk();
   await topUp("stk-caramel", 2000);
   [[{ wasOpen }]] = await pool.query("SELECT AcceptsOnlineOrders AS wasOpen FROM Location WHERE LocationID = 'loc-campus'");
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus'");
@@ -33,12 +33,13 @@ test.before(async () => {
 test.after(async () => {
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = ? WHERE LocationID = 'loc-campus'", [wasOpen]);
   env.server.close();
+  pub.server.close();
   await pool.end();
 });
 
 test("the register takes the cash for a kiosk order and it goes to the kitchen", async () => {
   const c = await cashier();
-  const r = await kiosk(client(env.base));
+  const r = await kiosk(phone(pub.base));
   const listed = (await c.call("/register/kiosk-orders")).body.orders.find((o) => o.id === r.body.orderId);
   assert.deepEqual([listed.name, listed.totalCents, listed.orderNumber], ["Pat", r.body.totalCents, r.body.orderNumber]);
   assert.equal((await c.call(`/register/kiosk-orders/${r.body.orderId}/pay`, {})).status, 200);
@@ -52,7 +53,7 @@ test("the register takes the cash for a kiosk order and it goes to the kitchen",
 test("cancelling an unpaid order puts its stock back", async () => {
   const c = await cashier();
   const before = await caramel();
-  const r = await kiosk(client(env.base));
+  const r = await kiosk(phone(pub.base));
   assert.equal(await caramel(), before - 30, "the order holds 2 cups x 15 syrup");
   assert.equal((await c.call(`/register/kiosk-orders/${r.body.orderId}/cancel`, {})).status, 200);
   assert.equal(await status(r.body.orderId), 6);
@@ -64,8 +65,8 @@ test("an order nobody pays for expires and gives its stock back; a paid one is l
   const c = await cashier();
   await settle();
   const before = await caramel();
-  const unpaid = await kiosk(client(env.base));
-  const paid = await kiosk(client(env.base));
+  const unpaid = await kiosk(phone(pub.base));
+  const paid = await kiosk(phone(pub.base));
   await c.call(`/register/kiosk-orders/${paid.body.orderId}/pay`, {});
   await expireStale(60);
   assert.equal(await status(unpaid.body.orderId), 1, "not old enough yet");
@@ -78,7 +79,7 @@ test("an order nobody pays for expires and gives its stock back; a paid one is l
 
 test("only someone who can use the register may take payment, and only at their own café", async () => {
   const jordan = await signIn("10420005", "555555");
-  const r = await kiosk(client(env.base));
+  const r = await kiosk(phone(pub.base));
   assert.equal((await jordan.call("/register/kiosk-orders")).status, 403);
   assert.equal((await jordan.call(`/register/kiosk-orders/${r.body.orderId}/pay`, {})).status, 403);
   assert.equal(await status(r.body.orderId), 1);
@@ -96,7 +97,7 @@ test("a card order that can't get its stock is not charged: stock is checked bef
      VALUES (UUID(), 'biz-brewbean', 'stk-caramel', 'loc-campus', 'emp-leo', ?, ?, 4, 'test: leave 5')`, [5 - left, cost]);
   try {
     // 4000 0000 0000 0002 is declined: a charge made first would answer 402, the stock failing first answers 409
-    const r = await kiosk(client(env.base), { paymentMethod: "Card", card: { number: "4000 0000 0000 0002", expiry: "12/49", cvc: "123" } });
+    const r = await kiosk(phone(pub.base), { paymentMethod: "Card", card: { number: "4000 0000 0000 0002", expiry: "12/49", cvc: "123" } });
     assert.equal(r.status, 409);
   } finally { await topUp("stk-caramel", 2000); }
 });

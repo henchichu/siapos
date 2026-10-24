@@ -5,10 +5,8 @@ const session = require("./session");
 const pool = require("./database/connection");
 const { hasPermission } = require("./pin");
 const { handleErrors } = require("./errors");
-const kiosk = require("./kiosk");
 
 const PORT = process.env.PORT || 3000;
-const KIOSK_PORT = process.env.KIOSK_PORT || 3001;
 const HOST = "0.0.0.0";
 
 const app = express();
@@ -17,14 +15,12 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-// The staff side always starts at the sign-in page; the customer iPad opens /customer
+// The staff side always starts at the sign-in page. The phones' order page is a separate server (server/kiosk.js).
 app.get("/", (req, res) => res.redirect("/login.html"));
-app.get("/customer", (req, res) => res.redirect("/customer.html"));
 
 app.use(require("./vendor"));
 
-// Customer kiosk routes precede employee authentication.
-app.use("/api", express.json(), require("./customers"), router);
+app.use("/api", express.json(), router);
 app.get("/settings.html", async (req, res, next) => {
   const s = session.fromRequest(req);
   if (!s) return res.redirect("/login.html");
@@ -62,8 +58,7 @@ app.use(handleErrors);
 if (require.main === module) {
   app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
   require("./kioskorders").startExpiry(); // cancels kiosk orders nobody paid for, which puts their stock back
-  // the only part meant for the internet, through the Caddy proxy: see server/kiosk.js
-  kiosk.listen(KIOSK_PORT, HOST, () => console.log(`Customer kiosk (public side) at http://localhost:${KIOSK_PORT}`));
+  require("./watchers").startPolling(pool); // tells open kitchen screens about orders the public server took
 }
 
 module.exports = app;

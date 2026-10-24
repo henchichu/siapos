@@ -60,3 +60,14 @@ test("collect lists every problem and rethrows anything else", () => {
   assert.equal(problems.length, 2);
   assert.throws(() => v.collect(problems, () => { throw new TypeError("bug"); }), TypeError);
 });
+
+test("contact phone: US, or international with a country code, either with an extension", () => {
+  assert.equal(v.contactPhone("(312) 555-0142"), "312-555-0142");
+  assert.equal(v.contactPhone("+1 312 555 0142"), "312-555-0142");
+  assert.equal(v.contactPhone("312-555-0142 x12"), "312-555-0142 x12");
+  assert.equal(v.contactPhone("312-555-0142 ext. 7"), "312-555-0142 x7");
+  assert.equal(v.contactPhone("+44  20 7946 0958"), "+44 20 7946 0958");
+  assert.equal(v.contactPhone("+44 20 7946 0958 x3"), "+44 20 7946 0958 x3");
+  assert.equal(v.contactPhone(""), null);
+  for (const no of ["abc", "7946 0958", "+44", "+1234567890123456", "+44 20 79x", "000-000-0000", "312-555-0142 x1234567"]) fails(() => v.contactPhone(no));
+});

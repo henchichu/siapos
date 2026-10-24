@@ -134,3 +134,12 @@ test("a wrong PIN is refused and a server's number can't sign for her", async ()
   await pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = 'emp-ana'");
   assert.equal((await ana.call("/refunds", { orderId: campus.id, reason: "x", managerNumber: "10420003", managerPin: "333333", lines: lineOf(campus) })).status, 403);
 });
+
+test("the one who asked for a refund can't be the one who approves it, unless an owner", async () => {
+  const asked = await sale(sam);
+  assert.equal((await leo.call("/refunds/request", { orderId: asked.id, lines: lineOf(asked), reason: "own request" })).status, 200);
+  const [waiting] = (await leo.call("/refunds/waiting")).body.refunds.filter((r) => r.orderNumber === asked.number);
+  const own = await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" });
+  assert.deepEqual([own.status, /Another manager/.test(own.body.error)], [403, true]);
+  assert.equal((await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420001", managerPin: "111111" })).status, 200, "another manager's or an owner's PIN works");
+});

@@ -1,6 +1,6 @@
 const express = require("express");
 const pool = require("./database/connection");
-const { findEmployee, workplace, authenticate, isOwner, hasPermission } = require("./pin");
+const { findEmployee, workplace, authenticate, isOwner, grantedCodes } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
 const { access } = require("./nav");
@@ -45,8 +45,7 @@ router.post("/login/pin", async (req, res) => {
   const { emp } = result;
   const place = await workplace(emp.EmployeeID);
   if (!place) return res.status(403).json({ error: "You aren't assigned to a café. Ask an owner to add you to one." });
-  const granted = [];
-  for (let code = 1; code <= 22; code++) if (await hasPermission(pool, emp.EmployeeID, code)) granted.push(code);
+  const granted = await grantedCodes(pool, emp.EmployeeID);
   const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
   session.create(res, {
     employeeId: emp.EmployeeID,

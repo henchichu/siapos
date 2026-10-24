@@ -6,7 +6,7 @@ const ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValue
   : ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
 const NEW_CATEGORY = { name: "" };
 const NEW_LOCATION = { name: "", address: "", phone: "", timeZone: "America/Chicago", active: true, online: false, rates: {}, registers: [{ name: "Register 1" }] };
-const NEW_ROLE = { name: "", opensTo: "SHIFT", active: true, permissions: [] };
+const NEW_ROLE = { name: "", active: true, permissions: [] };
 
 function Field({ label, value, onChange, type = "text", ...rest }) {
   return html`<label className="pf"><b>${label}</b>
@@ -44,6 +44,8 @@ function LocationForm({ data, form, set, msg, busy, onSave, onClose }) {
         <select className="select" required value=${form.timeZone} onChange=${(e) => set({ timeZone: e.target.value })}>
           ${(ZONES.includes(form.timeZone) ? ZONES : [form.timeZone, ...ZONES]).map((z) => html`<option key=${z} value=${z}>${z}</option>`)}</select></label>
       <label className="check"><input type="checkbox" checked=${form.online} onChange=${(e) => set({ online: e.target.checked })} /> Accept online orders</label>
+      ${form.id && html`<label className="pf"><b>Phone order link (make the café's QR code from this)</b>
+        <input className="field" readOnly value=${`${data.orderBase}/order/${form.id}`} onFocus=${(e) => e.target.select()} /></label>`}
       <h3>Tax rates (%)</h3>
       ${data.taxes.map((t) => html`<${Field} key=${t.id} label=${t.name} type="number" required value=${form.rates[t.id] ?? ""}
         onChange=${(v) => set({ rates: { ...form.rates, [t.id]: v } })} />`)}
@@ -147,21 +149,11 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
 function RoleForm({ data, form, setForm, msg, busy, onSave, onClose }) {
   const title = form.id ? "Edit role" : "Add role";
   const groups = [...new Set(data.permissions.map((p) => p.groupName))];
-  // a role opens to the Register or Kitchen only if it may use them
-  const toggle = (code, on) => {
-    const permissions = on ? [...form.permissions, code] : form.permissions.filter((c) => c !== code);
-    const lost = (form.opensTo === "REGISTER" && !permissions.includes(1)) || (form.opensTo === "KITCHEN" && !permissions.includes(5));
-    setForm({ permissions, opensTo: lost ? "SHIFT" : form.opensTo });
-  };
+  const toggle = (code, on) => setForm({ permissions: on ? [...form.permissions, code] : form.permissions.filter((c) => c !== code) });
   return html`<aside className="pform pside wide" aria-label=${title}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <${Field} label="Role name" required maxLength="50" value=${form.name} onChange=${(v) => setForm({ name: v })} />
-      <label className="pf"><b>Opens to after sign-in</b>
-        <select className="select" value=${form.opensTo} onChange=${(e) => setForm({ opensTo: e.target.value })}>
-          <option value="SHIFT">My shift</option>
-          ${form.permissions.includes(1) && html`<option value="REGISTER">Register</option>`}
-          ${form.permissions.includes(5) && html`<option value="KITCHEN">Kitchen</option>`}</select></label>
       <h3>What this role can do</h3>
       <div className="permissions">${groups.map((g) => html`<section key=${g}><h3>${g}</h3>
         ${data.permissions.filter((p) => p.groupName === g).map((p) => html`<label className="check" key=${p.code}>

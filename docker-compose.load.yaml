@@ -1,0 +1,7 @@
+# For the load test only (tests/load/run.js): lifts the public server's limits, which would otherwise stop one test machine.
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml -f docker-compose.load.yaml up -d kiosk-api
+# Put it back afterwards without this file: docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d kiosk-api
+services:
+  kiosk-api:
+    environment:
+      RATE_LIMIT_SCALE: "100"

@@ -12,7 +12,7 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || "miniworld",
   user: process.env.DB_USER || "app_user",
   password,
-  connectionLimit: 10,
+  connectionLimit: Number(process.env.DB_POOL_SIZE) || 10, // the staff and public servers each have their own pool
   timezone: "Z", // the container runs in UTC
 });
 

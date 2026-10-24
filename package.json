@@ -6,7 +6,9 @@
   "scripts": {
     "test": "sql/tests/run.sh && node --test tests/unit/*.test.js",
     "start": "node server/server.js",
+    "start:kiosk": "node server/kiosk.js",
     "dev": "node --watch server/server.js",
+    "dev:kiosk": "node --watch server/kiosk.js",
     "test:live": "node --test --test-concurrency=1 tests/live/*.test.js && node tests/live/click-through.js && node tests/live/kitchen-click.js && node tests/live/shift-click.js && node tests/live/home-click.js && node tests/live/idle-click.js && node tests/live/products-click.js && node tests/live/inventory-click.js && node tests/live/attention-click.js && node tests/live/reports-click.js && node tests/live/employees-click.js && node tests/live/orders-click.js && node tests/live/rewards-click.js && node tests/live/customer-click.js && node tests/live/settings-click.js"
   },
   "repository": {

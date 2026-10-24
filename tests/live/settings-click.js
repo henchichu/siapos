@@ -95,9 +95,7 @@ async function open(base) {
     check("Roles lists the roles, with the owner locked", m.$(".tabs [aria-pressed=true]").textContent === "Roles and permissions" && /Every permission, locked/.test(m.$("table[aria-label=Roles]").textContent) && !m.$(".pform"));
     await m.click(m.byText("button", "Add role"));
     check("Add role opens a wide form column with all 22 permissions", m.title() === "Add role" && m.$(".pform").classList.contains("wide") && m.$$(".permissions input[type=checkbox]").length === 22);
-    check("a new role can only open to My shift", [...m.field("Opens to after sign-in").options].map((o) => o.textContent).join("|") === "My shift");
-    await m.click(m.$$(".permissions label").find((l) => l.textContent.includes("Use the register")).querySelector("input"), 200);
-    check("using the register adds Register to where it can open", [...m.field("Opens to after sign-in").options].map((o) => o.textContent).join("|") === "My shift|Register");
+    check("the role form has no Opens to field", !/Opens to/.test(m.$(".pform").textContent));
     await m.click(m.byText("button", "Cancel"));
     check("Cancel closes it", !m.$(".pform"));
     await m.click(m.row("Roles", "Server").querySelector("button"));

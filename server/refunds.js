@@ -7,7 +7,7 @@ const { cents, dollars } = require("./pricing");
 const { verifyOverride } = require("./override");
 const { requirePermission } = require("./session");
 const { myLocations } = require("./locations");
-const { hasPermission } = require("./pin");
+const { hasPermission, isOwner } = require("./pin");
 const { label } = require("./labels");
 
 const PERM_SIGN_REFUND_OVERRIDES = 3;
@@ -30,9 +30,9 @@ router.get("/refunds/order", async (req, res) => {
     ? await pool.query(`${base} AND o.OrderNumber = ?`, [businessId, mine, q])
     : await pool.query(
         `${base} AND o.OrderStatusCode IN (5, 7)
-            AND (c.Email = ? OR REGEXP_REPLACE(c.Phone, '[^0-9]', '') = ?)
+            AND (c.Email = ? OR c.PhoneDigits = ?)
           ORDER BY o.OrderDateTime DESC LIMIT 1`,
-        [businessId, mine, q, q.replace(/\D/g, "") || "#"]
+        [businessId, mine, q, q.replace(/\D/g, "").slice(-10) || "#"]
       );
   if (!order) throw new HttpError(404, "No order found.");
   if (![5, 7].includes(order.OrderStatusCode))
@@ -258,7 +258,7 @@ router.get("/refunds/waiting", needSigner, async (req, res) => res.json({ refund
 // Lock the waiting refund (and its order) before anything else changes
 async function lockWaiting(conn, session, id) {
   const [[ref]] = await conn.query(
-    `SELECT r.RefundID, r.OrderID, r.PaymentID, r.ReturnID, r.Amount, o.LocationID, o.OrderStatusCode
+    `SELECT r.RefundID, r.OrderID, r.PaymentID, r.ReturnID, r.Amount, r.CreatedBy, o.LocationID, o.OrderStatusCode
        FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID WHERE r.RefundID = ? AND r.BusinessID = ? AND r.RefundStatusCode = 1 FOR UPDATE`,
     [id, session.businessId]
   );
@@ -269,11 +269,13 @@ async function lockWaiting(conn, session, id) {
 
 router.post("/refunds/:id/approve", needSigner, async (req, res) => {
   const managerId = await verifyOverride(
-    req.session, String(req.body.managerNumber), String(req.body.managerPin), [PERM_SIGN_REFUND_OVERRIDES, PERM_APPROVE_DISCOUNTS]
+    req.session, String(req.body.managerNumber), String(req.body.managerPin), [PERM_SIGN_REFUND_OVERRIDES, PERM_APPROVE_DISCOUNTS], { selfOk: true }
   );
   const { employeeId, businessId } = req.session;
   const out = await pool.tx(async (conn) => {
     const ref = await lockWaiting(conn, req.session, req.params.id);
+    // the one who asked for the refund can't be the one who signs it, unless they are an owner
+    if (managerId === ref.CreatedBy && !(await isOwner(managerId))) throw new HttpError(403, "Another manager has to approve this: you can't approve your own.");
     const [[payment]] = await conn.query(
       `SELECT p.Amount - COALESCE((SELECT SUM(r.Amount) FROM Refund r WHERE r.PaymentID = p.PaymentID AND r.RefundStatusCode <> 3 AND r.RefundID <> ?), 0) AS Remaining, pm.Description
          FROM Payment p JOIN PaymentMethod pm USING (PaymentMethodCode) WHERE p.PaymentID = ? FOR UPDATE`,

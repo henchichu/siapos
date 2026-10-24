@@ -65,6 +65,20 @@ function phone(v, { required = false } = {}) {
   return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
+// A business contact's phone: a US number as above, or an international one (+ and 7 to 15 digits); either may end in an
+// extension ("x12"). Empty gives null when allowed.
+function contactPhone(v, { required = false } = {}) {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!s && !required) return null;
+  const m = /^(.*?)\s*(?:ext\.?|x)\s*(\d{1,6})$/i.exec(s);
+  const [number, ext] = m ? [m[1], ` x${m[2]}`] : [s, ""];
+  const us = phoneDigits(number);
+  if (us) return `${us.slice(0, 3)}-${us.slice(3, 6)}-${us.slice(6)}${ext}`;
+  const digits = number.replace(/\D/g, "");
+  if (/^\+[\d\s().-]+$/.test(number) && digits.length >= 7 && digits.length <= 15) return `${number.replace(/\s+/g, " ")}${ext}`;
+  bad("Enter a US phone number like 312-555-0142, or an international one with its country code, like +44 20 7946 0958.");
+}
+
 // An email in lowercase: one @, a dotted domain with no empty parts, a letters-only ending of 2 or more, no spaces
 const EMAIL = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 function email(v, { required = false } = {}) {
@@ -104,4 +118,4 @@ function percent(v, what) {
 
 const EMPLOYEE_NUMBER = /^\d{8}$/;
 
-module.exports = { collect, personName, label, note, phone, phoneDigits, email, tipCents, giftCode, luhn, percent, EMPLOYEE_NUMBER, INVISIBLE };
+module.exports = { collect, personName, label, note, phone, contactPhone, phoneDigits, email, tipCents, giftCode, luhn, percent, EMPLOYEE_NUMBER, INVISIBLE };

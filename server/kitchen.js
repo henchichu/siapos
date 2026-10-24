@@ -15,9 +15,7 @@ const LOSS_TYPES = { broken: 5, spoiled: 6 }; // DAMAGED, EXPIRED
 
 const router = express.Router();
 
-// shortcut: open screens are tracked in this process only, so a second server process would miss them; share a channel (Redis) before running two
-const watchers = new Map(); // locationId -> open responses
-const notify = (locationId) => { for (const res of watchers.get(locationId) || []) res.write("data: changed\n\n"); };
+const { watchers, notify } = require("./watchers");
 
 // One-way push: the screen only needs to know "something changed", then it reloads its tickets
 router.get("/kitchen/stream", requirePermission(PERM_SEE_KITCHEN), (req, res) => {
@@ -179,4 +177,3 @@ router.post("/kitchen/losses", requirePermission(PERM_REPORT_LOSS), async (req, 
 });
 
 module.exports = router;
-module.exports.notify = notify;

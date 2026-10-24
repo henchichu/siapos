@@ -18,11 +18,12 @@ router.get('/settings/general',requirePermission(21),async(req,res)=>{
  const [taxes]=await pool.query('SELECT TaxCategoryID AS id, Name AS name FROM TaxCategory WHERE BusinessID=? AND Active ORDER BY Name',[b]);
  const [locations]=await pool.query('SELECT LocationID AS id, Name AS name, Address AS address, Phone AS phone, TimeZone AS timeZone, Active AS active, AcceptsOnlineOrders AS online FROM Location WHERE BusinessID=? ORDER BY Name',[b]);
  for(const l of locations){const [rates]=await pool.query('SELECT TaxCategoryID AS id, Rate AS rate FROM LocationTaxRate WHERE LocationID=?',[l.id]); const [registers]=await pool.query('SELECT RegisterID AS id, Name AS name FROM Register WHERE LocationID=? ORDER BY Name',[l.id]); l.rates=Object.fromEntries(rates.map(r=>[r.id,String(Number(r.rate)*100)])); l.registers=registers;}
- res.json({business,categories,taxes,locations});
+ // the public address phones order at (KIOSK_HOST, set where the app runs); each café's own link adds /order/<its id>
+ res.json({business,categories,taxes,locations,orderBase:process.env.KIOSK_HOST?`https://${process.env.KIOSK_HOST}`:''});
 });
 router.post('/settings/business',requirePermission(21),async(req,res)=>{
  const f=req.body,email=check.email(f.email);
- await pool.query('UPDATE Business SET Name=?, ContactEmail=?, ContactPhone=?, PricesIncludeTax=? WHERE BusinessID=?',[text(f.name,100,true),email,check.phone(f.phone),flag(f.includesTax),req.session.businessId]); res.json({message:'Business saved.'});
+ await pool.query('UPDATE Business SET Name=?, ContactEmail=?, ContactPhone=?, PricesIncludeTax=? WHERE BusinessID=?',[text(f.name,100,true),email,check.contactPhone(f.phone),flag(f.includesTax),req.session.businessId]); res.json({message:'Business saved.'});
 });
 router.post('/settings/refunds',requirePermission(21),async(req,res)=>{
  const amount=num(req.body.amount,99999999.99),days=num(req.body.days,65535,true);
@@ -34,7 +35,7 @@ router.post('/settings/categories',requirePermission(21),async(req,res)=>{
  await pool.tx(async db=>{if(f.id){await owned(db,'Category','CategoryID',f.id,b);await db.query('UPDATE Category SET Name=?, Active=? WHERE CategoryID=?',[name,flag(f.active),f.id]);}else await db.query('INSERT INTO Category (CategoryID,BusinessID,Name) VALUES (?,?,?)',[randomUUID(),b,name]);});res.json({message:'Category saved.'});
 });
 router.post('/settings/locations',requirePermission(21),async(req,res)=>{
- const f=req.body,b=req.session.businessId,id=f.id||randomUUID(),name=text(f.name,100,true),address=text(f.address,255),phone=check.phone(f.phone),tz=text(f.timeZone,64,true),active=flag(f.active),online=flag(f.online);
+ const f=req.body,b=req.session.businessId,id=f.id||randomUUID(),name=text(f.name,100,true),address=text(f.address,255),phone=check.contactPhone(f.phone),tz=text(f.timeZone,64,true),active=flag(f.active),online=flag(f.online);
  try{new Intl.DateTimeFormat('en',{timeZone:tz}).format();}catch{bad('Enter a valid IANA time zone.');}
  if(!Array.isArray(f.registers)||!f.registers.length)bad('Add at least one register.');
  const regs=f.registers.map(r=>({id:r.id,name:text(r.name,100,true)}));if(new Set(regs.map(r=>r.name.toLowerCase())).size!==regs.length)bad('Register names must be unique.');
@@ -56,12 +57,12 @@ router.get('/settings/roles',requirePermission(22),async(req,res)=>{
 router.post('/settings/roles',requirePermission(22),async(req,res)=>{
  const f=req.body,b=req.session.businessId,id=f.id||randomUUID(),name=text(f.name,50,true),active=flag(f.active);
  if(!Array.isArray(f.permissions)||f.permissions.some(p=>!Number.isInteger(p)||p<1||p>22))bad('Invalid permissions.');const permissions=[...new Set(f.permissions)];
- const destinations={REGISTER:1,KITCHEN:5,SHIFT:null};if(!Object.hasOwn(destinations,f.opensTo)||destinations[f.opensTo]&&!permissions.includes(destinations[f.opensTo]))bad('Choose a landing page this role can access.');
  const owner=await isOwner(req.session.employeeId);
  const affected=await pool.tx(async db=>{
  let old;if(f.id){old=await owned(db,'Role','RoleID',id,b);if(old.IsOwner)bad('The Owner role is locked.');const [[senior]]=await db.query('SELECT COUNT(*) AS n FROM RolePermission WHERE RoleID=? AND PermissionCode IN (19,22)',[id]);if(!owner&&senior.n)bad('Only an owner can edit staff or role management roles.');if(!active){const [[staff]]=await db.query('SELECT COUNT(*) AS n FROM Employee WHERE RoleID=? AND Active',[id]);if(staff.n)bad('Reassign active staff before deactivating this role.');}}
  if(!owner&&permissions.some(p=>p===19||p===22))bad('Only an owner can grant staff or role management.');if(!owner)for(const p of permissions)if(!await hasPermission(db,req.session.employeeId,p))bad('You can only grant permissions you hold.');
- if(old)await db.query('UPDATE Role SET Name=?,OpensTo=?,Active=? WHERE RoleID=?',[name,f.opensTo,active,id]);else await db.query('INSERT INTO Role (RoleID,BusinessID,Name,OpensTo,Active) VALUES (?,?,?,?,?)',[id,b,name,f.opensTo,active]);
+ // OpensTo only picks where a blocked page sends someone (server/nav.js); new roles start at My shift and existing ones keep theirs
+ if(old)await db.query('UPDATE Role SET Name=?,Active=? WHERE RoleID=?',[name,active,id]);else await db.query("INSERT INTO Role (RoleID,BusinessID,Name,OpensTo,Active) VALUES (?,?,?,'SHIFT',?)",[id,b,name,active]);
  // Only replace the permissions managed by this editor; preserve all others.
  await db.query('DELETE FROM RolePermission WHERE RoleID=? AND PermissionCode BETWEEN 1 AND 22',[id]);for(const p of permissions)await db.query('INSERT INTO RolePermission (RoleID,BusinessID,PermissionCode) VALUES (?,?,?)',[id,b,p]);
  const [staff]=await db.query('SELECT EmployeeID FROM Employee WHERE RoleID=?',[id]);return staff;

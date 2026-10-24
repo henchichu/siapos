@@ -96,7 +96,7 @@ test("details reconcile, and a refund shows up in payments and status", async ()
   assert.ok(d.history.every((h) => h.status && h.at));
 
   const lookup = (await sam.call(`/refunds/order?q=${s.number}`)).body;
-  const done = await leo.call("/refunds", { orderId: s.id, reason: "Test", ...MGR, lines: [{ orderItemId: lookup.lines[0].orderItemId, qty: 2, restock: false }] });
+  const done = await sam.call("/refunds", { orderId: s.id, reason: "Test", ...MGR, lines: [{ orderItemId: lookup.lines[0].orderItemId, qty: 2, restock: false }] });
   assert.equal(done.status, 200);
   const after = (await leo.call(`/orders/${s.id}`)).body;
   assert.equal(after.status, "Refunded");

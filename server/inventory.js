@@ -193,7 +193,7 @@ router.post("/inventory/supplier", change, async (req, res) => {
   const { businessId } = req.session;
   const name = check.label(req.body.name, "supplier's name", 100);
   const email = check.email(req.body.email);
-  const phone = check.phone(req.body.phone);
+  const phone = check.contactPhone(req.body.phone);
   const id = uuid();
   try {
     await pool.query("INSERT INTO Supplier (SupplierID, BusinessID, Name, ContactEmail, ContactPhone) VALUES (?, ?, ?, ?, ?)", [id, businessId, name, email, phone]);

@@ -9,14 +9,18 @@ const fmt = (iso, tz) => iso ? new Date(iso).toLocaleString([], { month:"short",
 // crypto.randomUUID exists only on HTTPS or localhost; an iPad on plain http://<lan-ip> has just getRandomValues
 const newKey = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
+// The café's QR code opens /order/<locationId>; every call says which café this is
+const LOCATION_ID = (/^\/order\/([^/]+)/.exec(window.location.pathname) || [])[1];
+const HEADERS = LOCATION_ID ? { "x-location-id": decodeURIComponent(LOCATION_ID) } : {};
+
 async function api(path) {
-  const r = await fetch(`/api${path}`);
+  const r = await fetch(`/api${path}`, { headers: HEADERS });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Something went wrong.");
   return d;
 }
 async function post(path, body) {
-  const r = await fetch(`/api${path}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  const r = await fetch(`/api${path}`, { method:"POST", headers:{"Content-Type":"application/json", ...HEADERS}, body:JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Something went wrong.");
   return d;
@@ -352,6 +356,23 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
 function Confirmation({ receipt, onBack }) {
   const { cart, note, payMethod, guestName, mode, memberInfo, orderNumber, orderId, totalCents, paid } = receipt;
   const name = mode === "guest" ? guestName : (memberInfo && memberInfo.firstName) || "there";
+  // The order's real status, so a phone shows "Ready for pickup" without the customer asking; it stops once the order is over
+  const [live, setLive] = useState(null);
+  useEffect(() => {
+    if (!orderId) return;
+    let stop = false;
+    const t = setInterval(() => load(), 8000);
+    const load = () => api(`/customer/orders/${orderId}`).then((o) => { if (stop) return; setLive(o); if ([5, 6, 7].includes(o.statusCode)) clearInterval(t); }).catch(() => {});
+    load();
+    return () => { stop = true; clearInterval(t); };
+  }, [orderId]);
+  const code = live?.statusCode;
+  const [title, sub] = code === 6 ? ["Order cancelled", "This order was cancelled, for example because it wasn't paid in time. Place a new one any time."]
+    : code === 4 ? ["Ready for pickup", "Your order is ready. Collect it at the counter."]
+    : code === 5 || code === 7 ? ["Picked up", "Enjoy!"]
+    : code === 3 ? ["Being prepared", "We're making your order now."]
+    : paid || code === 2 ? ["Paid — your order is being prepared", paid ? `Paid with ${payMethod}. This is test mode, so nothing was charged for real.` : "We have your payment. Thank you."]
+    : ["Order submitted — payment pending", "Pay the cashier at the counter within 15 minutes, and we'll start your order."];
   return html`
     <div className="confirm-overlay screen">
       <div className="bar">
@@ -380,10 +401,8 @@ function Confirmation({ receipt, onBack }) {
             <div className="row"><dt>Order number</dt><dd>#${orderNumber}</dd></div>
           </dl>
           <div className="pending-box">
-            ${paid ? html`<${React.Fragment}><p className="ttl">Paid — your order is being prepared</p>
-              <p className="sub">Paid with ${payMethod}. This is test mode, so nothing was charged for real.</p><//>`
-              : html`<${React.Fragment}><p className="ttl">Order submitted — payment pending</p>
-              <p className="sub">Pay the cashier at the counter within 15 minutes, and we'll start your order.</p><//>`}
+            <p className="ttl">${title}</p>
+            <p className="sub">${sub}</p>
           </div>
           ${mode === "signed-in" && memberInfo && memberInfo.member && html`
             <div className="pts-row">
@@ -654,6 +673,8 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
 // This iPad is shared: with no touches for IDLE_MS (30 seconds once an order has been placed) the customer is signed out
 // and the cart cleared. The server ends the session after 5 minutes by itself (server/customers.js).
 const IDLE_MS = 2 * 60 * 1000, IDLE_AFTER_ORDER_MS = 30 * 1000, TOUCH_EVERY_MS = 20 * 1000;
+// Only on a shared screen (the server says so with KIOSK_SHARED_DEVICE=1). On a customer's own phone nobody is signed out while
+// they wait for their order.
 function App() {
   const [ctx, setCtx] = useState(null);  // { businessName, locationName }
   const [catalog, setCatalog] = useState(null);
@@ -666,6 +687,7 @@ function App() {
 
   // Check if a customer session already exists (e.g. page refresh mid-session)
   useEffect(() => {
+    if (!LOCATION_ID) { setLoadErr("Scan the QR code in the café to order."); return; }
     Promise.all([
       api("/customer/context"),
       api("/customer/catalog"),
@@ -684,17 +706,18 @@ function App() {
     setMode(null); setMemberInfo(null); setCart([]); setView("entry"); setOpenOrderId(null);
   };
 
+  const shared = !!ctx?.sharedDevice;
   const touchedAt = useRef(Date.now()), lastTouch = useRef(0);
   useEffect(() => {
     const touch = () => {
       touchedAt.current = Date.now();
-      if (mode === "signed-in" && Date.now() - lastTouch.current >= TOUCH_EVERY_MS) { lastTouch.current = Date.now(); post("/customer/touch", {}).catch(() => {}); }
+      if (shared && mode === "signed-in" && Date.now() - lastTouch.current >= TOUCH_EVERY_MS) { lastTouch.current = Date.now(); post("/customer/touch", {}).catch(() => {}); }
     };
     const events = ["pointerdown", "keydown", "wheel"];
     events.forEach((e) => document.addEventListener(e, touch, true));
-    const t = setInterval(() => { if (view !== "entry" && Date.now() - touchedAt.current >= idleLimit.current) signOut(); }, 1000);
+    const t = shared && setInterval(() => { if (view !== "entry" && Date.now() - touchedAt.current >= idleLimit.current) signOut(); }, 1000);
     return () => { events.forEach((e) => document.removeEventListener(e, touch, true)); clearInterval(t); };
-  }, [view, mode]);
+  }, [view, mode, shared]);
 
   const onSignedIn = (info) => { setMode("signed-in"); setMemberInfo(info); setView("menu"); };
   const onGuest = () => { setMode("guest"); setMemberInfo(null); setView("menu"); };

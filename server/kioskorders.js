@@ -2,7 +2,7 @@
 // order; one that nobody pays within HOLD_MINUTES is cancelled by expireStale(), so unpaid orders can't tie up stock.
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
-const { notify } = require("./kitchen");
+const { notify } = require("./watchers");
 
 const HOLD_MINUTES = 15;
 const PENDING = 1, CONFIRMED = 2, CANCELLED = 6, KIOSK = 3, CASH = 1;
@@ -47,12 +47,14 @@ const gone = () => new HttpError(409, "That order was already paid or cancelled.
 
 async function pendingAt(locationId) {
   const [rows] = await pool.query(
-    `SELECT OrderID AS id, OrderNumber AS orderNumber, Total AS total, OrderDateTime AS placedAt, CustomerNote AS note,
-            TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), OrderDateTime + INTERVAL ? MINUTE) AS secondsLeft
-       FROM Orders WHERE LocationID = ? AND ChannelCode = ? AND OrderStatusCode = ? ORDER BY OrderDateTime`,
+    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.Total AS total, o.CustomerNote AS note, c.FirstName AS member,
+            TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.OrderDateTime + INTERVAL ? MINUTE) AS secondsLeft
+       FROM Orders o LEFT JOIN Customer c ON c.CustomerID = o.CustomerID
+      WHERE o.LocationID = ? AND o.ChannelCode = ? AND o.OrderStatusCode = ? ORDER BY o.OrderDateTime`,
     [HOLD_MINUTES, locationId, KIOSK, PENDING]);
   return rows.map((r) => ({ id: r.id, orderNumber: r.orderNumber, totalCents: Math.round(Number(r.total) * 100), secondsLeft: Math.max(0, r.secondsLeft),
-    name: /Name: ([^|]*)/.exec(r.note || "")?.[1].trim() || null }));
+    // a member's name is on file; a guest's is the first part of the note (only the guest name can start it, it is checked at the kiosk)
+    name: r.member || (r.note?.startsWith("Name: ") ? /^Name: ([^|]*)/.exec(r.note)[1].trim() : null) }));
 }
 
 async function pay(session, orderId) {

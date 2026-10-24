@@ -867,6 +867,8 @@ CREATE TABLE IF NOT EXISTS Customer (
     LastName VARCHAR(50),
     Email VARCHAR(255),
     Phone VARCHAR(30),
+    -- The last 10 digits of Phone however it was typed, so a phone can be looked up by index
+    PhoneDigits VARCHAR(10) GENERATED ALWAYS AS (RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 10)) STORED,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -893,7 +895,8 @@ CREATE TABLE IF NOT EXISTS Customer (
         UNIQUE (BusinessID, Email),            -- NULLs allowed; case-insensitive collation
 
     INDEX IX_Customer_BusinessID (BusinessID),
-    INDEX IX_Customer_Phone (BusinessID, Phone)
+    INDEX IX_Customer_Phone (BusinessID, Phone),
+    INDEX IX_Customer_PhoneDigits (BusinessID, PhoneDigits)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatus (
@@ -1020,7 +1023,8 @@ CREATE TABLE IF NOT EXISTS Orders (
     INDEX IX_Orders_EmployeeID (EmployeeID),
     INDEX IX_Orders_CustomerID (CustomerID),
     INDEX IX_Orders_DateTime (OrderDateTime),
-    INDEX IX_Orders_Channel_Status (ChannelCode, OrderStatusCode)
+    INDEX IX_Orders_Channel_Status (ChannelCode, OrderStatusCode),
+    INDEX IX_Orders_Location_Status (LocationID, OrderStatusCode)   -- the kitchen's open tickets, and the check for new ones
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatusHistory (

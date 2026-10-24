@@ -3,16 +3,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool, TEST_CARD } = require("./env");
+const { start, startKiosk, client, phone, pool, TEST_CARD } = require("./env");
 
-process.env.KIOSK_LOCATION_ID = "loc-campus";
-let env, maya, sam;
+let env, pub, maya, sam; // env: the staff server, pub: the public order page
 const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
 const refused = (r, pattern) => { assert.equal(r.status, 400, JSON.stringify(r.body)); assert.match(r.body.error, pattern); };
 
-test.before(async () => { env = await start(); maya = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); });
+test.before(async () => { env = await start(); pub = await startKiosk(); maya = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); });
 test.beforeEach(() => require("../../server/customers").resetOrderLimit());
-test.after(async () => { env.server.close(); await pool.end(); });
+test.after(async () => { env.server.close(); pub.server.close(); await pool.end(); });
 
 test("login: an employee number that isn't 8 digits is refused before any lookup", async () => {
   const c = client(env.base);
@@ -40,6 +39,17 @@ test("Settings: business and location phone, email, tax percentage, invisible ch
   assert.deepEqual([after.business.name, after.locations[0].phone, after.locations[0].rates], [g.business.name, l.phone, l.rates], "nothing was saved");
 });
 
+test("a business phone may be international or have an extension, and is saved as typed", async () => {
+  const g = (await maya.call("/settings/general")).body;
+  const biz = { name: g.business.name, email: g.business.email || "", phone: g.business.phone || "", includesTax: !!g.business.includesTax };
+  try {
+    for (const [typed, saved] of [["+44  20 7946 0958", "+44 20 7946 0958"], ["(312) 555-0142 ext 12", "312-555-0142 x12"]]) {
+      assert.equal((await maya.call("/settings/business", { ...biz, phone: typed })).status, 200, typed);
+      assert.equal((await maya.call("/settings/general")).body.business.phone, saved);
+    }
+  } finally { await maya.call("/settings/business", biz); }
+});
+
 test("a supplier's name, email and phone are checked", async () => {
   const s = { name: "Test Supplier Co", email: "", phone: "" };
   refused(await maya.call("/inventory/supplier", { ...s, phone: "call us" }), /US phone number/);
@@ -57,7 +67,7 @@ test("employee and member names are letters only, with every problem listed toge
 });
 
 test("kiosk: guest name and note are checked, and too-long is an error rather than a cut", async () => {
-  const c = client(env.base);
+  const c = phone(pub.base);
   const order = (extra) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Pat", items: [{ key: "a", variantId: "var-croissant", quantity: 1 }], ...extra });
   refused(await order({ guestName: "Pat 🙂" }), /name for the order/);
   refused(await order({ guestName: "R2D2" }), /name for the order/);

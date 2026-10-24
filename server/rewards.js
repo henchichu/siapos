@@ -23,7 +23,7 @@ const digitsOf = (s) => String(s || "").replace(/\D/g, "");
 // LIKE matches the text as typed: its own wildcards are escaped
 const like = (s) => `%${s.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
 // Phones are saved as 312-555-0142 but may have been typed any way before, so they are compared by their last 10 digits
-const PHONE_DIGITS = "RIGHT(REGEXP_REPLACE(c.Phone, '[^0-9]', ''), 10)";
+const PHONE_DIGITS = "c.PhoneDigits";
 const POINTS = "COALESCE((SELECT SUM(lt.PointsChange) FROM LoyaltyTransaction lt WHERE lt.LoyaltyAccountID = la.LoyaltyAccountID), 0)";
 
 // A member is a customer with a loyalty account; deactivating one switches off the account, not the customer

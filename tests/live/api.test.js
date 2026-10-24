@@ -127,3 +127,11 @@ test("a declined or bad card at the register makes no sale", async () => {
   assert.equal(await count(), before);
   assert.equal((await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } })).status, 200, "cash needs no card");
 });
+
+test("the staff side starts at the sign-in page, and the old scaffold pages are gone", async () => {
+  const at = (path) => fetch(env.base + path, { redirect: "manual" });
+  const root = await at("/");
+  assert.deepEqual([root.status, root.headers.get("location")], [302, "/login.html"]);
+  assert.equal((await at("/login.html")).status, 200);
+  for (const path of ["/index.html", "/customers.html", "/css/styles.css"]) assert.equal((await at(path)).status, 404, path);
+});

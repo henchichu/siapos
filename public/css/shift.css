@@ -1,5 +1,5 @@
 /* My shift and Team timecards. Spacing and type from the ClockIt wireframes (nodes 150:104 and 167:218) */
-.scrolls { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.scrolls { overflow-y: auto; overscroll-behavior: contain; padding-right: 16px; } /* room between the page and its scroll bar */
 .tabs { display: flex; gap: 12px; padding: 0 24px; flex: none; }
 .tab { border: 2px solid var(--ink); background: #fff; padding: 12px 20px; font-size: 16px; }
 .tab:hover:not([aria-pressed="true"]) { background: #f4f4f4; }

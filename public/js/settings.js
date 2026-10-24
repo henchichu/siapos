@@ -1,54 +1,267 @@
-function Field({label,value,onChange,type='text',required=false,maxLength}) {
- return html`<label className="field">${label}<input type=${type} value=${value??''} required=${required} maxLength=${maxLength} step=${type==='number'?'any':undefined} min=${type==='number'?'0':undefined} onChange=${e=>onChange(e.target.value)}/></label>`;
-}
-function General({data,run,busy}) {
- const [business,B]=useState({...data.business,includesTax:!!data.business.includesTax});
- const [refund,R]=useState({amount:data.business.amount??'',days:data.business.days??''});
- const [category,C]=useState({name:''});
- const [location,L]=useState(null);
- const [dirty,D]=useState(false);
- useEffect(()=>{const warn=e=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
- const submit=(path,body,done)=>async e=>{e.preventDefault();if(await run(path,body)){D(false);done?.();}};
- const change=(setter,old,key,value)=>{D(true);setter({...old,[key]:value});};
- const edit=l=>{if(location&&!window.confirm('Discard the open location form?'))return;L({...l,active:!!l.active,online:!!l.online,registers:l.registers.map(r=>({...r})),rates:{...l.rates}});};
- return html`<div>
- <div className="general-grid">
- <section><h2>Business</h2><form onSubmit=${submit('/settings/business',business)}>
- ${[['name','Business name',100],['email','Contact email',255],['phone','Contact phone',30]].map(([key,label,max])=>html`<${Field} key=${key} label=${label} value=${business[key]} maxLength=${max} required=${key==='name'} type=${key==='email'?'email':'text'} onChange=${v=>change(B,business,key,v)}/>`)}
- <label className="check"><input type="checkbox" checked=${business.includesTax} onChange=${e=>change(B,business,'includesTax',e.target.checked)}/>Menu prices already include tax</label><button className="primary" disabled=${busy}>Save business</button></form></section>
- <section><h2>Refund rules</h2><p>A refund override signer is required when a refund exceeds either limit.</p><form onSubmit=${submit('/settings/refunds',refund)}>
- <${Field} label="Over this amount" type="number" value=${refund.amount} onChange=${v=>change(R,refund,'amount',v)}/><${Field} label="Older than this many days" type="number" value=${refund.days} onChange=${v=>change(R,refund,'days',v)}/><p className="muted">Leave a limit blank to disable that limit.</p><button className="primary" disabled=${busy}>Save refund rules</button></form></section>
- <section><h2>Categories</h2><table><thead><tr><th>Category</th><th>Actions</th></tr></thead><tbody>${data.categories.map(c=>html`<tr key=${c.id}><td>${c.name}${!c.active&&' (inactive)'}</td><td><button disabled=${busy} onClick=${()=>C({...c,active:!!c.active})}>Rename</button><button disabled=${busy} onClick=${()=>window.confirm(`${c.active?'Deactivate':'Reactivate'} ${c.name}?`)&&run('/settings/categories',{...c,active:!c.active})}>${c.active?'Deactivate':'Reactivate'}</button></td></tr>`)}</tbody></table>
- <form onSubmit=${submit('/settings/categories',category,()=>C({name:''}))}><${Field} label=${category.id?'Rename category':'New category'} value=${category.name} required maxLength="100" onChange=${v=>change(C,category,'name',v)}/><div className="actions"><button disabled=${busy}>${category.id?'Save':'Add'}</button>${category.id&&html`<button type="button" onClick=${()=>C({name:''})}>Cancel</button>`}</div></form></section>
- </div>
- <section className="location-list"><div className="heading"><h2>Locations</h2><button disabled=${busy} className="primary" onClick=${()=>edit({name:'',address:'',phone:'',timeZone:'America/Chicago',active:true,online:false,rates:{},registers:[{name:'Register 1'}]})}>Add location</button></div>
- <table><thead><tr><th>Location</th><th>Address</th><th>Time zone</th><th>Tax rates</th><th>Registers</th><th>Online orders</th><th>Actions</th></tr></thead><tbody>${data.locations.map(l=>html`<tr key=${l.id}><td>${l.name}${!l.active&&' (inactive)'}</td><td>${l.address}</td><td>${l.timeZone}</td><td>${data.taxes.map(t=>html`<div key=${t.id}>${t.name}: ${l.rates[t.id]??'Not set'}%</div>`)}</td><td>${l.registers.length}</td><td>${l.online?'On':'Off'}</td><td><button disabled=${busy} onClick=${()=>edit(l)}>Edit</button><button disabled=${busy} onClick=${()=>window.confirm(`${l.active?'Deactivate':'Reactivate'} ${l.name}?`)&&run('/settings/locations',{...l,active:!l.active,online:!!l.online})}>${l.active?'Deactivate':'Reactivate'}</button></td></tr>`)}</tbody></table></section>
- ${location&&html`<section className="editor"><h2>${location.id?'Edit':'Add'} location</h2><form onSubmit=${submit('/settings/locations',location,()=>L(null))}><div className="general-grid">
- <div>${[['name','Location name',100],['address','Address',255],['phone','Phone',30],['timeZone','IANA time zone',64]].map(([k,label,max])=>html`<${Field} key=${k} label=${label} value=${location[k]} maxLength=${max} required=${k==='name'||k==='timeZone'} onChange=${v=>change(L,location,k,v)}/>`)}<label className="check"><input type="checkbox" checked=${location.online} onChange=${e=>change(L,location,'online',e.target.checked)}/>Accept online orders</label></div>
- <div><h3>Tax rates (%)</h3>${data.taxes.map(t=>html`<${Field} key=${t.id} label=${t.name} type="number" required value=${location.rates[t.id]??''} onChange=${v=>change(L,location,'rates',{...location.rates,[t.id]:v})}/>`)}<p className="muted">Enter percentages, such as 8.25. Use 0 for exempt.</p></div>
- <div><h3>Registers</h3>${location.registers.map((r,i)=>html`<div className="register-row" key=${r.id||i}><${Field} label=${`Register ${i+1}`} value=${r.name} required maxLength="100" onChange=${v=>change(L,location,'registers',location.registers.map((g,j)=>i===j?{...g,name:v}:g))}/>${!r.id&&html`<button type="button" onClick=${()=>change(L,location,'registers',location.registers.filter((_,j)=>i!==j))}>Remove</button>`}</div>`)}<button type="button" onClick=${()=>change(L,location,'registers',[...location.registers,{name:''}])}>Add register</button></div></div>
- <div className="actions"><button className="primary" disabled=${busy}>Save location</button><button type="button" onClick=${()=>window.confirm('Discard this location form?')&&L(null)}>Cancel</button></div></form></section>`}
- </div>`;
-}
-function Roles({data,run,busy}) {
- const [form,F]=useState(null),[dirty,D]=useState(false);
- useEffect(()=>{const warn=e=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
- const edit=r=>{if(dirty&&!window.confirm('Discard unsaved role changes?'))return;F({...r,active:!!r.active,permissions:[...r.permissions]});D(false);};
- const set=(k,v)=>{F({...form,[k]:v});D(true);};
- const groups=[...new Set(data.permissions.map(p=>p.groupName))];
- return html`<div className="role-grid"><section><div className="heading"><h2>Roles</h2><button disabled=${busy} className="primary" onClick=${()=>edit({name:'',opensTo:'SHIFT',active:true,permissions:[]})}>Add role</button></div><table><thead><tr><th>Role</th><th>Opens to</th><th>Staff</th><th>Actions</th></tr></thead><tbody>${data.roles.map(r=>html`<tr key=${r.id}><td>${r.name}${!r.active&&' (inactive)'}</td><td>${r.opensTo}</td><td>${r.staff}</td><td>${r.owner?'Every permission, locked':html`<div><button disabled=${busy} onClick=${()=>edit(r)}>Edit</button><button disabled=${busy} onClick=${()=>window.confirm(`${r.active?'Deactivate':'Reactivate'} ${r.name}? Staff using this role will be signed out.`)&&run('/settings/roles',{...r,active:!r.active})}>${r.active?'Deactivate':'Reactivate'}</button></div>`}</td></tr>`)}</tbody></table><p className="muted">Only owners change pay rates, use owner-only location views, and manage senior roles. Non-owners remain limited to their assigned locations.</p></section>
- <section>${form?html`<div><h2>${form.id?'Edit':'Add'} role</h2><form onSubmit=${async e=>{e.preventDefault();if(await run('/settings/roles',form)){F(null);D(false);}}}><${Field} label="Role name" required maxLength="50" value=${form.name} onChange=${v=>set('name',v)}/><label className="field">Opens to after sign-in<select value=${form.opensTo} onChange=${e=>set('opensTo',e.target.value)}><option value="SHIFT">My shift</option>${form.permissions.includes(1)&&html`<option value="REGISTER">Register</option>`}${form.permissions.includes(5)&&html`<option value="KITCHEN">Kitchen</option>`}</select></label><h3>What this role can do</h3><div className="permissions">${groups.map(g=>html`<section key=${g}><h3>${g}</h3>${data.permissions.filter(p=>p.groupName===g).map(p=>html`<label className="check" key=${p.code}><input type="checkbox" checked=${form.permissions.includes(p.code)} onChange=${e=>{const permissions=e.target.checked?[...form.permissions,p.code]:form.permissions.filter(c=>c!==p.code);F({...form,permissions,opensTo:form.opensTo==='REGISTER'&&!permissions.includes(1)||form.opensTo==='KITCHEN'&&!permissions.includes(5)?'SHIFT':form.opensTo});D(true);}}/>${p.name}</label>`)}</section>`)}</div><p className="muted">Saving signs affected staff out. Reassign staff before deactivating their role.</p><div className="actions"><button className="primary" disabled=${busy}>Save role</button><button type="button" onClick=${()=>{if(!dirty||window.confirm('Discard unsaved role changes?')){F(null);D(false);}}}>Cancel</button></div></form></div>`:html`<p>Select a role to edit, or add a new role.</p>`}</section></div>`;
-}
-function App(){
- const me=useMe(),[access,A]=useState(null),[tab,T]=useState('general'),[data,S]=useState(null),[note,N]=useState(null),[busy,B]=useState(false);
- useEffect(()=>{api('/settings/access').then(a=>{A(a);T(a.general?'general':'roles');}).catch(e=>N({error:true,text:e.message}));},[]);
- const load=useCallback(()=>api(`/settings/${tab}`).then(S),[tab]);
- useEffect(()=>{let cancelled=false;if(access){S(null);api(`/settings/${tab}`).then(d=>{if(!cancelled)S(d);}).catch(e=>{if(!cancelled)N({error:true,text:e.message});});}return()=>{cancelled=true;};},[access,tab]);
- const run=async(path,body)=>{B(true);N(null);try{const out=await api(path,body);await load();N({text:out.message});return true;}catch(e){N({error:true,text:e.message});return false;}finally{B(false);}};
- return html`<div className="app"><${Sidebar} me=${me} current="Settings"/><main className="settings"><div className="tabs" role="tablist" aria-label="Settings">${[['general','General'],['roles','Roles and permissions']].filter(([k])=>access?.[k]).map(([k,label])=>html`<button key=${k} role="tab" aria-selected=${tab===k} disabled=${busy} onClick=${()=>{if(k!==tab&&window.confirm('Switch tabs? Unsaved form changes will be discarded.')){S(null);T(k);N(null);}}}>${label}</button>`)}</div>${note&&html`<p className=${`note ${note.error?'error':''}`} role=${note.error?'alert':'status'}>${note.text}</p>`}${data?(tab==='general'?html`<${General} data=${data} run=${run} busy=${busy}/>`:html`<${Roles} data=${data} run=${run} busy=${busy}/>`):html`<p>Loading settings…</p>`}</main></div>`;
-}
-ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+// Settings: General (business, refund rules, categories, locations) and Roles and permissions. A form to add or edit
+// opens in a column beside the list only while it is needed, like the other pages.
+const TABS = [["general", "General"], ["roles", "Roles and permissions"]];
+// The browser's own list of IANA time zones (the server checks the choice again). An old browser without it gets the US zones.
+const ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone")
+  : ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
+const NEW_CATEGORY = { name: "" };
+const NEW_LOCATION = { name: "", address: "", phone: "", timeZone: "America/Chicago", active: true, online: false, rates: {}, registers: [{ name: "Register 1" }] };
+const NEW_ROLE = { name: "", opensTo: "SHIFT", active: true, permissions: [] };
 
+function Field({ label, value, onChange, type = "text", ...rest }) {
+  return html`<label className="pf"><b>${label}</b>
+    <input className="field" type=${type} value=${value ?? ""} step=${type === "number" ? "any" : undefined} min=${type === "number" ? "0" : undefined}
+      onChange=${(e) => onChange(e.target.value)} ...${rest} /></label>`;
+}
 
+const Tag = ({ off }) => (off ? html`<span className="tag">inactive</span>` : null);
 
+// ---- General --------------------------------------------------------------------------------------------------------
 
+function CategoryForm({ form, set, msg, busy, onSave, onClose }) {
+  const title = form.id ? "Rename category" : "Add category";
+  return html`<aside className="pform pside" aria-label=${title}>
+    <h2>${title}</h2>
+    <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
+      <${Field} label="Category name" required maxLength="100" value=${form.name} onChange=${(v) => set({ name: v })} />
+      <${Message} msg=${msg} dashed />
+      <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save</button>
+        <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
+    </form>
+  </aside>`;
+}
+
+function LocationForm({ data, form, set, msg, busy, onSave, onClose }) {
+  const title = form.id ? "Edit location" : "Add location";
+  const setRegisters = (registers) => set({ registers });
+  return html`<aside className="pform pside wide" aria-label=${title}>
+    <h2>${title}</h2>
+    <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
+      <${Field} label="Location name" required maxLength="100" value=${form.name} onChange=${(v) => set({ name: v })} />
+      <${Field} label="Address" maxLength="255" value=${form.address} onChange=${(v) => set({ address: v })} />
+      <${Field} label="Phone" maxLength="30" value=${form.phone} onChange=${(v) => set({ phone: v })} />
+      <label className="pf"><b>IANA time zone</b>
+        <select className="select" required value=${form.timeZone} onChange=${(e) => set({ timeZone: e.target.value })}>
+          ${(ZONES.includes(form.timeZone) ? ZONES : [form.timeZone, ...ZONES]).map((z) => html`<option key=${z} value=${z}>${z}</option>`)}</select></label>
+      <label className="check"><input type="checkbox" checked=${form.online} onChange=${(e) => set({ online: e.target.checked })} /> Accept online orders</label>
+      <h3>Tax rates (%)</h3>
+      ${data.taxes.map((t) => html`<${Field} key=${t.id} label=${t.name} type="number" required value=${form.rates[t.id] ?? ""}
+        onChange=${(v) => set({ rates: { ...form.rates, [t.id]: v } })} />`)}
+      <span className="sub">Enter percentages, such as 8.25. Use 0 for exempt.</span>
+      <h3>Registers</h3>
+      ${form.registers.map((r, i) => html`<div className="regrow" key=${r.id || i}>
+        <${Field} label=${`Register ${i + 1}`} required maxLength="100" value=${r.name}
+          onChange=${(v) => setRegisters(form.registers.map((g, j) => (i === j ? { ...g, name: v } : g)))} />
+        ${!r.id && html`<button className="pbtn outline" type="button" onClick=${() => setRegisters(form.registers.filter((_, j) => i !== j))}>Remove</button>`}</div>`)}
+      <div><button className="pbtn outline" type="button" onClick=${() => setRegisters([...form.registers, { name: "" }])}>Add register</button></div>
+      <${Message} msg=${msg} dashed />
+      <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save location</button>
+        <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
+    </form>
+  </aside>`;
+}
+
+function General({ data, run, fail, busy, ask, markDirty, markClean }) {
+  const [business, setBusiness] = useState({ ...data.business, includesTax: !!data.business.includesTax });
+  const [refund, setRefund] = useState({ amount: data.business.amount ?? "", days: data.business.days ?? "" });
+  const [panel, setPanel] = useState(null); // null: the form column is closed; else { kind: "category" | "location", form }
+  const [msg, setMsg] = useState(null); // the open form's errors
+
+  const change = (setter, old) => (patch) => { markDirty(); setter({ ...old, ...patch }); };
+  const saveInline = (path, body) => async (e) => { e.preventDefault(); const err = await run(path, body); if (err) fail(err); else markClean(); };
+  const open = (kind, form) => { setPanel({ kind, form }); setMsg(null); };
+  const close = () => { setPanel(null); setMsg(null); markClean(); };
+  const setForm = (patch) => { markDirty(); setPanel({ ...panel, form: { ...panel.form, ...patch } }); };
+  const savePanel = async (path) => { const err = await run(path, panel.form); if (err) setMsg({ kind: "error", text: err }); else close(); };
+  const toggle = (what, path, row) => ask({
+    title: `${row.active ? "Deactivate" : "Reactivate"} ${row.name}?`, text: what, label: row.active ? "Deactivate" : "Reactivate",
+    onYes: async () => { const err = await run(path, { ...row, active: !row.active, online: !!row.online }); if (err) fail(err); },
+  });
+  const editing = panel?.form.id;
+
+  return html`<div className="staff">
+    <section className="pview">
+      <div className="stack">
+        <h3>Business</h3>
+        <form className="sform" onSubmit=${saveInline("/settings/business", business)}>
+          <div className="sgrid">
+            <${Field} label="Business name" required maxLength="100" value=${business.name} onChange=${(v) => change(setBusiness, business)({ name: v })} />
+            <${Field} label="Contact email" type="email" maxLength="255" value=${business.email} onChange=${(v) => change(setBusiness, business)({ email: v })} />
+            <${Field} label="Contact phone" maxLength="30" value=${business.phone} onChange=${(v) => change(setBusiness, business)({ phone: v })} />
+          </div>
+          <label className="check"><input type="checkbox" checked=${business.includesTax} onChange=${(e) => change(setBusiness, business)({ includesTax: e.target.checked })} /> Menu prices already include tax</label>
+          <div><button className="pbtn" type="submit" disabled=${busy}>Save business</button></div>
+        </form>
+      </div>
+
+      <div className="stack">
+        <h3>Refund rules</h3>
+        <form className="sform" onSubmit=${saveInline("/settings/refunds", refund)}>
+          <span className="sub">A refund override signer is required when a refund exceeds either limit. Leave a limit blank to disable it.</span>
+          <div className="sgrid">
+            <${Field} label="Over this amount" type="number" value=${refund.amount} onChange=${(v) => change(setRefund, refund)({ amount: v })} />
+            <${Field} label="Older than this many days" type="number" value=${refund.days} onChange=${(v) => change(setRefund, refund)({ days: v })} />
+          </div>
+          <div><button className="pbtn" type="submit" disabled=${busy}>Save refund rules</button></div>
+        </form>
+      </div>
+
+      <div className="stack">
+        <header className="phead"><h3>Categories</h3><button className="pbtn" onClick=${() => open("category", NEW_CATEGORY)}>Add category</button></header>
+        <table className="table mg" aria-label="Categories">
+          <colgroup><col /><col style=${{ width: 240 }} /></colgroup>
+          <thead><tr><th>Category</th><th>Actions</th></tr></thead>
+          <tbody>${data.categories.map((c) => html`<tr key=${c.id} className=${`${panel?.kind === "category" && editing === c.id ? "sel" : ""} ${c.active ? "" : "off"}`}>
+            <td>${c.name}<${Tag} off=${!c.active} /></td>
+            <td><div className="acts">
+              <button className="act" disabled=${busy} onClick=${() => open("category", { ...c, active: !!c.active })}>Rename</button>
+              <button className="act" disabled=${busy} onClick=${() => toggle("Products in it keep their category.", "/settings/categories", c)}>${c.active ? "Deactivate" : "Reactivate"}</button>
+            </div></td></tr>`)}</tbody>
+        </table>
+      </div>
+
+      <div className="stack">
+        <header className="phead"><h3>Locations</h3><button className="pbtn" onClick=${() => open("location", NEW_LOCATION)}>Add location</button></header>
+        <table className="table mg" aria-label="Locations">
+          <colgroup><col /><col style=${{ width: 140 }} /><col style=${{ width: 230 }} /><col style=${{ width: 90 }} /><col style=${{ width: 110 }} /><col style=${{ width: 240 }} /></colgroup>
+          <thead><tr><th>Location</th><th>Time zone</th><th>Tax rates</th><th>Registers</th><th>Online orders</th><th>Actions</th></tr></thead>
+          <tbody>${data.locations.map((l) => html`<tr key=${l.id} className=${`${panel?.kind === "location" && editing === l.id ? "sel" : ""} ${l.active ? "" : "off"}`}>
+            <td>${l.name}<${Tag} off=${!l.active} /><span className="sub">${l.address}</span></td>
+            <td>${l.timeZone}</td>
+            <td>${data.taxes.map((t) => html`<div key=${t.id}>${t.name}: ${l.rates[t.id] ?? "Not set"}%</div>`)}</td>
+            <td>${l.registers.length}</td><td>${l.online ? "On" : "Off"}</td>
+            <td><div className="acts">
+              <button className="act" disabled=${busy} onClick=${() => open("location", { ...l, active: !!l.active, online: !!l.online, registers: l.registers.map((r) => ({ ...r })), rates: { ...l.rates } })}>Edit</button>
+              <button className="act" disabled=${busy} onClick=${() => toggle("Staff must be reassigned first.", "/settings/locations", l)}>${l.active ? "Deactivate" : "Reactivate"}</button>
+            </div></td></tr>`)}</tbody>
+        </table>
+      </div>
+    </section>
+    ${panel?.kind === "category" && html`<${CategoryForm} form=${panel.form} set=${setForm} msg=${msg} busy=${busy} onSave=${() => savePanel("/settings/categories")} onClose=${close} />`}
+    ${panel?.kind === "location" && html`<${LocationForm} data=${data} form=${panel.form} set=${setForm} msg=${msg} busy=${busy} onSave=${() => savePanel("/settings/locations")} onClose=${close} />`}
+  </div>`;
+}
+
+// ---- Roles and permissions ------------------------------------------------------------------------------------------
+
+function RoleForm({ data, form, setForm, msg, busy, onSave, onClose }) {
+  const title = form.id ? "Edit role" : "Add role";
+  const groups = [...new Set(data.permissions.map((p) => p.groupName))];
+  // a role opens to the Register or Kitchen only if it may use them
+  const toggle = (code, on) => {
+    const permissions = on ? [...form.permissions, code] : form.permissions.filter((c) => c !== code);
+    const lost = (form.opensTo === "REGISTER" && !permissions.includes(1)) || (form.opensTo === "KITCHEN" && !permissions.includes(5));
+    setForm({ permissions, opensTo: lost ? "SHIFT" : form.opensTo });
+  };
+  return html`<aside className="pform pside wide" aria-label=${title}>
+    <h2>${title}</h2>
+    <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
+      <${Field} label="Role name" required maxLength="50" value=${form.name} onChange=${(v) => setForm({ name: v })} />
+      <label className="pf"><b>Opens to after sign-in</b>
+        <select className="select" value=${form.opensTo} onChange=${(e) => setForm({ opensTo: e.target.value })}>
+          <option value="SHIFT">My shift</option>
+          ${form.permissions.includes(1) && html`<option value="REGISTER">Register</option>`}
+          ${form.permissions.includes(5) && html`<option value="KITCHEN">Kitchen</option>`}</select></label>
+      <h3>What this role can do</h3>
+      <div className="permissions">${groups.map((g) => html`<section key=${g}><h3>${g}</h3>
+        ${data.permissions.filter((p) => p.groupName === g).map((p) => html`<label className="check" key=${p.code}>
+          <input type="checkbox" checked=${form.permissions.includes(p.code)} onChange=${(e) => toggle(p.code, e.target.checked)} /> ${p.name}</label>`)}</section>`)}</div>
+      <span className="sub">Saving signs affected staff out. Reassign staff before deactivating their role.</span>
+      <${Message} msg=${msg} dashed />
+      <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save role</button>
+        <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
+    </form>
+  </aside>`;
+}
+
+function Roles({ data, run, fail, busy, ask, markDirty, markClean }) {
+  const [form, setForm] = useState(null); // null: the form column is closed
+  const [msg, setMsg] = useState(null);
+
+  const open = (r) => { setForm(r); setMsg(null); };
+  const close = () => { setForm(null); setMsg(null); markClean(); };
+  const set = (patch) => { markDirty(); setForm({ ...form, ...patch }); };
+  const save = async () => { const err = await run("/settings/roles", form); if (err) setMsg({ kind: "error", text: err }); else close(); };
+  const toggle = (r) => ask({
+    title: `${r.active ? "Deactivate" : "Reactivate"} ${r.name}?`, text: "Staff using this role will be signed out.", label: r.active ? "Deactivate" : "Reactivate",
+    onYes: async () => { const err = await run("/settings/roles", { ...r, active: !r.active }); if (err) fail(err); },
+  });
+
+  return html`<div className="staff">
+    <section className="pview">
+      <header className="phead"><h2>Roles</h2><button className="pbtn" onClick=${() => open(NEW_ROLE)}>Add role</button></header>
+      <table className="table mg" aria-label="Roles">
+        <colgroup><col /><col style=${{ width: 90 }} /><col style=${{ width: 240 }} /></colgroup>
+        <thead><tr><th>Role</th><th>Staff</th><th>Actions</th></tr></thead>
+        <tbody>${data.roles.map((r) => html`<tr key=${r.id} className=${`${form?.id === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
+          <td>${r.name}<${Tag} off=${!r.active} /></td><td>${r.staff}</td>
+          <td>${r.owner ? "Every permission, locked" : html`<div className="acts">
+            <button className="act" disabled=${busy} onClick=${() => open({ ...r, active: !!r.active, permissions: [...r.permissions] })}>Edit</button>
+            <button className="act" disabled=${busy} onClick=${() => toggle(r)}>${r.active ? "Deactivate" : "Reactivate"}</button></div>`}</td></tr>`)}</tbody>
+      </table>
+      <span className="sub">Only owners change pay rates, use owner-only location views, and manage senior roles. Non-owners remain limited to their assigned locations.</span>
+    </section>
+    ${form && html`<${RoleForm} data=${data} form=${form} setForm=${set} msg=${msg} busy=${busy} onSave=${save} onClose=${close} />`}
+  </div>`;
+}
+
+// ---- the page -------------------------------------------------------------------------------------------------------
+
+function App() {
+  const me = useMe();
+  const [access, setAccess] = useState(null);
+  const [tab, setTab] = useState("general");
+  const [data, setData] = useState(null);
+  const [note, setNote] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(null);
+  const dirty = useRef(false); // a form has edits that aren't saved
+  const markDirty = () => { dirty.current = true; };
+  const markClean = () => { dirty.current = false; };
+
+  useEffect(() => {
+    const warn = (e) => { if (dirty.current) { e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+  useEffect(() => { api("/settings/access").then((a) => { setAccess(a); setTab(a.general ? "general" : "roles"); }).catch((e) => setNote({ kind: "error", text: e.message })); }, []);
+  const load = useCallback(() => api(`/settings/${tab}`).then(setData), [tab]);
+  useEffect(() => {
+    let cancelled = false;
+    if (access) { setData(null); api(`/settings/${tab}`).then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setNote({ kind: "error", text: e.message }); }); }
+    return () => { cancelled = true; };
+  }, [access, tab]);
+
+  // Saves, reloads and says so. Resolves to the error's text, or null when it worked.
+  const run = async (path, body) => {
+    setBusy(true); setNote(null);
+    try { const out = await api(path, body); await load(); setNote({ kind: "ok", text: out.message }); return null; }
+    catch (e) { return e.message; }
+    finally { setBusy(false); }
+  };
+  const fail = (text) => setNote({ kind: "error", text });
+  const ask = (c) => setConfirm(c);
+  const pick = (k) => {
+    if (k === tab) return;
+    const go = () => { markClean(); setNote(null); setData(null); setTab(k); }; // no data until the new tab's arrives: it has another shape
+    if (dirty.current) ask({ title: "Switch tabs?", text: "Changes you haven't saved will be discarded.", label: "Switch", onYes: go });
+    else go();
+  };
+  const shared = { run, fail, busy, ask, markDirty, markClean };
+
+  return html`<div className="app kitchen">
+    <${Sidebar} me=${me} current="Settings" />
+    <section className="main scrolls" aria-label="Settings">
+      <header className="heading"><h2>Settings</h2></header>
+      <div className="tabs" role="group" aria-label="Settings">
+        ${TABS.filter(([k]) => access?.[k]).map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} disabled=${busy} onClick=${() => pick(k)}>${label}</button>`)}</div>
+      <${Message} msg=${note} />
+      ${data ? (tab === "general" ? html`<${General} data=${data} ...${shared} />` : html`<${Roles} data=${data} ...${shared} />`)
+        : !note?.kind || note.kind !== "error" ? html`<p className="success">Loading…</p>` : null}
+    </section>
+    ${confirm && html`<${Confirm} title=${confirm.title} text=${confirm.text} label=${confirm.label}
+      onNo=${() => setConfirm(null)} onYes=${() => { const c = confirm; setConfirm(null); c.onYes(); }} />`}
+  </div>`;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

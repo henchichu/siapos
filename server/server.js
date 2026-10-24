@@ -17,7 +17,8 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-// The customer iPad opens this URL; /customer redirects to the page
+// The staff side always starts at the sign-in page; the customer iPad opens /customer
+app.get("/", (req, res) => res.redirect("/login.html"));
 app.get("/customer", (req, res) => res.redirect("/customer.html"));
 
 app.use(require("./vendor"));

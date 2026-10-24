@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool, TEST_CARD } = require("./env");
+const { start, client, pool, topUp, TEST_CARD } = require("./env");
 
 process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
 let env, wasOpen;
@@ -12,6 +12,7 @@ const row = async (id) => (await pool.query("SELECT OrderStatusCode AS status, C
 test.beforeEach(() => require("../../server/customers").resetOrderLimit()); // the limit is per minute; each test starts clear
 test.before(async () => {
   env = await start();
+  await topUp("stk-caramel", 2000); // the test order's caramel americano takes 15 syrup a cup, so a few runs empty the shelf
   [[{ wasOpen }]] = await pool.query("SELECT AcceptsOnlineOrders AS wasOpen FROM Location WHERE LocationID = 'loc-campus'");
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus'");
 });
@@ -148,7 +149,8 @@ test("customer sessions cannot use the employee register", async () => {
 
 test("failed stock deduction rolls the entire checkout back", async () => {
   const [[before]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
-  const r = await order(client(env.base), { items: [{ ...LINE, quantity: 99 }] });
+  // more caramel americanos than any shelf holds (50 lines of 99), so the stock check fails whatever the test top-ups left
+  const r = await order(client(env.base), { items: Array.from({ length: 50 }, (_, i) => ({ ...LINE, key: `k${i}`, quantity: 99 })) });
   assert.notEqual(r.status, 200);
   const [[after]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   assert.equal(after.n, before.n);

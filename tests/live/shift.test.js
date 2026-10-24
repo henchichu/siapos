@@ -21,7 +21,7 @@ test("the menu and the pages a role may open follow its role, fixed at sign-in",
   assert.deepEqual((await jordan.call("/session")).body.nav, menus.jordan);
   assert.deepEqual((await sam.call("/session")).body.nav, menus.sam);
   assert.deepEqual((await leo.call("/session")).body.nav, menus.leo);
-  assert.deepEqual((await maya.call("/session")).body.nav, menus.leo);
+  assert.deepEqual((await maya.call("/session")).body.nav, [...menus.leo.slice(0, -1), "Settings", "My shift"], "an owner also gets Settings");
 
   const blocked = await page(jordan, "/register.html");
   assert.equal(blocked.status, 302);

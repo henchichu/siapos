@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool } = require("./env");
+const { start, pool, topUp } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -39,6 +39,7 @@ function kiosk(base) {
 
 (async () => {
   const { server, base } = await start();
+  await topUp("stk-caramel", 2000); // a caramel americano takes 15 syrup, so a few runs empty the shelf
   const [[{ open }]] = await pool.query("SELECT AcceptsOnlineOrders AS open FROM Location WHERE LocationID = 'loc-campus'");
   await pool.query("UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus'");
   try {

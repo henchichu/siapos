@@ -28,9 +28,9 @@ services:
   pos-app:
     build: .
     ports:
-      - "3000:3000"       # the staff side: the tills and the owner (over an SSH tunnel when away)
+      - "127.0.0.1:3000:3000"   # the staff side: this machine only; reach it from elsewhere over an SSH tunnel
     expose:
-      - "3001"            # the public kiosk side, reachable only by other containers (the ngrok service below)
+      - "3001"            # the public kiosk side, reachable only by other containers (the caddy service below)
     environment:
       PORT: 3000
       DB_HOST: mysql-db
@@ -43,6 +43,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
       TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
       KIOSK_LOCATION_ID: ${KIOSK_LOCATION_ID:-}   # the café the customer iPad orders at; required with more than one café
+      KIOSK_PHONE_SIGNIN: ${KIOSK_PHONE_SIGNIN:-}   # 1 lets customers sign in by phone on the public address: demos with made-up customers only
     volumes:
       - uploads:/app/uploads
     secrets:
@@ -52,22 +53,27 @@ services:
       mysql-db:
         condition: service_healthy
 
-  # The only way in from the internet: ngrok forwards to the kiosk side only. Off by default:
-  #   put NGROK_AUTHTOKEN and NGROK_DOMAIN (your free static domain) in a .env file, then
-  #   docker compose --profile tunnel up -d
-  ngrok:
-    image: ngrok/ngrok:latest
-    profiles: ["tunnel"]
+  # The only way in from the internet: Caddy takes HTTPS on 80 and 443 (it gets its certificate for KIOSK_HOST by itself)
+  # and forwards to the kiosk side only. Off by default; on the server: docker compose --profile public up -d
+  caddy:
+    image: caddy:2
+    profiles: ["public"]
     restart: unless-stopped
-    command: ["http", "pos-app:3001", "--url=${NGROK_DOMAIN:-}"]   # older ngrok versions call --url --domain
+    ports:
+      - "80:80"
+      - "443:443"
     environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      KIOSK_HOST: ${KIOSK_HOST:-localhost}   # the public hostname; with localhost Caddy makes its own certificate
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
     depends_on:
       - pos-app
 
 volumes:
   mysql_data:
   uploads:
+  caddy_data:
 
 secrets:
   db_root_password:

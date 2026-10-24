@@ -1,0 +1,5 @@
+# The public HTTPS front for the customer kiosk (docker compose --profile public). It forwards to the kiosk-only
+# server on port 3001, so the staff side is not reachable through it. KIOSK_HOST is the public hostname.
+{$KIOSK_HOST} {
+	reverse_proxy pos-app:3001
+}

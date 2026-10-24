@@ -22,10 +22,10 @@ const SESSION_MS = 2 * 60 * 60 * 1000;
 const IDLE_MS = 5 * 60 * 1000;
 const tokenOf = (req) => /(?:^|;\s*)customer_session=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
 
-function signIn(res, customerId) {
+function signIn(req, res, customerId) {
   const token = crypto.randomBytes(32).toString("hex");
   sessions.set(token, { customerId, expires: Date.now() + SESSION_MS, active: Date.now() });
-  res.cookie("customer_session", token, { httpOnly: true, sameSite: "strict", maxAge: SESSION_MS, secure: process.env.COOKIE_SECURE === "1" });
+  res.cookie("customer_session", token, { httpOnly: true, sameSite: "strict", maxAge: SESSION_MS, secure: process.env.COOKIE_SECURE === "1" || req.secure }); // req.secure: behind the HTTPS proxy
 }
 
 function currentCustomer(req) {
@@ -67,7 +67,7 @@ const statusLabel = (description) => CUSTOMER_STATUS[description] || label(descr
 
 router.get("/customer/context", async (req, res) => {
   const k = await kiosk();
-  res.json({ businessName: k.businessName, locationName: k.locationName, phoneSignIn: !req.publicKiosk });
+  res.json({ businessName: k.businessName, locationName: k.locationName, phoneSignIn: !req.noPhoneSignIn });
 });
 
 // A product's picture, for the kiosk page (the staff route needs a staff sign-in). Only products on sale here.
@@ -124,7 +124,7 @@ router.get("/customer/catalog", async (req, res) => {
 // Phone-number sign-in. Only the phone is needed, so the limiter below stops guessing numbers.
 const loginLimit = require("./ratelimit")(20, 60 * 1000);
 router.post("/customer/login", loginLimit, async (req, res) => {
-  if (req.publicKiosk) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
+  if (req.noPhoneSignIn) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
   const k = await kiosk();
   const digits = String(req.body.phone || "").replace(/\D/g, "").slice(-10);
   if (digits.length !== 10) return res.status(400).json({ error: "Enter a 10-digit phone number." });
@@ -134,7 +134,7 @@ router.post("/customer/login", loginLimit, async (req, res) => {
       ORDER BY c.CustomerID LIMIT 1`,
     [k.BusinessID, digits]);
   if (!c) return res.status(404).json({ error: "We don't have an account for that number. Continue as a guest, or ask a team member." });
-  signIn(res, c.id);
+  signIn(req, res, c.id);
   res.json(await me(c.id));
 });
 

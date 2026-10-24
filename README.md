@@ -36,9 +36,18 @@ The demo gift card `dev-seed-card-0001` only matches the dev secret `dev-giftcar
 
 The customer iPad opens `/customer` (no staff sign-in): browse the menu, sign in by phone number or continue as a guest, and place an order that waits for payment at the counter. Set `KIOSK_LOCATION_ID` to the café's id (`docker-compose.dev.yaml` sets the demo café's); with more than one café and no id, the kiosk refuses to guess. A customer is signed out after 2 minutes without a touch (30 seconds after placing an order), and the server ends the session after 5. Card, Apple Pay and Google Pay are mock-paid on the kiosk (see Mock payments), and the order goes straight to the kitchen. A Cash order waits for the counter, and nothing on the staff side takes that payment yet.
 
-## Public kiosk address (ngrok)
+## Public kiosk address (Azure VM)
 
-The app runs two servers. Port 3000 is the staff side (the tills, and the kiosk iPad on the café network). Port 3001 (`server/kiosk.js`) is the public side: it serves only the kiosk page and `/api/customer/*`, so the staff pages and API don't exist there. Phone sign-in is off on it, because a phone number alone isn't enough to protect someone's order history on the internet, so customers order as guests. Port 3001 isn't published to the host: only the `ngrok` service can reach it. To open it to the internet, put `NGROK_AUTHTOKEN` and `NGROK_DOMAIN` (your static ngrok domain) in a `.env` file next to `docker-compose.yaml` and run `docker compose --profile tunnel up -d`. Keep port 3000 off the internet; reach it from elsewhere over an SSH tunnel (`ssh -L 3000:localhost:3000 <host>`). Anyone with the address can still place unpaid cash orders, which take stock (rate-limited to 20 a minute), so share it only for testing.
+The app runs two servers. Port 3000 is the staff side (the tills and the owner); it is published to the machine itself only (`127.0.0.1`), so reach it from elsewhere over an SSH tunnel: `ssh -L 3000:localhost:3000 <user>@<host>`, then open `http://localhost:3000`. Port 3001 (`server/kiosk.js`) is the public side: it serves only the kiosk page and `/api/customer/*`, so the staff pages and API don't exist there. Phone sign-in is off on it by default, because a phone number alone isn't enough to protect someone's order history on the internet, so customers order as guests. `KIOSK_PHONE_SIGNIN=1` turns it on for a demo with made-up customers; `docker-compose.dev.yaml` sets it, so a demo VM started with the dev file offers phone sign-in, and a real deployment (no dev file) does not. Port 3001 isn't published to the host either: only the `caddy` service can reach it.
+
+To put the kiosk on the internet from a VM (Azure or any other):
+1. Create the VM (Ubuntu LTS, at least 2 GB of memory, SSH key login) with a fixed public IP and a name for it: your own domain pointed at the IP, or the cloud's DNS label. In its network rules allow port 22 only from your own address, ports 80 and 443 from anywhere, and nothing else.
+2. Install Docker and the Compose plugin, clone this repo, and do the Setup steps above (the secret files).
+3. Put `KIOSK_HOST=<your public hostname>` and `KIOSK_LOCATION_ID=<the café's id>` in a `.env` file next to `docker-compose.yaml`. (For a demo with the demo shop, add `-f docker-compose.dev.yaml` to the command below: it loads the dev data, sets the demo café, and turns on phone sign-in for the demo customers.)
+4. `docker compose --profile public up -d --build`. Caddy gets the HTTPS certificate for the hostname by itself, so the hostname must already point at the VM and ports 80 and 443 must be open.
+5. Open `https://<your hostname>/`. On your own machine, `KIOSK_HOST` can stay `localhost`: Caddy then makes its own certificate, and the browser warns about it.
+
+Nothing backs up the database or the `uploads` volume yet: take a `mysqldump` and a copy of the volume, or disk snapshots, before the data matters. Anyone with the address can still place unpaid cash orders, which take stock (rate-limited to 20 a minute), so share it only for testing.
 
 ## Mock payments
 

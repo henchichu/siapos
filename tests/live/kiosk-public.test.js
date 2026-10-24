@@ -1,8 +1,9 @@
-// The public kiosk server (server/kiosk.js), the only side a tunnel points at: it serves the kiosk page and nothing of the staff side.
+// The public kiosk server (server/kiosk.js), the only side the public proxy points at: it serves the kiosk page and nothing of the staff side.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
 process.env.KIOSK_LOCATION_ID = "loc-campus"; // the demo café this kiosk belongs to
+delete process.env.KIOSK_PHONE_SIGNIN; // off unless a test turns it on
 const { start, pool } = require("./env");
 const kioskApp = require("../../server/kiosk");
 
@@ -43,10 +44,25 @@ test("phone sign-in is off here, and the page is told so", async () => {
   assert.equal((await own.json()).phoneSignIn, true);
 });
 
+test("with KIOSK_PHONE_SIGNIN=1 (a demo) phone sign-in works here too", async () => {
+  process.env.KIOSK_PHONE_SIGNIN = "1";
+  try {
+    assert.equal((await (await get("/api/customer/context")).json()).phoneSignIn, true);
+    const login = await post("/api/customer/login", { phone: "(312) 555-0142" });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get("set-cookie").split(";")[0];
+    assert.equal((await get("/api/customer/my-orders", { headers: { cookie } })).status, 200, "and the session works");
+    assert.ok(!/;\s*secure/i.test(login.headers.get("set-cookie")), "no Secure flag over plain http");
+    const viaProxy = await fetch(base + "/api/customer/login", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-proto": "https" }, body: JSON.stringify({ phone: "(312) 555-0142" }) });
+    assert.match(viaProxy.headers.get("set-cookie"), /;\s*secure/i, "Secure when the proxy says it served https");
+  } finally { delete process.env.KIOSK_PHONE_SIGNIN; }
+  assert.equal((await post("/api/customer/login", { phone: "(312) 555-0142" })).status, 403, "off again when the flag is gone");
+});
+
 test("a guest can browse, order and read their order back", async () => {
   const catalog = await (await get("/api/customer/catalog")).json();
   assert.ok(catalog.products.length > 0);
-  const order = await post("/api/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Tunnel guest",
+  const order = await post("/api/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Public guest",
     items: [{ key: "a", variantId: "var-croissant", quantity: 1 }] });
   assert.equal(order.status, 200);
   const { orderId } = await order.json();

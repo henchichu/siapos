@@ -33,7 +33,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Orders" />
     <section className="main scrolls" aria-label="Orders">
-      <header className="ohead"><h2>Orders</h2></header>
+      <header className="ohead"><${PageTitle}>Orders<//></header>
       <form className="osearch" aria-label="Search orders" onSubmit=${(e) => { e.preventDefault(); search(draft); }}>
         <div className="ofilters">
           <${Field} label="From date"><input className="field date" type="date" value=${draft.from} onChange=${set("from")} /><//>

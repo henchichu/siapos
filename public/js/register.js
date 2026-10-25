@@ -27,7 +27,7 @@ function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch,
 
   return html`<section className="products" aria-label="Products">
     <header>
-      <h2>Products</h2>
+      <${PageTitle}>Products<//>
       <div className="search">
         ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders</button>`}
         ${showRefund && html`<button className="btn danger slim" onClick=${onRefund}>Refund</button>`}

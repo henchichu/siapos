@@ -86,10 +86,10 @@ function StockTab({ data, reload, onLocation, showInactive, setShowInactive }) {
           <thead><tr><th>Stock item</th><th>On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
           <tbody>${rows.map((r) => html`<tr key=${r.id} className=${`${form?.stockItemId === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
             <td>${r.name}${!r.active && html`<span className="tag">deactivated</span>`}</td><td>${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)}</td><td className="r">${unitMoney(r.avgCost)}</td>
-            <td className=${r.active && isLow(r) ? "state low" : "state"}>${!r.active ? "—" : isLow(r) ? "LOW" : "OK"}</td>
+            <td className=${r.active && isLow(r) ? "state low" : "state"}>${!r.active ? "—" : html`<${Status} tone=${isLow(r) ? "warn" : "on"}>${isLow(r) ? "LOW" : "OK"}<//>`}</td>
             ${data.canChange && html`<td><div className="acts">${r.active
               ? html`<${React.Fragment}><button className="act" onClick=${() => show(r, "restock")}>Restock</button><button className="act" onClick=${() => show(r, "adjust")}>Adjust</button>
-                  <button className="act" onClick=${() => setActive(r, false)}>Deactivate</button><//>`
+                  <button className="act danger" onClick=${() => setActive(r, false)}>Deactivate</button><//>`
               : html`<button className="act" onClick=${() => setActive(r, true)}>Reactivate</button>`}</div></td>`}</tr>`)}
             ${!rows.length && html`<tr><td colSpan="6">No stock items match.</td></tr>`}</tbody>
         </table>
@@ -192,7 +192,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       <div className="row2"><label className="pf grow"><b>Supplier</b><span className="inline"><select className="select" value=${supplierId} onChange=${(e) => setSupplierId(e.target.value)}>
           <option value="">Choose a supplier</option>${visibleSuppliers(data, showInactive).map((s) => html`<option key=${s.id} value=${s.id}>${s.name}${s.active ? "" : " (deactivated)"}</option>`)}</select>
           <button className="pbtn outline" onClick=${() => { setNewSupplier({ name: "", email: "", phone: "" }); setMsg(null); }}>New supplier</button>
-          ${chosen && html`<button className="pbtn outline" onClick=${() => setSupplierActive(!chosen.active)}>${chosen.active ? "Deactivate" : "Reactivate"}</button>`}</span>
+          ${chosen && html`<button className=${chosen.active ? "pbtn outline danger" : "pbtn outline"} onClick=${() => setSupplierActive(!chosen.active)}>${chosen.active ? "Deactivate" : "Reactivate"}</button>`}</span>
           <${ShowInactive} checked=${showInactive} onChange=${setShowInactive} /></label>
         <label className="pf w210"><b>Delivery date</b><input className="field date" type="date" value=${date} onChange=${(e) => setDate(e.target.value)} /></label></div>
       ${newSupplier && html`<div className="newsupplier" role="group" aria-label="New supplier">
@@ -205,10 +205,10 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       <label className="pf"><b>Invoice number</b><input className="field" maxLength="50" value=${invoice} onChange=${(e) => setInvoice(e.target.value)} /></label>
       <table className="table mg dlines">
         <colgroup><col /><col style=${{ width: 44 }} /><col style=${{ width: 106 }} /><col style=${{ width: 96 }} /><col style=${{ width: 84 }} /><col style=${{ width: 84 }} /></colgroup>
-        <thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th>Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
+        <thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th className="r">Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
         <tbody>${lines.map((l) => html`<tr key=${l.stockItemId}><td>${item(l.stockItemId)?.name}</td><td>${item(l.stockItemId)?.unit}</td>
           <td><input className="field cell" aria-label=${`Quantity of ${item(l.stockItemId)?.name}`} inputMode="decimal" value=${l.quantity} onChange=${(e) => setLine(l.stockItemId, { quantity: e.target.value.replace(/[^\d.]/g, "") })} /></td>
-          <td><input className="field cell" aria-label=${`Total paid for ${item(l.stockItemId)?.name}`} inputMode="decimal" placeholder=${quoteHint(l)} value=${l.total} onChange=${(e) => setLine(l.stockItemId, { total: e.target.value.replace(/[^\d.]/g, "") })} /></td>
+          <td className="r"><input className="field cell" aria-label=${`Total paid for ${item(l.stockItemId)?.name}`} inputMode="decimal" placeholder=${quoteHint(l)} value=${l.total} onChange=${(e) => setLine(l.stockItemId, { total: e.target.value.replace(/[^\d.]/g, "") })} /></td>
           <td className="r">${unitCost(l) == null ? "—" : unitMoney(unitCost(l))}</td>
           <td><button className="act" onClick=${() => setLines(lines.filter((x) => x !== l))}>Remove</button></td></tr>`)}
           ${!lines.length && html`<tr><td colSpan="6">No lines yet. Add a stock item below.</td></tr>`}</tbody>
@@ -275,9 +275,9 @@ function CountTab({ data, reload, onLocation }) {
         ${!rows.length && html`<tr><td colSpan="6">Nothing to count here.</td></tr>`}</tbody>
     </table>
     <div className="totals">
-      <div className="box"><span>Items counted</span><b>${done.length} of ${rows.length}</b></div>
-      <div className="box"><span>Items that differ</span><b>${differ}</b></div>
-      <div className="box"><span>Value of difference</span><b>${moneyDelta(totalValue)}</b></div>
+      <div className="box"><span>Items counted</span><b>${done.length} of ${rows.length}</b><${CardIcon} label="Items counted" /></div>
+      <div className="box"><span>Items that differ</span><b>${differ}</b><${CardIcon} label="Items that differ" /></div>
+      <div className="box"><span>Value of difference</span><b>${moneyDelta(totalValue)}</b><${CardIcon} label="Value of difference" /></div>
     </div>
     <label className="pf"><b>Note (optional)</b><input className="field" maxLength="255" value=${note} onChange=${(e) => setNote(e.target.value)} /></label>
     <${Message} msg=${msg} dashed />
@@ -310,6 +310,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Inventory" />
     <section className="main scrolls" aria-label="Inventory">
+      <${PageTitle}>Inventory<//>
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <${Tabs} tab=${tab} onTab=${go} />
         ${tab === "stock" && html`<${StockTab} key=${data.location.id} data=${data} reload=${() => load()} onLocation=${load} showInactive=${showInactive} setShowInactive=${setShowInactive} />`}

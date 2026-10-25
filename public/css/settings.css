@@ -3,7 +3,7 @@
 .sgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .regrow { display: flex; gap: 8px; align-items: flex-end; }
 .regrow .pf { flex: 1; min-width: 0; }
-.regrow .pbtn { height: 44px; padding-top: 0; padding-bottom: 0; }
+.regrow .pbtn { height: 46px; padding-top: 0; padding-bottom: 0; }
 .permissions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; align-items: start; }
 .permissions section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .permissions .check { align-items: flex-start; }
@@ -11,5 +11,5 @@
 
 .staff .table td .sub { display: block; }
 /* The last column is the actions: flush with the table's right edge in every table */
-.staff .table th:last-child, .staff .table td:last-child { text-align: right; padding-right: 0; }
+.staff .table th:last-child, .staff .table td:last-child { text-align: right; padding-right: 14px; }
 .staff .table td:last-child .acts { justify-content: flex-end; }

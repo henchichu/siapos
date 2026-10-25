@@ -11,18 +11,18 @@ const fromEmployee = (e) => ({
 function StaffTable({ data, rows, busy, onEdit, onAct, editingId }) {
   return html`<table className="table mg" aria-label="Employees">
     <colgroup><col /><col style=${{ width: 112 }} /><col style=${{ width: 140 }} /><col style=${{ width: 84 }} /><col style=${{ width: 68 }} /><col style=${{ width: 164 }} /></colgroup>
-    <thead><tr><th>Employee</th><th>Role</th><th>Locations</th><th>Pay rate</th><th>Status</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Employee</th><th>Role</th><th>Locations</th><th className="r">Pay rate</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>${rows.map((e) => html`<tr key=${e.id} className=${`${editingId === e.id ? "sel" : ""} ${e.active ? "" : "off"}`}>
-      <td className="person"><b>${e.firstName} ${e.lastName}</b><span className="sub">No. ${e.number}</span></td>
+      <td className="person" data-initials=${initials(`${e.firstName} ${e.lastName}`)}><b>${e.firstName} ${e.lastName}</b><span className="sub">No. ${e.number}</span></td>
       <td>${e.role}</td>
       <td>${e.locations.map((l) => l.name).join(", ") || "—"}</td>
-      <td>${usd(e.rate)}${e.next && html`<span className="sub" style=${{ display: "block" }}>${usd(e.next.rate)} from ${dayOf(e.next.startsOn)}</span>`}</td>
-      <td className=${e.status === "Locked" ? "state locked" : ""}>${e.status}</td>
+      <td className="r">${usd(e.rate)}${e.next && html`<span className="sub" style=${{ display: "block" }}>${usd(e.next.rate)} from ${dayOf(e.next.startsOn)}</span>`}</td>
+      <td><${Status} tone=${e.status === "Locked" ? "warn" : e.active ? "on" : "off"}>${e.status}<//></td>
       <td>${!e.manageable ? html`<span className="sub">Owner only</span>` : html`<div className="acts">
         <button className="act" disabled=${busy} onClick=${() => onEdit(e)}>Edit</button>
         ${!e.active ? html`<button className="act" disabled=${busy} onClick=${() => onAct(e, "reactivate")}>Reactivate</button>`
-          : e.locked ? html`<button className="act" disabled=${busy} onClick=${() => onAct(e, "unlock")}>Unlock</button>`
-          : html`<button className="act" disabled=${busy || e.id === data.me} title=${e.id === data.me ? "You can't deactivate yourself" : undefined}
+          : e.locked ? html`<button className="act hi" disabled=${busy} onClick=${() => onAct(e, "unlock")}>Unlock</button>`
+          : html`<button className="act danger" disabled=${busy || e.id === data.me} title=${e.id === data.me ? "You can't deactivate yourself" : undefined}
               onClick=${() => onAct(e, "deactivate")}>Deactivate</button>`}
       </div>`}</td></tr>`)}
       ${!rows.length && html`<tr><td colSpan="6">No employees match.</td></tr>`}</tbody>
@@ -108,9 +108,10 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Employees" />
     <section className="main scrolls" aria-label="Employees">
+      <${PageTitle}>Employees<//>
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<div className="staff">
         <section className="pview">
-          <header className="phead"><h2>Employees</h2>
+          <header className="phead end">
             <div className="pfilters">
               <select className="select" aria-label="Role" value=${role} onChange=${(e) => setRole(e.target.value)}>
                 <option value="all">All roles</option>${data.roles.map((r) => html`<option key=${r.id} value=${r.id}>${r.name}</option>`)}</select>

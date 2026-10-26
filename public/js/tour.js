@@ -1,5 +1,5 @@
 // The front page: the real staff pages, run on sample data (api.js demo mode) in an iframe, and the tour of them (tour-kit.js).
-// The last step, Skip tour and Escape all lead to sign-up. Targets are CSS selectors inside the page shown for that step.
+// The last step, Skip tour and Escape all lead to sign-up; with DEMO_MODE (server/demo.js) they show the demo sign-ins instead. Targets are CSS selectors inside the page shown for that step.
 const T = (page, target, title, body, placement) => ({ page, target, title, body, placement });
 const STEPS = [
   { page: "home", title: "Welcome to ClockIt", body: "A quick walk through every screen your team will use, filled with sample data. Nothing here is saved, and at the end you set up your own business." },
@@ -50,4 +50,33 @@ const getRoot = (step) => {
   return doc && doc.readyState !== "loading" && doc.location.pathname === `/tour/${step.page}.html` ? doc : null;
 };
 
-ReactDOM.createRoot(document.getElementById("root")).render(html`<${TourProvider} steps=${STEPS} getRoot=${getRoot} onClose=${() => window.location.assign("/signup.html")}><${Screen} /><//>`);
+// DEMO_MODE: the last step and leaving the tour show these, then go to the dev-seeded shop's sign-in
+function DemoLogins({ credentials }) {
+  const title = useRef();
+  useEffect(() => title.current?.focus(), []);
+  return html`<main className="logins">
+    <h1 ref=${title} tabIndex="-1">Your demo sign-ins</h1>
+    <p className="keep" role="alert"><b>Take a picture of this list or write it down now.</b> You sign in with an employee number and its 6-digit PIN on the next page, and nothing there will remind you.</p>
+    <table className="logintable">
+      <caption className="sr">Demo employees</caption>
+      <thead><tr><th>Name</th><th>Role</th><th>Employee number</th><th>PIN</th></tr></thead>
+      <tbody>${credentials.map((c) => html`<tr key=${c.number}><td>${c.name}</td><td>${c.role}</td><td className="mono">${c.number}</td><td className="mono">${c.pin}</td></tr>`)}</tbody>
+    </table>
+    <a className="tour-btn primary" href="/login.html">Continue to sign-in</a>
+  </main>`;
+}
+
+function App() {
+  const [credentials, setCredentials] = useState(undefined); // undefined: still asking; null: not a demo
+  const [logins, setLogins] = useState(false);
+  useEffect(() => {
+    fetch("/api/demo").then((r) => (r.ok ? r.json() : null)).then((d) => setCredentials(d?.credentials || null)).catch(() => setCredentials(null));
+  }, []);
+  const steps = useMemo(() => !credentials ? STEPS : [...STEPS.slice(0, -1), { ...STEPS[STEPS.length - 1], title: "Ready to try it?",
+    body: "The demo shop is already set up. You'll get a list of demo sign-ins to keep: you sign in with one of them.", cta: { label: "Show demo sign-ins", onClick: () => setLogins(true) } }], [credentials]);
+  if (credentials === undefined) return null;
+  if (logins) return html`<${DemoLogins} credentials=${credentials} />`;
+  return html`<${TourProvider} steps=${steps} getRoot=${getRoot} onClose=${() => (credentials ? setLogins(true) : window.location.assign("/signup.html"))}><${Screen} /><//>`;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

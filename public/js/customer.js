@@ -711,7 +711,7 @@ function App() {
 
   // Check if a customer session already exists (e.g. page refresh mid-session)
   useEffect(() => {
-    if (!LOCATION_ID) { setLoadErr("Scan the QR code in the café to order."); return; }
+    if (!LOCATION_ID) { setLoadErr("Scan your café's QR code to order."); return; }
     Promise.all([
       api("/customer/context"),
       api("/customer/catalog"),

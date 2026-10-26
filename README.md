@@ -28,7 +28,6 @@ a Simple Industry Agnostic Point Of Sale System
    | `.env` variable (next to `docker-compose.yaml`) | Default | Set it when |
    |---|---|---|
    | `KIOSK_HOST` | `localhost` | **deploying**: the public hostname for the order page (Caddy gets its certificate for it, and Settings shows each café's order link built on it) |
-   | `BUSINESS_ID` | the only active business | the database holds more than one business (the order page refuses to guess) |
    | `COOKIE_SECURE` | `0` | the apps are served over HTTPS (`1`) |
    | `TRUST_PROXY` | `0` | the staff side sits behind a reverse proxy (`1`) |
    | `KIOSK_SHARED_DEVICE` | off | the order screen is one shared iPad (`1`: customers are signed out quickly) |
@@ -63,7 +62,7 @@ Each café has its own QR code that opens `https://<KIOSK_HOST>/order/<café id>
 - Card, Apple Pay and Google Pay are mock-paid (see Mock payments) and the order goes straight to the kitchen. A Cash order waits as "payment pending" and holds its stock for 15 minutes: the register's **Kiosk orders** window takes the cash or cancels it, and one nobody pays is cancelled by itself, which puts the stock back.
 - The phone shows the order's live status (paid, preparing, ready for pickup, cancelled) and checks every 8 seconds.
 - Sessions: a customer stays signed in on their own phone. For one shared iPad at the counter set `KIOSK_SHARED_DEVICE=1`: customers are signed out after 2 minutes without a touch (30 seconds after an order), and the server after 5.
-- The app serves one business: `BUSINESS_ID`, or the only active business. With several and no `BUSINESS_ID`, the public side refuses to guess.
+- Several businesses share the app: each café's QR link (`/order/<location id>`) decides the café and so the business. Opened without one, the page says to scan the café's QR code. A phone signed in at one business is a guest at another's café.
 
 ## Containers and the public address (Azure VM)
 

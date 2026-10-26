@@ -13,9 +13,8 @@ const app = express();
 app.set("trust proxy", 1); // only the proxy reaches this port: its forwarded address is the customer's, for the rate limits
 app.use((req, res, next) => { req.noPhoneSignIn = process.env.KIOSK_PHONE_SIGNIN !== "1"; next(); });
 
-// Each café's QR code opens /order/<locationId>; the page reads the id from its address. Without one, a business with a single
-// café goes straight to it, and otherwise people are told to scan the code.
-// For the container health check: it asks the database too, so a lost database login shows up as unhealthy
+// Each café's QR code opens /order/<locationId>; the page reads the id from its address, and the café decides the business.
+// Without one there's no telling which café (or business) is meant, so people are told to scan the code.
 // Every route that asks the database is limited by address, so one address can't hold the pool, which is shared with the
 // registers. The limit is high because a café's phones share one address (a menu load is ~25 calls); tighter per-phone limits
 // are in customers.js. Pictures have their own, higher limit (a menu shows many, and the browser keeps them after the first
@@ -26,14 +25,11 @@ const limits = [
   require("./ratelimit")(3000, 60 * 1000, { ban: true, skip: (req) => !PICTURE.test(req.path) }),
 ];
 
+// For the container health check: it asks the database too, so a lost database login shows up as unhealthy
 app.get("/ready", limits, async (req, res) => { await pool.query("SELECT 1"); res.json({ status: "ok" }); });
 
 app.get("/order/:locationId", (req, res) => res.sendFile(path.join(PUBLIC, "customer.html")));
-app.get(["/", "/customer"], limits, async (req, res) => {
-  const id = await customers.onlyLocation();
-  if (id) return res.redirect(`/order/${encodeURIComponent(id)}`);
-  res.status(404).type("text").send("Scan the QR code in the café to order.");
-});
+app.get(["/", "/customer"], (req, res) => res.status(404).type("text").send(customers.SCAN));
 app.use("/api", limits, express.json(), customers); // customers has no catch-all, so anything else under /api is a 404 below
 app.use(require("./vendor"));
 // exactly the files the page loads, and nothing else from public/
@@ -47,7 +43,6 @@ app.use(handleErrors);
 if (require.main === module) {
   const PORT = process.env.KIOSK_PORT || 3001;
   app.listen(PORT, "0.0.0.0", () => console.log(`Customer order page (public side) at http://localhost:${PORT}`));
-  customers.onlyLocation().catch((err) => console.error(`The order page can't serve yet: ${err.message}`)); // e.g. several businesses and no BUSINESS_ID
 }
 
 module.exports = app;

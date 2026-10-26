@@ -1,15 +1,20 @@
 /* Employees. Layout from the ClockIt Employees wireframe; tables, fields and buttons come from shift.css and products.css */
-.staff { display: flex; gap: 40px; align-items: flex-start; padding-bottom: 24px; }
-.staff > .pview { flex: 1 1 0; min-width: 0; padding: 24px 0; overflow-x: auto; }
-.staff > .pform { width: 340px; flex: none; padding: 24px 0; }
-.staff > .pview .table { min-width: 600px; }
+.staff { display: flex; gap: 24px; align-items: flex-start; padding-bottom: 24px; }
+.staff > .pview { flex: 1 1 0; min-width: 0; padding: 20px; overflow-x: auto; }
+.staff > .pform { width: 340px; flex: none; padding: 20px; }
+.staff > .pview .table { min-width: 720px; } /* room for the name beside its initials circle */
 .staff .phead .pfilters { gap: 24px; }
 .staff .table td { vertical-align: middle; }
 .staff .table .person b, .staff .table .person .sub { font-weight: 400; display: block; }
+/* an initials circle before each name, drawn from data-initials so the cell's text stays the name and number */
+.staff .table .person { position: relative; padding-left: 58px; }
+.staff .table .person::before { content: attr(data-initials); position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%;
+  background: var(--navy); color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.staff .table tbody tr:nth-child(even) .person::before { background: var(--cyan); color: var(--navy-dark); }
+.staff .table .person b { font-weight: 600; color: var(--navy); }
 .staff .table .sub { font-size: 13px; }
 .staff .pform .sub { font-size: 13px; }
-.staff .select:disabled, .staff .field:disabled { background-color: #f4f4f4; color: var(--muted); cursor: not-allowed; }
-.state.locked { color: var(--error); }
+.staff .select:disabled, .staff .field:disabled { background-color: #F6F7FB; color: var(--muted); cursor: not-allowed; }
 
 @media (max-width: 1360px) {
   .staff { flex-direction: column; gap: 24px; }
@@ -17,6 +22,5 @@
   .staff > .pform { width: 100%; max-width: 560px; }
 }
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
-  .staff > .pview { overflow-x: auto; padding: 0; }
-  .staff .table { min-width: 720px; }
+  .staff > .pview { overflow-x: auto; padding: 16px; }
 }

@@ -26,8 +26,8 @@ test("it serves the kiosk page and the files that page loads", async () => {
   assert.match(await café.text(), /id="root"/);
   for (const path of ["/", "/customer"]) {
     const r = await get(path);
-    assert.equal(r.status, 404, "with two cafés, no address says which one");
-    assert.match(await r.text(), /Scan the QR code/);
+    assert.equal(r.status, 404, "without a café's link there's no telling which café, or which business");
+    assert.equal(await r.text(), "Scan your café's QR code to order.");
   }
 });
 

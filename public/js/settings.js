@@ -117,7 +117,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
             <td>${c.name}<${Tag} off=${!c.active} /></td>
             <td><div className="acts">
               <button className="act" disabled=${busy} onClick=${() => open("category", { ...c, active: !!c.active })}>Rename</button>
-              <button className="act" disabled=${busy} onClick=${() => toggle("Products in it keep their category.", "/settings/categories", c)}>${c.active ? "Deactivate" : "Reactivate"}</button>
+              <button className=${c.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle("Products in it keep their category.", "/settings/categories", c)}>${c.active ? "Deactivate" : "Reactivate"}</button>
             </div></td></tr>`)}</tbody>
         </table>
       </div>
@@ -134,7 +134,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
             <td>${l.registers.length}</td><td>${l.online ? "On" : "Off"}</td>
             <td><div className="acts">
               <button className="act" disabled=${busy} onClick=${() => open("location", { ...l, active: !!l.active, online: !!l.online, registers: l.registers.map((r) => ({ ...r })), rates: { ...l.rates } })}>Edit</button>
-              <button className="act" disabled=${busy} onClick=${() => toggle("Staff must be reassigned first.", "/settings/locations", l)}>${l.active ? "Deactivate" : "Reactivate"}</button>
+              <button className=${l.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle("Staff must be reassigned first.", "/settings/locations", l)}>${l.active ? "Deactivate" : "Reactivate"}</button>
             </div></td></tr>`)}</tbody>
         </table>
       </div>
@@ -189,7 +189,7 @@ function Roles({ data, run, fail, busy, ask, markDirty, markClean }) {
           <td>${r.name}<${Tag} off=${!r.active} /></td><td>${r.staff}</td>
           <td>${r.owner ? "Every permission, locked" : html`<div className="acts">
             <button className="act" disabled=${busy} onClick=${() => open({ ...r, active: !!r.active, permissions: [...r.permissions] })}>Edit</button>
-            <button className="act" disabled=${busy} onClick=${() => toggle(r)}>${r.active ? "Deactivate" : "Reactivate"}</button></div>`}</td></tr>`)}</tbody>
+            <button className=${r.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle(r)}>${r.active ? "Deactivate" : "Reactivate"}</button></div>`}</td></tr>`)}</tbody>
       </table>
       <span className="sub">Only owners change pay rates, use owner-only location views, and manage senior roles. Non-owners remain limited to their assigned locations.</span>
     </section>
@@ -244,7 +244,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Settings" />
     <section className="main scrolls" aria-label="Settings">
-      <header className="heading"><h2>Settings</h2></header>
+      <header className="heading"><${PageTitle}>Settings<//></header>
       <div className="tabs" role="group" aria-label="Settings">
         ${TABS.filter(([k]) => access?.[k]).map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} disabled=${busy} onClick=${() => pick(k)}>${label}</button>`)}</div>
       <${Message} msg=${note} />

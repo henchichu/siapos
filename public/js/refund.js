@@ -81,7 +81,7 @@ function RefundView({ onExit, orderNumber, onDone }) {
   return html`<section className="refund" aria-label="Refund on an order">
     <div className="main">
       ${!orderNumber && html`<${React.Fragment}>
-        <div className="title"><button className="btn" onClick=${onExit}>Back to register</button><h2>Refund</h2></div>
+        <div className="title"><button className="btn" onClick=${onExit}>Back to register</button><${PageTitle}>Refund<//></div>
         <div className="find"><h3>Find the order</h3>
           <form onSubmit=${find}>
             <input className="field" aria-label="Order number, or member email or phone" placeholder="Order number, or member email or phone"
@@ -91,7 +91,7 @@ function RefundView({ onExit, orderNumber, onDone }) {
       ${found && html`<div className="order-sum">
         <div><h3>Order ${found.orderNumber}</h3>
           <p className="sub">${new Date(found.placedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} · ${found.member || "walk-in"} · Paid ${money(found.paidCents)} by ${found.method}${found.tipCents ? ` · Tip ${money(found.tipCents)} (not refundable)` : ""}</p></div>
-        <table className="rt"><thead><tr><th>Return</th><th>Item</th><th>Bought</th><th>Already returned</th><th>Qty to return</th><th>Back to stock</th><th>Amount</th></tr></thead>
+        <table className="rt"><thead><tr><th>Return</th><th>Item</th><th>Bought</th><th>Already returned</th><th>Qty to return</th><th>Back to stock</th><th className="r">Amount</th></tr></thead>
           <tbody>${found.lines.map((l) => {
             const p = picks[l.orderItemId] || {};
             const done = left(l) <= 0;
@@ -103,7 +103,7 @@ function RefundView({ onExit, orderNumber, onDone }) {
                 aria-label=${`Quantity of ${l.name} to return`} disabled=${!p.on} value=${p.qty || ""} onChange=${(e) => pick(l, { qty: e.target.value })} />`}</td>
               <td>${!done && html`<input type="checkbox" aria-label=${`Put ${l.name} back to stock`} disabled=${!p.on || !l.restockable}
                 title=${l.restockable ? "" : "This item can't go back to stock"} checked=${!!p.restock} onChange=${(e) => pick(l, { restock: e.target.checked })} />`}</td>
-              <td>${done ? "—" : p.on ? money(share(l.netCents, qtyOf(l), l.bought) + share(l.taxCents, qtyOf(l), l.bought)) : money(0)}</td></tr>`;
+              <td className="r">${done ? "—" : p.on ? money(share(l.netCents, qtyOf(l), l.bought) + share(l.taxCents, qtyOf(l), l.bought)) : money(0)}</td></tr>`;
           })}</tbody></table></div>`}
     </div>
     <aside className="side" aria-label="Refund summary">

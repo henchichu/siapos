@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
 const app = fs.readFileSync(path.join(root, "public/js/customer.js"), "utf8");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CAFE = { headers: { "x-location-id": "loc-campus" } }; // what the page sends with every call: a sign-in counts only at its own business
 let fails = 0;
 process.env.KIOSK_PHONE_SIGNIN = "1"; // the demo switch: these checks sign Chloe in by phone
 process.env.KIOSK_SHARED_DEVICE = "1"; // these checks are for the shared iPad; a phone is never signed out while it waits
@@ -125,7 +126,7 @@ function kiosk(base) {
 
     await k.click("Back to Customer Login"); await sleep(300);
     check("sign-out returns to the entry page", /How would you like to order\?/.test(k.text()));
-    const session = await (await k.w.fetch("/api/customer/session")).json();
+    const session = await (await k.w.fetch("/api/customer/session", CAFE)).json();
     check("the customer session is gone", session.signedIn === false);
 
     await k.click("Order as Guest");
@@ -175,7 +176,7 @@ function kiosk(base) {
     check("a minute of no touches is still signed in", /Hi, Chloe!/.test(k.text()));
     ahead(3 * 60 * 1000); await sleep(1500);
     check("after 2 minutes idle, signed out", /How would you like to order\?/.test(k.text()) && !/Chloe/.test(k.text()));
-    check("and the server session is gone", (await (await k.w.fetch("/api/customer/session")).json()).signedIn === false);
+    check("and the server session is gone", (await (await k.w.fetch("/api/customer/session", CAFE)).json()).signedIn === false);
 
     // the public address (server/kiosk.js): guests only, with no phone sign-in to offer
     const pub = await new Promise((r) => { const sv = require("../../server/kiosk").listen(0, () => r(sv)); });

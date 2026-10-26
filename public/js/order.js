@@ -73,7 +73,7 @@ function App() {
         : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <header className="ohead">
           <a className="pbtn outline" href="/orders.html">Back to orders</a>
-          <h2>Order ${data.orderNumber}</h2>
+          <${PageTitle}>Order ${data.orderNumber}<//>
           <button className="pbtn outline" disabled=${!data.canRefund} title=${data.canRefund ? "" : "Only completed orders can be refunded, by a role that may refund"} onClick=${() => setRefunding(true)}>Refund this order</button>
         </header>
         <div className="metrics">

@@ -74,4 +74,18 @@ const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" }
 // A phone at the Campus café: the page sends the café it was opened for (its QR code) with every call
 const phone = (base, locationId = "loc-campus") => client(base, { "x-location-id": locationId });
 
-module.exports = { start, startKiosk, client, phone, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD };
+// Everything a sign-up (and these tests) can put in a business, children first
+// A business made by a sign-up test, with everything in it
+async function removeBusiness(id) {
+  const [emps] = await pool.query("SELECT EmployeeID AS id FROM Employee WHERE BusinessID = ?", [id]);
+  const [locs] = await pool.query("SELECT LocationID AS id FROM Location WHERE BusinessID = ?", [id]);
+  const e = emps.map((r) => r.id), l = locs.map((r) => r.id);
+  for (const t of ["LoyaltyAccount", "Customer", "VariantRecipe", "ProductModifierGroup", "ProductVariant", "Product", "Category", "MembershipTier", "PayPeriod", "EmployeeLocation", "EmployeePayRate"])
+    await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+  if (e.length) await pool.query("DELETE FROM EmployeeCredential WHERE EmployeeID IN (?)", [e]);
+  for (const t of ["Employee", "LocationTaxRate"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+  if (l.length) await pool.query("DELETE FROM Register WHERE LocationID IN (?)", [l]);
+  for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+}
+
+module.exports = { start, startKiosk, client, phone, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

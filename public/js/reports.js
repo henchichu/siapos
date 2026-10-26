@@ -22,19 +22,20 @@ const DateField = ({ label, value, onChange }) => html`<label className="pf"><b>
 
 // [label, value, dark]: a dark card is the one figure to read first
 function Cards({ cards }) {
-  return html`<div className="rcards">${cards.map(([label, value, dark]) => html`<div key=${label} className=${dark ? "rcard dark" : "rcard"}><span>${label}</span><b>${value}</b></div>`)}</div>`;
+  return html`<div className="rcards">${cards.map(([label, value, dark]) => html`<div key=${label} className=${dark ? "rcard dark" : "rcard"}><span>${label}</span><b>${value}</b><${CardIcon} label=${label} /></div>`)}</div>`;
 }
 
 // Bars on one zero baseline. Hover or focus a bar for its label and amount; the table below has every figure.
-// bars: [{ key, label, tip, value }]; label is what sits under the bar (blank to skip it)
-function BarChart({ title, bars }) {
+// bars: [{ key, label, tip, value }]; label is what sits under the bar (blank to skip it). best: the highest bar is cyan, with a legend saying so.
+function BarChart({ title, bars, best }) {
   const [tip, setTip] = useState(null);
   const top = Math.max(...bars.map((b) => b.value), 0);
+  const bestAt = best && top > 0 ? bars.findIndex((b) => b.value === top) : -1;
   return html`<figure className="chart" aria-label=${title}>
-    <figcaption><h3>${title}</h3></figcaption>
+    <figcaption><h3>${title}</h3>${bestAt >= 0 && html`<span className="legend">${best}</span>`}</figcaption>
     <div className="plot" onMouseLeave=${() => setTip(null)}>
       <div className="axis"><span>${money(top)}</span><span>$0</span></div>
-      <div className="bars">${bars.map((b, i) => html`<div key=${b.key} className="col" tabIndex="0" aria-label=${`${b.tip}: ${money(b.value)}`}
+      <div className="bars">${bars.map((b, i) => html`<div key=${b.key} className=${i === bestAt ? "col best" : "col"} tabIndex="0" aria-label=${`${b.tip}: ${money(b.value)}${i === bestAt ? ` (${best})` : ""}`}
           onMouseEnter=${() => setTip(i)} onFocus=${() => setTip(i)} onBlur=${() => setTip(null)}>
         <div className="slot">${tip === i && html`<span className="tip" role="tooltip"><b>${money(b.value)}</b>${b.tip}</span>`}
           <div className="rbar" style=${{ height: `${top > 0 ? Math.max(0, b.value) / top * 100 : 0}%` }}></div></div>
@@ -145,7 +146,7 @@ function SalesByDay({ options }) {
     ${report && html`<${React.Fragment}>
       <p className="sub">${report.location} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
       <${Cards} cards=${[["Net sales", money(report.cards.net)], ["Orders", String(report.cards.orders)], ["Average order", money(report.cards.average)], ["Tax collected", money(report.cards.tax)]]} />
-      <${BarChart} title="Net sales per day" bars=${dayBars(report.days)} />
+      <${BarChart} title="Net sales per day" bars=${dayBars(report.days)} best="Best day" />
       <div className="tablewrap">
         <h3>Sales by day and location</h3>
         <table className="table mg" aria-label="Sales by day and location">
@@ -278,7 +279,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Reports" />
     <section className="main scrolls" aria-label="Reports">
-      <header className="heading"><h2>Reports</h2></header>
+      <header className="heading"><${PageTitle}>Reports<//></header>
       <${Tabs} tab=${tab} onTab=${pick} />
       ${error ? html`<p className="success" role="alert">${error}</p>`
         : !options ? html`<p className="success">Loading…</p>`

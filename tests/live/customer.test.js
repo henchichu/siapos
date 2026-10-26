@@ -242,21 +242,34 @@ test("the café comes from the link: a wrong, missing or closed café is refused
   } finally { await pool.query("DELETE FROM Location WHERE LocationID = 'loc-test-closed'"); reset(); }
 });
 
-test("one business per app: a second business needs BUSINESS_ID, and a café of another business is refused", async () => {
+test("several businesses: the café link decides the business, and a sign-in stays with its own business", async () => {
   await pool.query("INSERT INTO Business (BusinessID, Name) VALUES ('biz-test-other', 'Other Co')");
+  await pool.query("INSERT INTO Location (LocationID, BusinessID, Name, TimeZone) VALUES ('loc-test-other', 'biz-test-other', 'Other Café', 'America/Denver')");
   try {
     customers.resetCaches();
-    const r = await phone(pub.base).call("/customer/context");
-    assert.equal(r.status, 503);
-    assert.match(r.body.error, /BUSINESS_ID/);
-    process.env.BUSINESS_ID = "biz-brewbean";
+    const there = await phone(pub.base, "loc-test-other").call("/customer/context");
+    assert.deepEqual([there.status, there.body.businessName, there.body.locationName], [200, "Other Co", "Other Café"]);
+    const here = await phone(pub.base).call("/customer/context");
+    assert.deepEqual([here.status, here.body.businessName], [200, "Brewbean Coffee"], "Brewbean still serves with a second business");
+    const none = await phone(pub.base, "").call("/customer/context");
+    assert.deepEqual([none.status, none.body.error], [404, "Scan your café's QR code to order."]);
+
+    const ben = phone(pub.base);
+    assert.equal((await ben.call("/customer/login", { phone: "(312) 555-0142" })).status, 200);
+    const away = client(pub.base, { "x-location-id": "loc-test-other", cookie: ben.cookie() });
+    assert.equal((await away.call("/customer/session")).body.signedIn, false, "a Brewbean sign-in is a guest at another business");
+    assert.equal((await away.call("/customer/my-orders")).status, 401);
+    assert.equal((await away.call("/customer/login", { phone: "(312) 555-0142" })).status, 404, "Brewbean's members aren't another business's");
+    assert.equal((await ben.call("/customer/session")).body.signedIn, true, "and still signed in at Brewbean");
+
+    await pool.query("UPDATE Business SET Active = FALSE WHERE BusinessID = 'biz-test-other'");
     customers.resetCaches();
-    assert.equal((await phone(pub.base).call("/customer/context")).status, 200, "it serves the business it is told to");
-    process.env.BUSINESS_ID = "biz-test-other";
+    assert.equal((await phone(pub.base, "loc-test-other").call("/customer/context")).status, 404, "a closed business takes no orders");
+  } finally {
+    await pool.query("DELETE FROM Location WHERE LocationID = 'loc-test-other'");
+    await pool.query("DELETE FROM Business WHERE BusinessID = 'biz-test-other'");
     customers.resetCaches();
-    assert.equal((await phone(pub.base).call("/customer/context")).status, 404, "and a café of any other business isn't served");
-  } finally { delete process.env.BUSINESS_ID; await pool.query("DELETE FROM Business WHERE BusinessID = 'biz-test-other'"); customers.resetCaches(); }
-  assert.equal((await phone(pub.base).call("/customer/context")).status, 200);
+  }
 });
 
 test("the menu is kept for 5 seconds, then shows changes", async () => {

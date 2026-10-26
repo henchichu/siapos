@@ -85,7 +85,7 @@ function ProductsTab({ data, reload }) {
           <td>${p.name}${!p.active && html`<span className="tag">inactive</span>`}</td><td>${p.category || "—"}</td><td className="r">${usd(p.priceFrom)}</td>
           <td className="r">${usd(p.cost)}</td><td className="r">${p.margin == null ? "—" : `${p.margin}%`}</td>
           <td><div className="acts"><button className="act" onClick=${() => show({ ...p, categoryId: p.categoryId || "" })}>Edit</button>
-            <button className="act" onClick=${() => toggle(p)}>${p.active ? "Deactivate" : "Activate"}</button></div></td></tr>`)}
+            <button className=${p.active ? "act danger" : "act"} onClick=${() => toggle(p)}>${p.active ? "Deactivate" : "Activate"}</button></div></td></tr>`)}
           ${!rows.length && html`<tr><td colSpan="6">No products match.</td></tr>`}</tbody>
       </table>
     </section>
@@ -377,6 +377,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Products" />
     <section className="main scrolls" aria-label="Products">
+      <${PageTitle}>Products<//>
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>`
         : data.canEdit ? html`<${Manage} data=${data} reloadProducts=${reload} />` : html`<${ReadOnly} data=${data} />`}
     </section>

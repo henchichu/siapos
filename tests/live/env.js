@@ -2,6 +2,7 @@
 const path = require("path");
 const root = path.resolve(__dirname, "../..");
 process.env.DB_PASSWORD_FILE ??= path.join(root, "sql/secrets/app_user_password.txt");
+process.env.MOCK_PAY ??= "1"; // the tests pay with the mock processor's test cards
 process.env.GIFTCARD_SECRET_FILE ??= path.join(root, "sql/secrets/giftcard_secret.txt");
 const fs = require("fs");
 const app = require("../../server/server");

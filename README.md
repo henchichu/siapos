@@ -32,6 +32,7 @@ a Simple Industry Agnostic Point Of Sale System
    | `COOKIE_SECURE` | `0` | the apps are served over HTTPS (`1`) |
    | `TRUST_PROXY` | `0` | the staff side sits behind a reverse proxy (`1`) |
    | `KIOSK_SHARED_DEVICE` | off | the order screen is one shared iPad (`1`: customers are signed out quickly) |
+   | `MOCK_PAY` | off | never in `.env`: the dev compose file sets it (`1`: the public page also offers Card, Apple Pay and Google Pay through the mock processor, which takes no money). Production offers Cash only |
    | `KIOSK_PHONE_SIGNIN` | off | a demo with made-up customers (`1`: phone-number sign-in on the public address; the dev compose file sets it) |
 
    None of the `.env` variables is needed for local development. Everything else (database host and logins, ports, pool sizes, uploads folder) is set in `docker-compose.yaml`.

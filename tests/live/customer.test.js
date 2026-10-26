@@ -109,6 +109,18 @@ const paidOf = async (orderId) => (await pool.query(
   "SELECT PaymentMethodCode AS method, Amount AS amount, PaymentStatusCode AS status, TipAmount AS tip FROM Payment WHERE OrderID = ?", [orderId]))[0];
 const history = async (orderId) => (await pool.query("SELECT OrderStatusCode AS s FROM OrderStatusHistory WHERE OrderID = ? ORDER BY ChangedAt, OrderStatusCode", [orderId]))[0].map((r) => r.s);
 
+test("without MOCK_PAY the public side offers Cash only and refuses card and wallet orders", async () => {
+  delete process.env.MOCK_PAY;
+  try {
+    const c = phone(pub.base);
+    assert.equal((await c.call("/customer/context")).body.payHere, false);
+    for (const paymentMethod of ["Card", "Apple Pay", "Google Pay"])
+      assert.equal((await order(c, { paymentMethod, card: TEST_CARD })).status, 400, paymentMethod);
+  } finally {
+    process.env.MOCK_PAY = "1";
+  }
+});
+
 test("a card or wallet order is mock-paid on the kiosk and confirmed for the kitchen", async () => {
   for (const [paymentMethod, code, card] of [["Card", 2, TEST_CARD], ["Apple Pay", 5], ["Google Pay", 6]]) {
     const r = await order(phone(pub.base), { paymentMethod, card });
@@ -158,10 +170,32 @@ test("customer sessions cannot use the employee register", async () => {
 test("failed stock deduction rolls the entire checkout back", async () => {
   const [[before]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   // more caramel americanos than any shelf holds (50 lines of 99), so the stock check fails whatever the test top-ups left
-  const r = await order(phone(pub.base), { items: Array.from({ length: 50 }, (_, i) => ({ ...LINE, key: `k${i}`, quantity: 99 })) });
+  // paid by card: a cash order that big is refused by the item cap before it reaches the stock
+  const r = await order(phone(pub.base), { paymentMethod: "Card", card: TEST_CARD, items: Array.from({ length: 50 }, (_, i) => ({ ...LINE, key: `k${i}`, quantity: 99 })) });
   assert.notEqual(r.status, 200);
   const [[after]] = await pool.query("SELECT COUNT(*) AS n FROM Orders");
   assert.equal(after.n, before.n);
+});
+
+test("unpaid orders can hold at most half of a stock item, and a cash order at most 20 items", async () => {
+  assert.equal((await order(phone(pub.base), { items: [{ ...LINE, quantity: 21 }] })).status, 400);
+  // Leave caramel at exactly what waiting orders hold plus 610: 20 cups (300) may wait, one more cup (15) tips past half
+  const held = async () => Number((await pool.query(
+    `SELECT -COALESCE(SUM(t.QuantityChange), 0) AS h FROM InventoryTransaction t JOIN Orders o ON o.OrderID = t.OrderID
+      WHERE o.LocationID = 'loc-campus' AND o.ChannelCode = 3 AND o.OrderStatusCode = 1 AND t.TransactionTypeCode = 2 AND t.StockItemID = 'stk-caramel'`))[0][0].h);
+  const [[{ qty, cost }]] = await pool.query("SELECT Quantity AS qty, AverageUnitCost AS cost FROM Inventory WHERE LocationID = 'loc-campus' AND StockItemID = 'stk-caramel'");
+  await pool.query(
+    `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID, QuantityChange, UnitCost, TransactionTypeCode, Note)
+     VALUES (UUID(), 'biz-brewbean', 'stk-caramel', 'loc-campus', 'emp-leo', ?, ?, 4, 'test: half-share limit')`,
+    [(await held()) + 610 - Number(qty), cost]);
+  try {
+    assert.equal((await order(phone(pub.base), { items: [{ ...LINE, quantity: 20 }] })).status, 200);
+    const r = await order(phone(pub.base), { items: [{ ...LINE, quantity: 1 }] });
+    assert.equal(r.status, 409, "the shelf would have less left than waiting orders hold");
+    assert.equal((await order(phone(pub.base), { paymentMethod: "Card", card: TEST_CARD, items: [{ ...LINE, quantity: 1 }] })).status, 200, "a paid order still gets the other half");
+  } finally {
+    await topUp("stk-caramel", 2000);
+  }
 });
 test("on a shared screen a customer is signed out after 5 idle minutes, and a touch restarts the clock", async () => {
   const MIN = 60 * 1000, real = Date.now, base = real();

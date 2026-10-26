@@ -90,10 +90,11 @@ const placeAt = memo(5 * 1000, async (key) => {
 const place = async (req) => placeAt(JSON.stringify([(await business()).BusinessID, String(req.get("x-location-id") || "")]));
 
 // The café's id when the business has exactly one active café, for the addresses that carry no id (/ and /customer)
-router.onlyLocation = async () => {
-  const [rows] = await pool.query("SELECT LocationID FROM Location WHERE BusinessID = ? AND Active", [(await business()).BusinessID]);
+const onlyLocationOf = memo(60 * 1000, async (businessId) => {
+  const [rows] = await pool.query("SELECT LocationID FROM Location WHERE BusinessID = ? AND Active", [businessId]);
   return rows.length === 1 ? rows[0].LocationID : null;
-};
+});
+router.onlyLocation = async () => onlyLocationOf((await business()).BusinessID);
 
 // Customer-facing wording for the database's statuses. Customers never change these.
 const CUSTOMER_STATUS = {
@@ -106,7 +107,7 @@ const statusLabel = (description) => CUSTOMER_STATUS[description] || label(descr
 
 router.get("/customer/context", async (req, res) => {
   const k = await place(req);
-  res.json({ businessName: k.businessName, locationName: k.locationName, phoneSignIn: !req.noPhoneSignIn, sharedDevice: shared() });
+  res.json({ businessName: k.businessName, locationName: k.locationName, phoneSignIn: !req.noPhoneSignIn, payHere: mockPay(), sharedDevice: shared() });
 });
 
 // A product's picture, for the kiosk page (the staff route needs a staff sign-in). Only products on sale here.
@@ -261,17 +262,22 @@ router.post("/customer/orders", orderLimits, async (req, res) => {
 // Cash waits for the counter: that order goes in as PENDING_PAYMENT holding its stock, until the register takes the payment or
 // cancels it, or it goes unpaid for HOLD_MINUTES (server/kioskorders.js).
 const PAID_HERE = { "Card": [2, "card"], "Apple Pay": [5, "apple"], "Google Pay": [6, "google"] }; // payment method code, mock kind
+// The mock takes no money, so it is offered only when MOCK_PAY=1 (development); without it the public page offers Cash only
+const mockPay = () => process.env.MOCK_PAY === "1";
+const UNPAID_MAX_ITEMS = 20; // an unpaid order holds stock, so one can't take a whole shelf
 async function placeOrder(req) {
   const k = await place(req);
   const s = currentCustomer(req);
   const customerId = s?.customerId || null;
   const payWith = String(req.body.paymentMethod || "");
-  if (payWith !== "Cash" && !PAID_HERE[payWith]) throw new HttpError(400, "Choose how you'll pay.");
-  const paidHere = PAID_HERE[payWith];
+  const paidHere = mockPay() ? PAID_HERE[payWith] : null;
+  if (payWith !== "Cash" && !paidHere) throw new HttpError(400, "Choose how you'll pay.");
   const name = customerId ? null : check.personName(req.body.guestName, "name for the order");
   const note = check.note(req.body.note, "note", 120);
   const priced = await priceCart(pool, { businessId: k.BusinessID, locationId: k.LocationID }, cartOf(req.body));
   // shortcut: promotionId and discount are not accepted from customers; staff-only pricing features are stripped by cartOf
+  if (!paidHere && priced.lines.reduce((n, l) => n + l.quantity, 0) > UNPAID_MAX_ITEMS)
+    throw new HttpError(400, `A pay-at-counter order can have up to ${UNPAID_MAX_ITEMS} items. For more, order at the counter.`);
 
   return pool.tx(async (conn) => {
     const orderId = crypto.randomUUID();
@@ -285,12 +291,22 @@ async function placeOrder(req) {
 
     await addOrderLines(conn, { orderId, businessId: k.BusinessID, locationId: k.LocationID, employeeId: null, priced,
       unavailable: (l) => `${l.productName} can't be ordered right now.` });
+    // Unpaid orders together may hold at most half of each stock item: what they hold can't exceed what is still on the shelf
+    // shortcut: a plain read, so orders placed at the same instant can pass together; bounded by the order rate limits
+    if (!paidHere) {
+      const [over] = await conn.query(
+        `SELECT c.StockItemID FROM OrderItemComponent c JOIN OrderItem oi ON oi.OrderItemID = c.OrderItemID
+           JOIN Orders o ON o.OrderID = oi.OrderID
+           JOIN Inventory i ON i.LocationID = o.LocationID AND i.StockItemID = c.StockItemID
+          WHERE o.LocationID = ? AND o.ChannelCode = 3 AND o.OrderStatusCode = 1
+            AND c.StockItemID IN (SELECT x.StockItemID FROM OrderItemComponent x JOIN OrderItem y ON y.OrderItemID = x.OrderItemID WHERE y.OrderID = ?)
+          GROUP BY c.StockItemID, i.Quantity HAVING SUM(c.QuantityUsed) > i.Quantity`,
+        [k.LocationID, orderId]);
+      if (over.length) throw new HttpError(409, "Too many orders are waiting to be paid right now. Please order at the counter.");
+    }
 
     await conn.query("UPDATE Orders SET Subtotal = ?, Tax = ?, Total = ? WHERE OrderID = ?",
       [dollars(priced.subtotalCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
-    // Charged only once the stock is taken, like the register: a decline, or stock that ran out meanwhile, rolls everything back.
-    // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
-    if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card);
     const history = (status) => conn.query(
       "INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt) VALUES (UUID(), ?, ?, ?, UTC_TIMESTAMP())",
       [orderId, k.BusinessID, status]);
@@ -304,6 +320,9 @@ async function placeOrder(req) {
       await history(2);
     }
     const [[o]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
+    // Charged last, after every write that can still fail: a decline rolls the order back, and nothing after it can fail.
+    // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
+    if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card);
     return { orderId, orderNumber: o.OrderNumber, totalCents: priced.totalCents, paid: !!paidHere };
   }).then((receipt) => { notify(k.LocationID); return receipt; });
 }

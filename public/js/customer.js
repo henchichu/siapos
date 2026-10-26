@@ -229,7 +229,7 @@ function HeaderActions({ canOpenOrders, onOpenOrders, onExit }) {
 }
 
 //  Checkout overlay 
-function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, onBack, onOrderPlaced }) {
+function Checkout({ cart, mode, memberInfo, locationName, payHere, note, onNoteChange, onBack, onOrderPlaced }) {
   const [guestName, setGuestName] = useState("");
   const [payMethod, setPayMethod] = useState(null);
   const [card, setCard] = useState({ number: "", expiry: "", cvc: "" }); // a test card: this kiosk takes mock payments
@@ -307,9 +307,9 @@ function Checkout({ cart, mode, memberInfo, locationName, note, onNoteChange, on
 
           <div className="section gap3 bordered">
             <h3>3. Payment</h3>
-            <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>Test mode: Card, Apple Pay and Google Pay are not charged for real. Cash is paid at the counter.</p>
+            <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>${payHere ? "Test mode: Card, Apple Pay and Google Pay are not charged for real. Cash is paid at the counter." : "Pay with cash at the counter when you pick up."}</p>
             <div className="methods">
-              ${["Cash","Card","Apple Pay","Google Pay"].map((m) => html`
+              ${(payHere ? ["Cash", "Card", "Apple Pay", "Google Pay"] : ["Cash"]).map((m) => html`
                 <button key=${m} className=${"method" + (payMethod === m ? " on" : "")}
                   onClick=${() => setPayMethod(m)}>${m}</button>`)}
             </div>
@@ -452,7 +452,7 @@ function RewardsPage({ memberInfo, onBrowseMenu, headerActions }) {
 }
 
 
-function Menu({ mode, memberInfo, hasOrders, locationName, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
+function Menu({ mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
   const [showRewards, setShowRewards] = useState(false);
   const [cat, setCat] = useState("All");
   const [customizing, setCustomizing] = useState(null);
@@ -478,7 +478,7 @@ function Menu({ mode, memberInfo, hasOrders, locationName, products, categories,
   }
 
   if (checkoutOpen) {
-    return html`<${Checkout} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName}
+    return html`<${Checkout} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
       onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
@@ -787,7 +787,7 @@ function App() {
   return html`
     <${Menu}
       mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0}
-      locationName=${ctx.locationName}
+      locationName=${ctx.locationName} payHere=${ctx.payHere}
       products=${catalog.products} categories=${catalog.categories}
       cart=${cart}
       onAddItem=${addItem}

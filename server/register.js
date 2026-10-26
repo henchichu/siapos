@@ -182,8 +182,6 @@ async function completeSale(req) {
       }
       const tipCents = PROCESSED[methodCode] ? check.tipCents(payment.tip) : 0;
       if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
-      // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
-      if (PROCESSED[methodCode] && priced.totalCents > 0) charge(PROCESSED[methodCode], payment.card);
       let giftCardId = null;
       if (methodCode === 3) {
         const code = check.giftCode(payment.giftCardCode); // a mistyped format isn't a guess, so it doesn't count against the limit
@@ -239,6 +237,9 @@ async function completeSale(req) {
         [orderId, orderId]
       );
       const [[{ OrderNumber }]] = await conn.query("SELECT OrderNumber FROM Orders WHERE OrderID = ?", [orderId]);
+      // Charged last, after every write that can still fail, so a refused sale never leaves a charge behind.
+      // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
+      if (PROCESSED[methodCode] && priced.totalCents > 0) charge(PROCESSED[methodCode], payment.card);
       return { orderNumber: OrderNumber, totalCents: priced.totalCents, tipCents };
     }, () => releaseApproval(req.session, String(req.body.approvalToken))); // a deadlock reruns the sale, which takes the approval again
   } catch (err) {

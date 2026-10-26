@@ -13,3 +13,15 @@
 /* The last column is the actions: flush with the table's right edge in every table */
 .staff .table th:last-child, .staff .table td:last-child { text-align: right; padding-right: 14px; }
 .staff .table td:last-child .acts { justify-content: flex-end; }
+/* Locations: narrow fixed columns leave the rest to the name and address, which wrap between words, never a letter per line */
+.table.locs th, .table.locs td { overflow-wrap: normal; }
+.table.locs td:first-child { overflow-wrap: break-word; } /* only a single word longer than the whole column breaks */
+.table.locs .rates { font-size: 12px; line-height: 1.35; }
+.table.locs .rates > div + div { margin-top: 2px; }
+.table.locs .nw { white-space: nowrap; }
+/* Edit and Deactivate side by side, centered in the Actions column with its header */
+.staff .table.locs th:last-child, .staff .table.locs td:last-child { text-align: center; padding-left: 8px; padding-right: 8px; }
+.staff .table.locs td:last-child .acts { justify-content: center; flex-wrap: nowrap; gap: 6px; }
+.table.locs .act { padding: 5px 8px; font-size: 12px; }
+/* Categories: the Actions header centered in its column (the buttons stay at the right) */
+.staff .table.cats th:last-child { text-align: center; padding-left: 14px; }

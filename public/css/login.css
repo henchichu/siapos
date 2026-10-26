@@ -1,26 +1,52 @@
-/* Tokens from the ClockIt "Login" wireframe (node 108:6) */
-:root { --ink: #222; --muted: #444; --error: #c62828; }
-* { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 40px 16px;
-  font-family: "IBM Plex Sans", sans-serif; color: var(--ink); background: #fff; }
-.panel { display: flex; flex-direction: column; align-items: center; gap: 24px; }
-.panel p { margin: 0; }
-.brand { font-size: 28px; font-weight: 600; }
-.sub { font-size: 14px; color: var(--muted); }
-.prompt { font-size: 18px; font-weight: 600; text-align: center; }
-.digits { font-size: 20px; font-weight: 600; letter-spacing: 0.25em; min-height: 26px; }
-.dots { display: flex; gap: 24px; height: 22px; }
-.dot { width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 50%; }
-.dot.on { background: var(--ink); }
-.error { color: var(--error); font-size: 14px; text-align: center; min-height: 20px; margin-top: -8px; }
-.lockout { color: var(--muted); font-size: 14px; text-align: center; padding: 8px 15px 8px 13px; }
-.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 280px; }
-.key, .enter { height: 76px; border: 2px solid var(--ink); border-radius: 999px; background: #fff;
-  color: #000; font: inherit; font-size: 26px; cursor: pointer; }
-.key.small { font-size: 15px; }
-.key:active:not(:disabled) { background: #eee; }
-.enter { width: 280px; height: 56px; font-size: 18px; font-weight: 600; background: var(--ink); color: #fff; }
-.key:disabled, .enter:disabled { opacity: 0.4; cursor: not-allowed; }
-.link { background: none; border: 0; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer;
-  text-decoration: underline; }
-:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; }
+/* Staff sign-in: the navy ClockIt screen. Colors are theme.css tokens; everything is centered on a full navy page */
+body { min-height: 100vh; display: grid; place-items: center; padding: 40px 16px; overflow-x: hidden;
+  font-family: "IBM Plex Sans", sans-serif; color: #fff; background: var(--navy); }
+/* faint cyan rings in two corners */
+body::before, body::after { content: ""; position: fixed; z-index: -1; border-radius: 50%; pointer-events: none; }
+body::before { width: 360px; height: 360px; left: -200px; top: -200px; border: 20px solid rgba(18, 198, 244, 0.14); }
+body::after { width: 620px; height: 620px; right: -320px; bottom: -340px; border: 36px solid rgba(18, 198, 244, 0.18); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+.signin { display: flex; flex-direction: column; align-items: center; gap: 24px; width: min(420px, 100%); text-align: center; }
+.signin p, .signin h1, .signin h2 { margin: 0; }
+/* the logo sits where the old 28px "ClockIt" title was */
+.brand { line-height: 0; }
+.brand img { width: 144px; height: auto; color: #fff; font: 600 28px/1.2 "IBM Plex Sans", sans-serif; }
+.eyebrow { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #C3C9F2; } /* 7.6:1 on navy */
+.prompt { font-size: 18px; font-weight: 600; color: #fff; }
+
+/* Step 1: eight digit slots with underlines that turn cyan as they fill */
+.slots { display: flex; gap: 8px; min-height: 26px; }
+.slot { width: 16px; height: 26px; display: flex; align-items: flex-end; justify-content: center;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.35); font-size: 20px; font-weight: 600; line-height: 1; color: #fff; }
+.slot.on { border-bottom-color: var(--cyan); }
+
+/* Step 2: six circles that fill cyan */
+.pins { display: flex; gap: 24px; height: 22px; }
+.pin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); }
+.pin.on { background: var(--cyan); border-color: var(--cyan); }
+
+/* Keypad: round white-outline keys */
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 280px; justify-items: center; }
+.key { width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(255, 255, 255, 0.03);
+  color: #fff; font: inherit; font-size: 26px; cursor: pointer; transition: background-color 0.12s, border-color 0.12s; }
+.key.small { font-size: 15px; font-weight: 600; }
+.key:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); border-color: #fff; }
+.key:active:not(:disabled) { background: rgba(18, 198, 244, 0.25); border-color: var(--cyan); }
+.key:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Messages: a soft coral note for a wrong entry, a solid coral bar for a lockout */
+.messages { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
+.error { padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--coral); background: rgba(243, 90, 71, 0.16); color: #FFD6D0; font-size: 14px; font-weight: 600; } /* 9:1 */
+.lockout { display: flex; align-items: center; gap: 8px; padding: 8px 15px 8px 13px; border-radius: 10px; background: var(--coral); color: var(--navy-dark); font-size: 14px; font-weight: 600; } /* 4.7:1 */
+.lock { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.step { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 14px; color: #C3C9F2; }
+.progress { display: flex; gap: 6px; }
+.progress span { width: 40px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.25); }
+.progress span.on { background: var(--cyan); }
+
+.again { font-size: 14px; color: #C3C9F2; }
+.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: #fff; text-decoration: underline; cursor: pointer; }
+.link:hover { color: var(--cyan); }

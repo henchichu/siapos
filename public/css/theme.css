@@ -1,0 +1,65 @@
+/* ClockIt navy theme (docs/design/ClockIt-navy-menu.pdf). Every staff page loads this last: the other stylesheets use these tokens,
+   and the shared card, summary-card and status looks below win over the pages' own older rules */
+:root {
+  --navy: #13209A;        /* sidebar, primary buttons, headings, table headers */
+  --navy-dark: #0D1670;   /* text on cyan, primary hover */
+  --cyan: #12C6F4;        /* selected menu item, highlights, avatars, best-day bar */
+  --coral: #F35A47;       /* warnings only: borders and dots. Too light for text (3.3:1), so warning text uses --red */
+  --red: #C42E1C;         /* warning and error text: 5.6:1 on white */
+  --page: #F3F5FB;
+  --card: #fff;
+  --border: #D5DAEC;
+  --text: #141B4D;
+  --text-2: #4A5178;      /* secondary text: 7.7:1 on white */
+  --hover: #EAEDF8;       /* behind hovered rows and white buttons */
+  --ok: #17703A;
+  --radius: 10px;         /* buttons, inputs */
+  --radius-card: 14px;    /* cards and panels */
+  --nav-w: 248px;
+
+  /* The names the page stylesheets already use */
+  --ink: var(--text); --muted: var(--text-2); --line: var(--border); --box: var(--border); --error: var(--red); --danger: var(--red);
+}
+@media (max-width: 1100px) { :root { --nav-w: 208px; } }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); }
+:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.nav :focus-visible { outline-color: var(--cyan); }
+
+/* Small outline icons (shell.js Icon): stroke only, in the text's color */
+svg.icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Page header: location in small caps above a large navy title */
+.ptitle { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ptitle .place { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.ptitle .place .icon { width: 14px; height: 14px; color: var(--navy); }
+.app .ptitle > h2 { font-size: 32px; font-weight: 700; line-height: 1.15; color: var(--navy); overflow-wrap: anywhere; }
+
+/* Cards: white with a light border and 14px corners. Forms in a side panel add a 6px cyan strip on top */
+.pview, .pform, .panel, .clock, .sales, .hours, .cards, .filters, .closing, .results, .osec, .chart, .tablewrap {
+  background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-card); }
+.pform, .panel.form { border-top: 6px solid var(--cyan); }
+.pview h2, .pform h2, .panel h3, .osec h3, .results h3, .chart h3, .tablewrap h3 { color: var(--navy); }
+/* a whole report or member history sits on the page; its own cards, chart and tables are the cards */
+.pview.report, .pview.history { background: none; border: 0; border-radius: 0; }
+
+/* Summary cards: a small icon in the top right; the main card (marked .dark, else the first) is solid navy */
+.rcard, .mcards > div, .totals .box { position: relative; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-card); padding: 14px 52px 14px 16px; }
+.rcard span, .mcards > div > span, .totals .box span { color: var(--text-2); }
+.rcard b, .mcards > div > b, .totals .box b { color: var(--navy); font-weight: 700; }
+.rcards:not(:has(> .dark)) > .rcard:first-child, .rcard.dark, .mcards > div:first-child, .totals .box:first-child { background: var(--navy); border-color: var(--navy); }
+.rcards:not(:has(> .dark)) > .rcard:first-child :is(span, b), .rcard.dark :is(span, b), .mcards > div:first-child :is(span, b), .totals .box:first-child :is(span, b) { color: #fff; }
+.cicon { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 8px; background: var(--hover); color: var(--navy); display: flex; align-items: center; justify-content: center; }
+.cicon .icon { width: 16px; height: 16px; }
+.rcards:not(:has(> .dark)) > .rcard:first-child .cicon, .rcard.dark .cicon, .mcards > div:first-child .cicon, .totals .box:first-child .cicon { background: var(--cyan); color: var(--navy-dark); }
+.stat .cicon { top: 10px; right: 10px; width: 24px; height: 24px; } .stat .cicon .icon { width: 14px; height: 14px; }
+.stats > .stat:first-child .cicon { background: var(--cyan); color: var(--navy-dark); }
+
+/* Status: a dot before the word. The dot is drawn here so the cell's text stays the word alone */
+.dot { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--navy); white-space: nowrap; }
+.dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); flex: none; }
+.dot.warn { color: var(--red); } .dot.warn::before { background: var(--coral); }
+.dot.off { color: var(--text-2); font-weight: 400; } .dot.off::before { background: var(--border); }
+
+@media (max-width: 760px), (max-aspect-ratio: 1/1) { .app .ptitle > h2 { font-size: 26px; } }

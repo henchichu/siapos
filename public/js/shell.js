@@ -8,11 +8,52 @@ PAGES.Settings = "/settings.html";
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
+// One request per page: the sidebar and the page title both ask.
+let mePromise;
 function useMe() {
   const [me, setMe] = useState(null);
-  useEffect(() => { api("/session").then(setMe).catch(() => {}); }, []);
+  useEffect(() => { (mePromise ||= api("/session")).then(setMe).catch(() => {}); }, []);
   return me;
 }
+
+// Small outline icons, 24x24 and stroked in the text's color (theme.css .icon)
+const ICONS = {
+  register: '<rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  kitchen: '<path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 22V2c-2 1.5-3 4.5-3 8h3"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  receipt: '<path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h6"/>',
+  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/>',
+  cup: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
+  box: '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V7M18 17v-8"/>',
+  people: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>',
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/>',
+  money: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+  pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+};
+const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
+const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Needs attention": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
+  Reports: "chart", Employees: "people", Settings: "sliders", "My shift": "clock" };
+
+// The small icon in a summary card's corner, picked from its label
+const CARD_ICONS = [[/hour|today|week|period/i, "clock"], [/%|tax|discount/i, "percent"], [/refund|lost|loss|differ/i, "alert"],
+  [/sales|revenue|profit|gross/i, "trend"], [/cost|tip|spent|value|average/i, "money"], [/order|report|unit|item|count/i, "receipt"], [/point|tier|member/i, "star"]];
+const CardIcon = ({ label }) => html`<span className="cicon"><${Icon} name=${(CARD_ICONS.find(([re]) => re.test(label)) || [, "chart"])[1]} /></span>`;
+
+// A status word with a colored dot before it (theme.css): tone "on" (cyan), "warn" (coral) or "off" (grey)
+const Status = ({ tone = "on", children }) => html`<span className=${`dot ${tone}`}>${children}</span>`;
+
+// The page header: this location in small caps above the page's title
+function PageTitle({ children }) {
+  const me = useMe();
+  return html`<div className="ptitle"><p className="place"><${Icon} name="pin" />${me?.locationName || " "}</p><h2>${children}</h2></div>`;
+}
+
+const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join("").toUpperCase();
 
 async function signOut() {
   try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
@@ -41,13 +82,13 @@ function Sidebar({ me, current, onSignOut = signOut }) {
   const [places, setPlaces] = useState(false);
   return html`<nav className="nav" aria-label="Main">
     <div>
-      <h1><a href="/home.html">ClockIt</a></h1>
+      <h1><a href="/home.html"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /></a></h1>
       <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
-        <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined}>${n}</a>
-        ${n === current && html`<span className="nav-rule"></span>`}</li>`)}</ul>
+        <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined}><${Icon} name=${MENU_ICONS[n]} />${n}</a></li>`)}</ul>
     </div>
     <div className="who">
-      <span>${me?.employeeName} ·</span>
+      <span className="avatar" aria-hidden="true">${initials(me?.employeeName)}</span>
+      <span className="name">${me?.employeeName}</span>
       ${me?.canSwitch
         ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
         : html`<span>${me?.roleName} · ${me?.locationName}</span>`}

@@ -7,7 +7,7 @@ const { start, client, pool } = require("./env");
 let env, leoRole, mine, owner, leo;
 const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
 const role = (over) => ({ name: "Test role", opensTo: "SHIFT", active: true, permissions: [1], ...over });
-const roleId = async (name) => (await pool.query("SELECT RoleID AS id FROM Role WHERE Name = ?", [name]))[0][0]?.id;
+const roleId = async (name) => (await pool.query("SELECT RoleID AS id FROM Role WHERE Name = ? AND BusinessID = 'biz-brewbean'", [name]))[0][0]?.id;
 
 test.before(async () => {
   env = await start();
@@ -20,7 +20,7 @@ test.before(async () => {
 });
 test.after(async () => {
   await pool.query("UPDATE Employee SET RoleID = ? WHERE EmployeeID = 'emp-leo'", [leoRole]);
-  const ids = (await pool.query("SELECT RoleID FROM Role WHERE Name LIKE 'Test %'"))[0].map((r) => r.RoleID);
+  const ids = (await pool.query("SELECT RoleID FROM Role WHERE Name LIKE 'Test %' AND BusinessID = 'biz-brewbean'"))[0].map((r) => r.RoleID);
   if (ids.length) { await pool.query("DELETE FROM RolePermission WHERE RoleID IN (?)", [ids]); await pool.query("DELETE FROM Role WHERE RoleID IN (?)", [ids]); }
   env.server.close();
   await pool.end();
@@ -41,7 +41,7 @@ test("a non-owner may only grant permissions they hold", async () => {
 });
 
 test("the Owner role is locked, and a role with active staff can't be switched off", async () => {
-  const [[{ id }]] = await pool.query("SELECT RoleID AS id FROM Role WHERE IsOwner LIMIT 1");
+  const [[{ id }]] = await pool.query("SELECT RoleID AS id FROM Role WHERE IsOwner AND BusinessID = 'biz-brewbean'");
   const locked = await owner.call("/settings/roles", role({ id, name: "Owner", permissions: [1] }));
   assert.deepEqual([locked.status, locked.body.error], [400, "The Owner role is locked."]);
   const off = await owner.call("/settings/roles", role({ id: mine, name: "Test settings manager", permissions: [1, 21, 22], active: false }));
@@ -56,7 +56,7 @@ test("a role change signs out the people on it", async () => {
 
 test("a location with active staff can't be deactivated", async () => {
   const general = (await owner.call("/settings/general")).body;
-  const [[{ id }]] = await pool.query("SELECT el.LocationID AS id FROM EmployeeLocation el JOIN Employee e USING (EmployeeID) WHERE el.Active AND e.Active LIMIT 1");
+  const [[{ id }]] = await pool.query("SELECT el.LocationID AS id FROM EmployeeLocation el JOIN Employee e USING (EmployeeID) WHERE el.Active AND e.Active AND e.BusinessID = 'biz-brewbean' LIMIT 1");
   const l = general.locations.find((x) => x.id === id);
   const r = await owner.call("/settings/locations", { ...l, active: false, online: !!l.online });
   assert.deepEqual([r.status, r.body.error], [400, "Reassign active staff before deactivating this location."]);

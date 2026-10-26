@@ -10,6 +10,9 @@ const DENIED = "Unauthorized. Supervisor or Owner credentials required to overri
 // itself, because the person signed in isn't the one the approval is about.
 async function verifyOverride(session, managerNumber, managerPin, permissionCodes, { selfOk = false } = {}) {
   if (!/^\d{8}$/.test(managerNumber) || !/^\d{6}$/.test(managerPin)) throw new HttpError(403, DENIED);
+  // Another business's number is refused before its PIN is tried, so nobody here can run up that person's lockout
+  const [[ours]] = await pool.query("SELECT 1 AS ok FROM Employee WHERE EmployeeNumber = ? AND BusinessID = ?", [managerNumber, session.businessId]);
+  if (!ours) throw new HttpError(403, DENIED);
   const result = await authenticate(managerNumber, managerPin, session.employeeId);
   if (result.status !== "ok" || result.emp.BusinessID !== session.businessId) throw new HttpError(403, DENIED);
   for (const code of permissionCodes)

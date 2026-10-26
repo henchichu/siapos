@@ -1,7 +1,7 @@
 // Needs the dev database. Sells croissants as Sam (Downtown) so there is an order from today to find; it is refunded in one test and left otherwise.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp } = require("./env");
+const { start, client, pool, pickUp, topUp } = require("./env");
 
 let env, leo, maya, sam, jordan, mine;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
@@ -19,6 +19,7 @@ async function sale(n = 2) {
 }
 
 test.before(async () => {
+  await topUp("stk-croissant", 60, "loc-downtown"); // the test sales are croissants at Sam's café, and every run uses some
   env = await start();
   [leo, maya, sam, jordan] = await Promise.all([["10420002", "222222"], ["10420001", "111111"], ["10420003", "333333"], ["10420005", "555555"]].map(([n, p]) => signIn(n, p)));
 });
@@ -106,9 +107,9 @@ test("details reconcile, and a refund shows up in payments and status", async ()
 });
 
 test("an order that isn't completed can't be refunded; an online one has no register and a pickup", async () => {
-  const [[pending]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE OrderStatusCode = 1 LIMIT 1");
+  const [[pending]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE OrderStatusCode = 1 AND BusinessID = 'biz-brewbean' LIMIT 1");
   if (pending) assert.equal((await leo.call(`/orders/${pending.id}`)).body.canRefund, false);
-  const [[online]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE ChannelCode = 2 LIMIT 1");
+  const [[online]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE ChannelCode = 2 AND BusinessID = 'biz-brewbean' LIMIT 1");
   const d = (await leo.call(`/orders/${online.id}`)).body;
   assert.equal(d.source, "Online");
   assert.deepEqual([d.where.register, d.where.rungUpBy], [null, "Online"]);

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClockIt · Point of sale for small businesses</title>
+  <meta name="description" content="Ring up sales, send orders to the kitchen, clock in your team and see the day's numbers, across every location you run.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/welcome.css">
+</head>
+<body>
+  <!-- The public homepage for business owners (server.js serves it at "/" to anyone not signed in). Layout from docs/design/ClockIt-homepage.pdf -->
+  <header class="top">
+    <div class="wrap topbar">
+      <a class="logo" href="/"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="144" height="36"></a>
+      <nav class="topnav" aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a class="btn ghost" href="/login.html">Sign in</a>
+        <a class="btn cyan" href="/signup.html">Register your business</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div class="hero-text">
+          <p class="eyebrow"><span class="spot" aria-hidden="true"></span>Point of sale for small businesses</p>
+          <h1 id="hero-title">Your checkout,<br><span class="accent">in sync.</span></h1>
+          <p class="lead">Ring up sales, send orders to the kitchen, clock in your team and see the day's numbers, across every location you run.</p>
+          <div class="actions">
+            <a class="btn cyan big" href="/signup.html">Register your business</a>
+            <a class="btn ghost big" href="#how-it-works">See how it works</a>
+          </div>
+        </div>
+
+        <!-- A sketch of the app from plain shapes: sidebar, cards, a bar chart and a table -->
+        <div class="preview" aria-hidden="true">
+          <div class="p-side"><i class="p-brand"></i><i></i><i></i><i class="on"></i><i></i><i></i></div>
+          <div class="p-main">
+            <div class="p-cards"><i class="dark"></i><i></i><i></i></div>
+            <div class="p-chart"><i style="height:40%"></i><i style="height:55%"></i><i style="height:33%"></i><i style="height:70%"></i><i style="height:58%"></i><i class="best" style="height:86%"></i><i style="height:49%"></i></div>
+            <div class="p-table"><i class="head"></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 id="features-title">Everything the shift needs</h2>
+        <p class="intro">One system for the front counter, the kitchen and the back office, with each person seeing only what their role allows.</p>
+        <ul class="grid four">
+          <li class="card">
+            <span class="ficon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span>
+            <h3>Register and kitchen</h3>
+            <p>Ring up orders with modifiers and discounts, and send tickets straight to a live kitchen screen.</p>
+          </li>
+          <li class="card">
+            <span class="ficon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></span>
+            <h3>Staff and timecards</h3>
+            <p>Each person signs in with their own number and PIN, clocks in, and sees only what their role allows.</p>
+          </li>
+          <li class="card">
+            <span class="ficon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/></svg></span>
+            <h3>Rewards</h3>
+            <p>Look up or sign up members at the register and see their orders and points history.</p>
+          </li>
+          <li class="card">
+            <span class="ficon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3v18h18"/><path d="M8 17v-5M13 17V7M18 17v-8"/></svg></span>
+            <h3>Reports</h3>
+            <p>Live sales, sales by day, top sellers, labor cost and stock losses for any location.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section band" aria-labelledby="steps-title">
+      <div class="wrap">
+        <h2 id="steps-title">Up and running in three steps</h2>
+        <ol class="grid three">
+          <li class="card">
+            <span class="num" aria-hidden="true">1</span>
+            <h3>Register your business</h3>
+            <p>Tell us your business name, set up your first location and create your owner sign-in.</p>
+          </li>
+          <li class="card">
+            <span class="num" aria-hidden="true">2</span>
+            <h3>Add locations and staff</h3>
+            <p>Set addresses, tax rates and roles, then add your team with their own PINs.</p>
+          </li>
+          <li class="card">
+            <span class="num" aria-hidden="true">3</span>
+            <h3>Sign in and start selling</h3>
+            <p>Staff sign in at the register with their employee number and PIN.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="cta-title">
+      <div class="wrap">
+        <div class="cta">
+          <div>
+            <h2 id="cta-title">Ready to set up your shop?</h2>
+            <p>Register your business, add your locations, and your team can sign in today.</p>
+          </div>
+          <a class="btn cyan big" href="/signup.html">Register your business</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap footbar">
+      <p>ClockIt · Your checkout, in sync.</p>
+      <nav aria-label="Legal">
+        <a href="#">[Terms]</a>
+        <a href="#">[Privacy]</a>
+        <a href="#">[Contact]</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

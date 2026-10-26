@@ -21,12 +21,12 @@ function MemberTable({ data, busy, editingId, onEdit, onHistory, onAct }) {
       <td className="contact">${contactOf(m)}${m.email && m.phone && html`<span className="sub">${m.phone}</span>`}</td>
       <td>${m.tier}</td>
       <td className="r">${m.points}</td>
-      <td>${m.active ? "Active" : "Inactive"}</td>
+      <td><${Status} tone=${m.active ? "on" : "off"}>${m.active ? "Active" : "Inactive"}<//></td>
       <td><div className="acts">
         ${data.canEdit && html`<button className="act" disabled=${busy} onClick=${() => onEdit(m)}>Edit</button>`}
         <button className="act" onClick=${() => onHistory(m)}>History</button>
         ${data.canEdit && (m.active
-          ? html`<button className="act" disabled=${busy} onClick=${() => onAct(m, false)}>Deactivate</button>`
+          ? html`<button className="act danger" disabled=${busy} onClick=${() => onAct(m, false)}>Deactivate</button>`
           : html`<button className="act" disabled=${busy} onClick=${() => onAct(m, true)}>Reactivate</button>`)}
       </div></td></tr>`)}
       ${!data.members.length && html`<tr><td colSpan="6">No members match.</td></tr>`}</tbody>
@@ -94,9 +94,9 @@ function Members({ q, inactive, onFilters, onHistory }) {
     setBusy(false);
   };
 
-  return html`<div className="staff">
+  return html`<${React.Fragment}><${PageTitle}>Rewards members<//><div className="staff">
     <section className="pview">
-      <header className="phead"><h2>Rewards members</h2>
+      <header className="phead end">
         <div className="pfilters">
           <label className="check search">Search
             <input className="field" type="search" placeholder="Name, email or phone" value=${q} onChange=${(e) => onFilters({ q: e.target.value })} /></label>
@@ -113,7 +113,7 @@ function Members({ q, inactive, onFilters, onHistory }) {
     ${confirm && html`<${Confirm} title=${`Deactivate ${confirm.firstName} ${confirm.lastName}?`}
       text="They won't be able to earn or redeem points at the register until they're reactivated. Their points and history are kept." label="Deactivate"
       onNo=${() => setConfirm(null)} onYes=${() => { const m = confirm; setConfirm(null); setActive(m, false); }} />`}
-  </div>`;
+  </div><//>`;
 }
 
 // ---- one member's history -------------------------------------------------------------------------------------------
@@ -177,13 +177,13 @@ function History({ id, onBack }) {
   useEffect(() => { api(`/rewards/members/${id}`).then(setH).catch((e) => setError(e.message)); }, [id]);
   const m = h?.member;
   return html`<div className="pview history">
-    <header className="hhead"><button className="pbtn outline" onClick=${onBack}>Back to members</button><h2>Member history</h2></header>
+    <header className="hhead"><button className="pbtn outline" onClick=${onBack}>Back to members</button><${PageTitle}>Member history<//></header>
     ${error ? html`<p className="success" role="alert">${error}</p>` : !h ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
       <div className="mcards">
-        <div><span>${m.firstName} ${m.lastName}${!m.active ? " (inactive)" : ""}</span><b>${m.tier}</b></div>
-        <div><span>Points balance</span><b>${m.points}</b></div>
-        <div><span>Orders</span><b>${h.orders}</b></div>
-        <div><span>Total spent</span><b>${money(h.spentCents)}</b></div>
+        <div><span>${m.firstName} ${m.lastName}${!m.active ? " (inactive)" : ""}</span><b>${m.tier}</b><${CardIcon} label="member" /></div>
+        <div><span>Points balance</span><b>${m.points}</b><${CardIcon} label="Points" /></div>
+        <div><span>Orders</span><b>${h.orders}</b><${CardIcon} label="Orders" /></div>
+        <div><span>Total spent</span><b>${money(h.spentCents)}</b><${CardIcon} label="Total spent" /></div>
       </div>
       <div className="phead"><h2>Orders and points</h2>
         <span className="sub">${[m.email, m.phone].filter(Boolean).join(" · ")} · member since ${dateAt(m.since, h.tz)}</span></div>

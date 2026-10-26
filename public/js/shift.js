@@ -41,9 +41,9 @@ function MyShift({ data, reload }) {
         <p className="since">${clockedIn ? `Clocked in since ${clock(open.clockInAt, tz)}` : "Not clocked in"}</p>
         <p className="where">${data.location}</p>
         <div className="stats">
-          <div className="stat"><span>Today</span><b>${hrs(data.hours.today)} h</b></div>
-          <div className="stat"><span>This week</span><b>${hrs(data.hours.week)} h</b></div>
-          <div className="stat"><span>Pay period</span><b>${hrs(data.hours.period)} h</b></div>
+          <div className="stat"><span>Today</span><b>${hrs(data.hours.today)} h</b><${CardIcon} label="Today" /></div>
+          <div className="stat"><span>This week</span><b>${hrs(data.hours.week)} h</b><${CardIcon} label="This week" /></div>
+          <div className="stat"><span>Pay period</span><b>${hrs(data.hours.period)} h</b><${CardIcon} label="Pay period" /></div>
         </div>
         <div className="pad">
           <button className="tbtn" disabled=${busy || !clockedIn || open.onBreak} onClick=${() => act("break-start")}>Break Start</button>
@@ -56,9 +56,9 @@ function MyShift({ data, reload }) {
       <section className="sales" aria-label="Today's sales">
         <h3>Today's sales at ${data.location}</h3>
         <div className="stats">
-          <div className="stat" style=${{ width: 130 }}><span>Orders</span><b>${data.sales.orders}</b></div>
-          <div className="stat" style=${{ width: 150 }}><span>Net sales</span><b>${money(data.sales.netCents)}</b></div>
-          <div className="stat" style=${{ width: 130 }}><span>Items sold</span><b>${data.sales.items}</b></div>
+          <div className="stat" style=${{ width: 130 }}><span>Orders</span><b>${data.sales.orders}</b><${CardIcon} label="Orders" /></div>
+          <div className="stat" style=${{ width: 150 }}><span>Net sales</span><b>${money(data.sales.netCents)}</b><${CardIcon} label="Net sales" /></div>
+          <div className="stat" style=${{ width: 130 }}><span>Items sold</span><b>${data.sales.items}</b><${CardIcon} label="Items sold" /></div>
         </div>
       </section>
     </div>
@@ -200,6 +200,7 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="My shift" />
     <section className="main scrolls" aria-label=${view === "team" ? "Team timecards" : "My shift"}>
+      <${PageTitle}>My shift<//>
       ${shift?.canTeam && html`<${Tabs} view=${view} onView=${go} />`}
       <${Notices} items=${notices} onDismiss=${dismiss} />
       ${!shift ? html`<section className="success">Loading…</section>`

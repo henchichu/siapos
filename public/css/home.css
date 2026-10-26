@@ -1,20 +1,18 @@
-/* Home dashboard. Spacing, radii and strokes from the ClockIt wireframe (node 345:53) */
-:root { --ink: #000; }
-* { box-sizing: border-box; }
-body { margin: 0; font: 16px/1.3 Inter, system-ui, sans-serif; color: var(--ink); background: #fff; }
+/* Home dashboard. Spacing from the ClockIt wireframe (node 345:53); colors and radii are theme.css tokens */
+body { font: 16px/1.3 Inter, system-ui, sans-serif; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; }
 
 .home { min-height: 100dvh; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
-.bar { background: #000; color: #fff; border-radius: 12px; min-height: 56px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.bar { background: var(--navy); color: #fff; border-radius: var(--radius-card); min-height: 56px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .bar h1 { margin: 0; font-size: 20px; font-weight: 600; white-space: nowrap; }
 .bar p { margin: 0; flex: 1; min-width: 0; text-align: right; font-weight: 500; line-height: 22px; }
 
 /* Equal-size cards that wrap onto as many rows as the width allows; a hidden card just isn't in the list */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 32px; }
 .tile { height: 160px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; text-align: left;
-  background: #fff; color: inherit; border: 1px solid #000; border-radius: 12px; font: inherit; text-decoration: none; cursor: pointer; }
-.tile:hover { background: #f4f4f4; }
+  background: var(--card); color: var(--navy); border: 1.5px solid var(--border); border-radius: var(--radius-card); font: inherit; text-decoration: none; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s; }
+.tile:hover { border-color: var(--navy); box-shadow: inset 0 4px 0 var(--cyan); }
 .tile span { font-weight: 600; overflow-wrap: anywhere; text-transform: capitalize; } /* the wireframe's Title Case, from the shared names */
 .icon { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; }
 .icon img { display: block; }

@@ -1,0 +1,117 @@
+/* Public homepage (welcome.html). Layout from docs/design/ClockIt-homepage.pdf; colors are theme.css tokens */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: #fff; font: 16px/1.5 "IBM Plex Sans", sans-serif; overflow-x: hidden; }
+h1, h2, h3, p { margin: 0; }
+ul, ol { list-style: none; margin: 0; padding: 0; }
+:focus-visible { outline: 3px solid var(--navy); outline-offset: 3px; }
+.top :focus-visible, .hero :focus-visible, .cta :focus-visible { outline-color: var(--cyan); }
+.wrap { width: min(1120px, 100% - 48px); margin: 0 auto; }
+/* jump links land below the top of the window, not flush against it */
+section[id] { scroll-margin-top: 16px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 16px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: background-color 0.15s, border-color 0.15s; }
+.btn.big { min-height: 48px; padding: 12px 22px; font-size: 15px; }
+.btn.cyan { background: var(--cyan); color: var(--navy-dark); border: 1.5px solid var(--cyan); }  /* 7.6:1 */
+.btn.cyan:hover { background: #0FB3DD; border-color: #0FB3DD; }
+.btn.ghost { color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.7); }
+.btn.ghost:hover { background: rgba(255, 255, 255, 0.1); border-color: #fff; }
+
+/* 1. Header */
+.top { background: var(--navy); color: #fff; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding: 20px 0; }
+.logo { line-height: 0; border-radius: 6px; }
+.logo img { width: 144px; height: auto; }
+.topnav { display: flex; align-items: center; gap: 8px 24px; flex-wrap: wrap; }
+.topnav > a:not(.btn) { color: #E3E6FA; font-size: 15px; text-decoration: none; }
+.topnav > a:not(.btn):hover { color: #fff; text-decoration: underline; }
+.topnav .btn.ghost { margin-left: 4px; }
+
+/* 2. Hero, with faint cyan rings behind it */
+.hero { position: relative; overflow: hidden; isolation: isolate; background: var(--navy); color: #fff; padding: 56px 0 72px; }
+.hero::before, .hero::after { content: ""; position: absolute; z-index: -1; border-radius: 50%; pointer-events: none; }
+.hero::before { width: 640px; height: 640px; right: -180px; top: -80px; border: 28px solid rgba(18, 198, 244, 0.14); }
+.hero::after { width: 300px; height: 300px; left: -170px; bottom: -110px; border: 18px solid rgba(18, 198, 244, 0.12); }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 48px; align-items: center; }
+.eyebrow { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #C3C9F2; } /* 7.6:1 */
+.spot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); flex: none; }
+.hero h1 { margin-top: 14px; font-size: clamp(40px, 6vw, 60px); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; }
+.accent { color: var(--cyan); } /* 6.1:1 on navy */
+.lead { margin-top: 20px; max-width: 34em; font-size: 17px; line-height: 1.6; color: #D9DDF7; }
+.actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+
+/* The app sketch: a white frame around a sidebar, three cards, a bar chart and a table */
+.preview { display: flex; gap: 10px; padding: 10px; background: #F3F5FB; border-radius: 16px; box-shadow: 0 24px 48px rgba(7, 12, 70, 0.35); aspect-ratio: 16 / 10.5; min-width: 0; }
+.preview i { display: block; }
+.p-side { width: 24%; flex: none; background: var(--navy); border-radius: 8px; padding: 10px 8px; display: flex; flex-direction: column; gap: 7px; }
+.p-side i { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.3); }
+.p-side .p-brand { width: 50%; height: 7px; margin-bottom: 8px; background: rgba(255, 255, 255, 0.55); }
+.p-side .on { height: 13px; background: var(--cyan); }
+.p-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.p-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; height: 19%; }
+.p-cards i, .p-chart, .p-table { background: #fff; border: 1.5px solid var(--border); border-radius: 8px; }
+.p-cards .dark { background: var(--navy); border-color: var(--navy); }
+.p-chart { flex: 1; display: flex; align-items: flex-end; gap: 6%; padding: 12px 10px 10px; }
+.p-chart i { flex: 1; background: var(--navy); border-radius: 3px 3px 0 0; }
+.p-chart .best { background: var(--cyan); }
+.p-table { height: 20%; overflow: hidden; display: flex; flex-direction: column; }
+.p-table i { flex: 1; border-bottom: 1px solid var(--border); }
+.p-table .head { flex: 0 0 26%; background: var(--navy); border: 0; }
+
+/* 3 and 4. Features and steps */
+.section { padding: 80px 0; }
+.section.band { background: var(--page); }
+.section h2 { font-size: clamp(28px, 4vw, 36px); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--navy); }
+.intro { margin-top: 10px; max-width: 36em; font-size: 15px; color: var(--text-2); }
+.grid { display: grid; gap: 16px; margin-top: 32px; }
+.grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 18px; }
+.card { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-card); padding: 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.card h3 { margin-top: 8px; font-size: 17px; font-weight: 600; color: var(--navy); }
+.card p { font-size: 14px; line-height: 1.55; color: var(--text-2); }
+.ficon { width: 32px; height: 32px; border-radius: 8px; background: #E4F7FD; color: var(--navy); display: flex; align-items: center; justify-content: center; }
+.ficon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.num { width: 34px; height: 34px; border-radius: 50%; background: var(--navy); color: var(--cyan); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; } /* 6.1:1 */
+
+/* 5. The closing banner */
+.cta { position: relative; overflow: hidden; isolation: isolate; display: flex; align-items: center; justify-content: space-between; gap: 24px 40px; flex-wrap: wrap;
+  padding: 48px 36px; background: var(--navy); color: #fff; border-radius: 16px; }
+.cta::after { content: ""; position: absolute; z-index: -1; width: 320px; height: 320px; right: 60px; top: -150px; border-radius: 50%; border: 18px solid rgba(18, 198, 244, 0.14); pointer-events: none; }
+.cta h2 { color: #fff; font-size: clamp(24px, 3.4vw, 30px); }
+.cta p { margin-top: 8px; max-width: 34em; font-size: 15px; color: #D9DDF7; }
+
+/* 6. Footer */
+.foot { border-top: 1.5px solid var(--border); }
+.footbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding: 24px 0; font-size: 13px; color: var(--text-2); }
+.foot nav { display: flex; gap: 16px; }
+.foot a { color: var(--navy); }
+.foot a:hover { color: var(--navy-dark); }
+
+/* Tablets: two cards a row, the hero stacks with the preview under the text */
+@media (max-width: 960px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .preview { max-width: 560px; }
+  .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.three { grid-template-columns: minmax(0, 1fr); }
+  .section { padding: 64px 0; }
+}
+/* Phones: one card a row, and the header goes to two rows */
+@media (max-width: 600px) {
+  .wrap { width: calc(100% - 32px); }
+  /* logo and Sign in on the first row, the two page links under them; the hero's own Register button is just below */
+  .topbar { padding: 14px 0; row-gap: 6px; column-gap: 20px; justify-content: flex-start; }
+  .topnav { display: contents; }
+  .topnav .btn.ghost { order: 1; margin-left: auto; }
+  .topnav .btn.cyan { display: none; }
+  .topbar::after { content: ""; order: 2; flex-basis: 100%; }
+  .topnav > a:not(.btn) { order: 3; }
+  .hero { padding: 36px 0 52px; }
+  .lead { font-size: 16px; }
+  .actions .btn { flex: 1 1 100%; }
+  .grid.four { grid-template-columns: minmax(0, 1fr); }
+  .section { padding: 52px 0; }
+  .cta { padding: 32px 22px; }
+  .cta .btn { flex: 1 1 100%; }
+}

@@ -1,12 +1,11 @@
 const express = require("express");
 const pool = require("./database/connection");
-const { findEmployee, workplace, authenticate, isOwner, grantedCodes } = require("./pin");
+const { findEmployee, workplace, authenticate, isOwner } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
-const { access } = require("./nav");
 const { EMPLOYEE_NUMBER } = require("./validate");
+const { signInAs } = require("./signin");
 
-const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html", SHIFT: "/shift.html" };
 const PERM_REPORTS = 20;
 const PERM_MANAGE_STAFF = 19;
 const PERM_MEMBERS = 9;
@@ -24,7 +23,11 @@ router.use("/login", loginLimit);
 router.use("/login", (req, res, next) =>
   EMPLOYEE_NUMBER.test(String(req.body.employeeNumber)) ? next() : res.status(400).json({ error: "Employee numbers are 8 digits." }));
 
-router.post("/login/employee", async (req, res) => {
+// Step 1 shows the first name before the PIN (the sign-in design needs it), so the lookup has its own tighter limits: enough for
+// a café's staff signing in on one address, too few to try numbers in bulk. No ban: the whole café shares that address.
+const lookupLimits = [rateLimit(10, 60 * 1000), rateLimit(60, 60 * 60 * 1000)];
+router.resetLookupLimits = () => lookupLimits.forEach((l) => l.reset());
+router.post("/login/employee", lookupLimits, async (req, res) => {
   const emp = await findEmployee(pool, String(req.body.employeeNumber));
   if (!emp) return res.status(404).json({ error: "Employee Number does not exist." });
   const place = await workplace(emp.EmployeeID);
@@ -42,28 +45,12 @@ router.post("/login/pin", async (req, res) => {
       .status(401)
       .json({ error: `Incorrect PIN. ${result.retriesLeft} retries left.`, retriesLeft: result.retriesLeft });
 
-  const { emp } = result;
-  const place = await workplace(emp.EmployeeID);
-  if (!place) return res.status(403).json({ error: "You aren't assigned to a café. Ask an owner to add you to one." });
-  const granted = await grantedCodes(pool, emp.EmployeeID);
-  const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
-  session.create(res, {
-    employeeId: emp.EmployeeID,
-    businessId: emp.BusinessID,
-    locationId: place.LocationID,
-    registerId: place.RegisterID,
-    info: {
-      employeeName: `${emp.FirstName} ${emp.LastName}`,
-      roleName: emp.RoleName,
-      nav,
-      tiles,
-      home,
-      locationName: place.LocationName,
-      registerName: place.RegisterName,
-    },
-  });
+  const refused = await signInAs(res, result.emp);
+  if (refused) return res.status(403).json({ error: refused });
   res.json({ redirect: "/home.html" }); // everyone lands on Home; its tiles come from the role
 });
+
+router.use(require("./setup")); // public business sign-up: before the session check below
 
 router.post("/logout", (req, res) => {
   session.destroy(req, res);

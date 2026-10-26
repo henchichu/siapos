@@ -59,7 +59,7 @@ function Kitchen({ onReport }) {
 
   return html`<section className="main" aria-label="Kitchen">
     <div className="bar">
-      <h2>Kitchen</h2>
+      <${PageTitle}>Kitchen<//>
       <button className="kbtn outline" onClick=${onReport}>Report a loss</button>
     </div>
     ${error && html`<p className="err" role="alert">${error}</p>`}
@@ -106,7 +106,7 @@ function Loss({ onBack }) {
   return html`<section className="main" aria-label="Report a loss">
     <div className="bar start">
       <button className="kbtn outline" onClick=${onBack}>Back to tickets</button>
-      <h2>Report a loss</h2>
+      <${PageTitle}>Report a loss<//>
     </div>
     <div className="loss">
       <div className="panel form">

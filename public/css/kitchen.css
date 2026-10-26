@@ -1,31 +1,32 @@
 /* Kitchen display. Spacing and type from the ClockIt wireframes (nodes 148:91 and 149:76); tokens come from register.css */
-.kitchen.app { padding: 24px 32px; gap: 24px; }
+.kitchen.app { padding: 24px 32px 24px calc(var(--nav-w) + 32px); gap: 24px; }
+@media (max-width: 1100px) { .kitchen.app { padding: 16px 16px 16px calc(var(--nav-w) + 16px); } }
 
 .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 24px; padding: 0; animation: view-in 0.18s ease-out; }
 @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .main { animation: none; } }
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex: none; }
 .bar.start { justify-content: flex-start; }
-.bar h2 { font-size: 24px; font-weight: 600; }
+.bar h2 { font-size: 24px; font-weight: 600; color: var(--navy); }
 
 /* Figma buttons: 16px semibold, 14/24 padding; dark fill or 1px outline */
-.kbtn { background: var(--ink); color: #fff; border: 1px solid var(--ink); padding: 14px 24px; font-size: 16px; font-weight: 600; }
-.kbtn:hover:not(:disabled) { background: #444; }
-.kbtn:disabled { background: #aaa; border-color: #aaa; opacity: 1; }
-.kbtn.outline { background: #fff; color: var(--ink); }
-.kbtn.outline:hover:not(:disabled) { background: #f4f4f4; }
+.kbtn { background: var(--navy); color: #fff; border: 1.5px solid var(--navy); border-radius: var(--radius); padding: 13px 24px; font-size: 16px; font-weight: 600; }
+.kbtn:hover:not(:disabled) { background: var(--navy-dark); }
+.kbtn:disabled { background: #9AA0C8; border-color: #9AA0C8; opacity: 1; }
+.kbtn.outline { background: #fff; color: var(--navy); border-color: var(--border); }
+.kbtn.outline:hover:not(:disabled) { background: var(--hover); }
 .kbtn.block { width: 100%; }
 
 /* Three queues. Each column is its own scroll area: the grid never grows past the window, and a scrollbar stays inside its column */
 .queues { flex: 1; min-height: 0; display: flex; gap: 24px; }
 .queue { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
-.queue > header { flex: none; position: sticky; top: 0; z-index: 1; background: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 0 14px; margin-bottom: -14px; }
-.queue h3 { font-size: 17px; font-weight: 600; }
-.badge { background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
+.queue > header { flex: none; position: sticky; top: 0; z-index: 1; background: var(--page); display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 0 14px; margin-bottom: -14px; }
+.queue h3 { font-size: 17px; font-weight: 600; color: var(--navy); }
+.badge { background: var(--cyan); color: var(--navy-dark); font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
 
-.ticket { flex: none; border: 1px solid var(--ink); background: #fff; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.ticket { flex: none; border: 1.5px solid var(--border); border-radius: var(--radius-card); background: #fff; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .ticket .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.ticket .top b { font-size: 14px; font-weight: 600; }
+.ticket .top b { font-size: 14px; font-weight: 600; color: var(--navy); }
 .ticket .top span { font-size: 12px; color: var(--muted); text-align: right; }
 .ticket .meta, .ticket .opts, .ticket .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .ticket .item { font-size: 14px; overflow-wrap: anywhere; }
@@ -37,7 +38,7 @@
 .panel { display: flex; flex-direction: column; gap: 18px; padding: 24px; min-width: 0; }
 .panel.form { width: 420px; flex: none; overflow-y: auto; }
 .panel.log { flex: 1; gap: 16px; overflow-y: auto; }
-.panel h3 { font-size: 20px; font-weight: 600; }
+.panel h3 { font-size: 20px; font-weight: 600; color: var(--navy); }
 .panel label { display: flex; flex-direction: column; gap: 6px; }
 .panel label > b, .panel .lbl { font-size: 14px; font-weight: 600; }
 .amount { display: flex; gap: 16px; align-items: flex-start; }
@@ -47,16 +48,18 @@
 .reasons div { display: flex; gap: 12px; }
 .reasons .kbtn { flex: 1 1 auto; white-space: nowrap; padding: 14px 12px; }
 .panel .msg { min-height: 0; }
-.losses { width: 100%; border-collapse: collapse; font-size: 13px; }
-.losses th { text-align: left; font-weight: 600; padding: 0 10px 10px 0; border-bottom: 2px solid var(--ink); }
-.losses td { padding: 14px 10px 0 0; }
+.losses { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.losses th { text-align: left; font-weight: 600; padding: 10px; background: var(--navy); color: #fff; }
+.losses thead th:first-child { border-top-left-radius: 8px; } .losses thead th:last-child { border-top-right-radius: 8px; }
+.losses td { padding: 12px 10px; border-bottom: 1px solid var(--border); }
 
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .kitchen.app { padding: 16px; }
     .main { overflow: visible; flex: none; }
   .queues, .loss { flex-direction: column; flex: none; }
   .queue { overflow: visible; padding: 0; }
   .queue > header { position: static; padding: 0; margin: 0; }
-  .panel { padding: 0; }
+  .panel { padding: 16px; }
   .panel.form { width: auto; overflow: visible; }
   .panel.log { overflow-x: auto; }
 }

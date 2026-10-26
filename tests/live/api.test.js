@@ -1,14 +1,14 @@
 // Needs the dev database. Each run adds a few real test sales to it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock, pickUp, TEST_CARD } = require("./env");
+const { start, client, pool, unlock, pickUp, topUp, TEST_CARD } = require("./env");
 
 const DENIED = "Unauthorized. Supervisor or Owner credentials required to override.";
 let env, sam;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
 const croissant = { key: "a", variantId: "var-croissant", quantity: 1 };
 
-test.before(async () => { env = await start(); sam = await signIn("10420003", "333333"); });
+test.before(async () => { env = await start(); await topUp("stk-croissant", 60, "loc-downtown"); sam = await signIn("10420003", "333333"); });
 test.after(async () => { env.server.close(); await pool.end(); });
 
 test("a server's own PIN can't approve a discount; a manager's can", async () => {
@@ -138,10 +138,17 @@ test("a declined or bad card at the register makes no sale", async () => {
   assert.equal((await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } })).status, 200, "cash needs no card");
 });
 
-test("the staff side starts at the sign-in page, and the old scaffold pages are gone", async () => {
-  const at = (path) => fetch(env.base + path, { redirect: "manual" });
+test("visitors get the homepage at /, signed-in staff go Home, and the old scaffold pages are gone", async () => {
+  const at = (path, headers = {}) => fetch(env.base + path, { redirect: "manual", headers });
   const root = await at("/");
-  assert.deepEqual([root.status, root.headers.get("location")], [302, "/login.html"]);
+  assert.equal(root.status, 200);
+  const page = await root.text();
+  assert.match(page, /Your checkout,/);
+  assert.match(page, /href="\/login\.html"/, "Sign in goes to the staff sign-in");
+  assert.ok(!/href="\/register\.html"/.test(page), "Register your business isn't the staff register");
+  const sam = await signIn("10420003", "333333");
+  const home = await at("/", { cookie: sam.cookie() });
+  assert.deepEqual([home.status, home.headers.get("location")], [302, "/home.html"], "signed in: straight to Home");
   assert.equal((await at("/login.html")).status, 200);
   for (const path of ["/index.html", "/customers.html", "/css/styles.css"]) assert.equal((await at(path)).status, 404, path);
 });

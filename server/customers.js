@@ -28,18 +28,19 @@ const shared = () => process.env.KIOSK_SHARED_DEVICE === "1";
 const idleMs = () => (shared() ? 5 * 60 * 1000 : SESSION_MS);
 const tokenOf = (req) => /(?:^|;\s*)customer_session=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
 
-function signIn(req, res, customerId) {
+// A sign-in belongs to the business of the café it was made at: at another business's café the phone is a guest there
+function signIn(req, res, customerId, businessId) {
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, { customerId, expires: Date.now() + SESSION_MS, active: Date.now() });
+  sessions.set(token, { customerId, businessId, expires: Date.now() + SESSION_MS, active: Date.now() });
   res.cookie("customer_session", token, { httpOnly: true, sameSite: "strict", maxAge: SESSION_MS, secure: process.env.COOKIE_SECURE === "1" || req.secure }); // req.secure: behind the HTTPS proxy
 }
 
-function currentCustomer(req) {
+function currentCustomer(req, businessId) {
   const token = tokenOf(req);
   const s = token && sessions.get(token);
   if (!s) return null;
   if (over(s)) { sessions.delete(token); return null; }
-  return s;
+  return businessId && s.businessId !== businessId ? null : s;
 }
 
 const over = (s) => s.expires < Date.now() || Date.now() - s.active >= idleMs();
@@ -47,7 +48,7 @@ setInterval(() => {
   for (const [token, s] of sessions) if (over(s)) sessions.delete(token);
 }, 60 * 60 * 1000).unref();
 
-// A small memory for lookups that rarely change (the business, a café): each answer is kept for ms. shortcut: per process, so a
+// A small memory for lookups that rarely change (a café): each answer is kept for ms. shortcut: per process, so a
 // change in Settings shows within a few seconds, not at once.
 const memos = [];
 function memo(ms, fn) {
@@ -66,34 +67,21 @@ function memo(ms, fn) {
 }
 router.resetCaches = () => memos.forEach((m) => m.reset());
 
-// The one business this app serves: BUSINESS_ID, or the only active business. With several and no BUSINESS_ID it refuses to guess.
-const businessOf = memo(60 * 1000, async (id) => {
-  const [rows] = await pool.query(`SELECT BusinessID, Name AS businessName FROM Business WHERE Active ${id ? "AND BusinessID = ?" : ""}`, id ? [id] : []);
-  if (!rows.length) throw new HttpError(503, "This store isn't set up yet.");
-  if (!id && rows.length > 1) throw new HttpError(503, "This app serves one business. Set BUSINESS_ID.");
-  return rows[0];
-});
-const business = () => businessOf(process.env.BUSINESS_ID || "");
-
-// The café a phone is ordering at: its x-location-id header, from the café's QR code (/order/<locationId>). It must be an
-// active café of this business.
-const placeAt = memo(5 * 1000, async (key) => {
-  const [businessId, locationId] = JSON.parse(key);
+// The café a phone is ordering at: its x-location-id header, from the café's QR code (/order/<locationId>). The café decides the
+// business, so several businesses share this server: an active café of an active business, or nothing.
+const SCAN = "Scan your café's QR code to order.";
+const placeAt = memo(5 * 1000, async (locationId) => {
+  if (!locationId) throw new HttpError(404, SCAN);
   const [rows] = await pool.query(
     `SELECT l.LocationID, l.BusinessID, l.Name AS locationName, b.Name AS businessName, r.RegisterID
-       FROM Location l JOIN Business b ON b.BusinessID = l.BusinessID
+       FROM Location l JOIN Business b ON b.BusinessID = l.BusinessID AND b.Active
        LEFT JOIN Register r ON r.LocationID = l.LocationID AND r.RegStatusCode = 1
-      WHERE l.LocationID = ? AND l.BusinessID = ? AND l.Active ORDER BY r.Name LIMIT 1`, [locationId, businessId]);
+      WHERE l.LocationID = ? AND l.Active ORDER BY r.Name LIMIT 1`, [locationId]);
   if (!rows[0]) throw new HttpError(404, "This café link isn't valid. Scan the QR code in the café again.");
   return rows[0];
 });
-const place = async (req) => placeAt(JSON.stringify([(await business()).BusinessID, String(req.get("x-location-id") || "")]));
-
-// The café's id when the business has exactly one active café, for the addresses that carry no id (/ and /customer)
-router.onlyLocation = async () => {
-  const [rows] = await pool.query("SELECT LocationID FROM Location WHERE BusinessID = ? AND Active", [(await business()).BusinessID]);
-  return rows.length === 1 ? rows[0].LocationID : null;
-};
+const place = (req) => placeAt(String(req.get("x-location-id") || ""));
+router.SCAN = SCAN;
 
 // Customer-facing wording for the database's statuses. Customers never change these.
 const CUSTOMER_STATUS = {
@@ -112,9 +100,10 @@ router.get("/customer/context", async (req, res) => {
 // A product's picture, for the kiosk page (the staff route needs a staff sign-in). Only products on sale here.
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, "../uploads");
 router.get("/customer/products/:id/photo", async (req, res) => {
-  const k = await business(); // an <img> can't send the café header, and products belong to the business
-  const [[p]] = await pool.query("SELECT ImageKey FROM Product WHERE ProductID = ? AND BusinessID = ? AND Active AND NOT IsGiftCard AND ImageKey IS NOT NULL",
-    [String(req.params.id), k.BusinessID]);
+  // an <img> can't send the café header: any product on sale at an active business, which is what its menu shows anyway
+  const [[p]] = await pool.query(
+    `SELECT p.ImageKey FROM Product p JOIN Business b ON b.BusinessID = p.BusinessID AND b.Active
+      WHERE p.ProductID = ? AND p.Active AND NOT p.IsGiftCard AND p.ImageKey IS NOT NULL`, [String(req.params.id)]);
   if (!p) throw new HttpError(404, "No photo.");
   // kept by the phone for 5 minutes, so a menu of pictures is fetched once; a replaced picture shows within that time
   res.sendFile(path.resolve(UPLOAD_DIR, p.ImageKey), { maxAge: "5m" }, (err) => { if (err && !res.headersSent) res.status(404).json({ error: "No photo." }); });
@@ -172,7 +161,7 @@ router.get("/customer/catalog", async (req, res) => {
 const loginLimits = [rateLimit(60, 60 * 1000), rateLimit(10, 60 * 1000, { by: "device" })];
 router.post("/customer/login", loginLimits, async (req, res) => {
   if (req.noPhoneSignIn) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
-  const k = await business();
+  const k = await place(req);
   const digits = check.phoneDigits(req.body.phone);
   if (!digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
   const [[c]] = await pool.query(
@@ -181,7 +170,7 @@ router.post("/customer/login", loginLimits, async (req, res) => {
       ORDER BY c.CustomerID LIMIT 1`,
     [k.BusinessID, digits]);
   if (!c) return res.status(404).json({ error: "We don't have an account for that number. Continue as a guest, or ask a team member." });
-  signIn(req, res, c.id);
+  signIn(req, res, c.id, k.BusinessID);
   res.json(await me(c.id));
 });
 
@@ -211,7 +200,7 @@ async function me(customerId) {
 }
 
 router.get("/customer/session", async (req, res) => {
-  const s = currentCustomer(req);
+  const s = currentCustomer(req, (await place(req)).BusinessID);
   if (!s) return res.json({ signedIn: false });
   res.json({ signedIn: true, ...(await me(s.customerId)) });
 });
@@ -263,7 +252,7 @@ router.post("/customer/orders", orderLimits, async (req, res) => {
 const PAID_HERE = { "Card": [2, "card"], "Apple Pay": [5, "apple"], "Google Pay": [6, "google"] }; // payment method code, mock kind
 async function placeOrder(req) {
   const k = await place(req);
-  const s = currentCustomer(req);
+  const s = currentCustomer(req, k.BusinessID);
   const customerId = s?.customerId || null;
   const payWith = String(req.body.paymentMethod || "");
   if (payWith !== "Cash" && !PAID_HERE[payWith]) throw new HttpError(400, "Choose how you'll pay.");
@@ -310,7 +299,7 @@ async function placeOrder(req) {
 
 // One order. Signed in: only that customer's own orders. Guest: only guest orders, found by their unguessable id.
 router.get("/customer/orders/:id", async (req, res) => {
-  const s = currentCustomer(req);
+  const s = currentCustomer(req, (await place(req)).BusinessID);
   const [[o]] = await pool.query(
     `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.Total AS total,
             o.CustomerNote AS note, o.OrderStatusCode AS statusCode, st.Description AS status, l.TimeZone AS tz
@@ -332,7 +321,7 @@ router.get("/customer/orders/:id", async (req, res) => {
 
 // Signed-in customer's own orders, newest first
 router.get("/customer/my-orders", async (req, res) => {
-  const s = currentCustomer(req);
+  const s = currentCustomer(req, (await place(req)).BusinessID);
   if (!s) return res.status(401).json({ error: "Sign in to see your orders." });
   const [rows] = await pool.query(
     `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.Total AS total,

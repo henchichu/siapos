@@ -64,7 +64,7 @@ function App() {
     <${Sidebar} me=${me} current="Needs attention" />
     <section className="main scrolls" aria-label="Needs attention">
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
-        <header className="phead heading"><h2>Needs attention</h2><span className="sub">${data.location} · today</span></header>
+        <header className="phead heading"><${PageTitle}>Needs attention<//><span className="sub">${data.location} · today</span></header>
         <div className="attention">
           ${losses && html`<${Panel} title="Stock losses reported today" count=${losses.count} empty="No losses reported today."
             action=${html`<a className="pbtn outline" href="/inventory.html">Open inventory</a>`}>

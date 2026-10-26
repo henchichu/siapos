@@ -1,7 +1,7 @@
 // Needs the dev database. Sells croissants as Sam (Downtown) and asks for refunds on them; every request ends approved or rejected.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp } = require("./env");
+const { start, client, pool, pickUp, topUp } = require("./env");
 
 let env, leo, sam, jordan, maya;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
@@ -20,7 +20,7 @@ async function sale(n = 2, variantId = "var-croissant") {
 }
 const ask = (s, who = sam, extra = {}) => who.call("/refunds/request", { orderId: s.orderId, reason: "Wrong order", lines: [{ orderItemId: s.line.orderItemId, qty: s.line.bought, restock: false }], ...extra });
 
-test.before(async () => { env = await start(); leo = await signIn("10420002", "222222"); sam = await signIn("10420003", "333333"); jordan = await signIn("10420005", "555555"); maya = await signIn("10420001", "111111"); });
+test.before(async () => { env = await start(); await topUp("stk-croissant", 60, "loc-downtown"); leo = await signIn("10420002", "222222"); sam = await signIn("10420003", "333333"); jordan = await signIn("10420005", "555555"); maya = await signIn("10420001", "111111"); });
 test.after(async () => { env.server.close(); await pool.end(); });
 
 test("only roles with something to act on see Needs attention", async () => {
@@ -155,10 +155,10 @@ test("only an owner can switch location, among their own locations", async () =>
     assert.equal((await who.call("/locations")).status, 403);
     assert.equal((await who.call("/locations/switch", { locationId: "loc-downtown" })).status, 403);
   }
-  assert.equal((await attention()).canSwitch, false);
+  assert.equal((await leo.call("/session")).body.canSwitch, false, "the switch is offered from the session (81ef1f8 moved it there)");
   const places = (await maya.call("/locations")).body;
   assert.deepEqual(places.locations.map((l) => l.id), ["loc-campus", "loc-downtown"]);
-  assert.equal((await maya.call("/attention")).body.canSwitch, true);
+  assert.equal((await maya.call("/session")).body.canSwitch, true);
   assert.equal((await maya.call("/locations/switch", { locationId: "nope" })).status, 403);
   try {
     assert.equal((await maya.call("/locations/switch", { locationId: "loc-downtown" })).status, 200);

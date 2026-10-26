@@ -1,5 +1,4 @@
 /* Inventory. Spacing and type from the ClockIt wireframes (nodes 178:2309, 178:3391, 178:3567); tabs, tables and buttons come from shift.css and products.css */
-.tabs.thin .tab { border-width: 1px; }
 .pfilters.wrap { flex-wrap: wrap; }
 .pview .pfilters .select { width: auto; min-width: 144px; }
 .table td.low { color: var(--error); }
@@ -7,20 +6,20 @@
 .wide-form { width: 638px; max-width: 100%; flex: none; }
 .w210 { width: 210px; max-width: 100%; }
 .pactions.left { justify-content: flex-start; } .pactions.left .pbtn { flex: none; }
-.field.cell { height: 40px; min-height: 40px; padding: 8px 10px; width: 80px; }
+.field.cell { height: 40px; min-height: 40px; padding: 8px 10px; width: 80px; border-radius: 8px; }
 .dlines td { overflow: visible; }
 .count .phead { align-items: center; }
 .count .pf > b { font-weight: 500; }
 
 /* The three totals under a stock count */
 .totals { display: flex; gap: 16px; flex-wrap: wrap; }
-.totals .box { flex: 1 1 180px; border: 2px solid var(--ink); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.totals .box span { font-size: 14px; color: var(--muted); }
-.totals .box b { font-size: 28px; font-weight: 600; }
+.totals .box { flex: 1 1 180px; display: flex; flex-direction: column; gap: 6px; } /* the card look is theme.css */
+.totals .box span { font-size: 14px; }
+.totals .box b { font-size: 28px; }
 
 @media print { .nav, .tabs, .noprint, .pform { display: none !important; } .app { display: block; height: auto; padding: 0; } .main.scrolls { overflow: visible; } }
 @media (max-width: 760px), (max-aspect-ratio: 1/1) { .wide-form { width: 100%; } }
 
 .inline { display: flex; gap: 8px; align-items: stretch; }
 .inline .select { flex: 1; min-width: 0; }
-.newsupplier { border: 1px dashed var(--muted); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.newsupplier { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }

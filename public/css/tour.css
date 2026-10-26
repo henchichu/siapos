@@ -31,3 +31,14 @@ ul { list-style: none; margin: 0; padding: 0; }
 .tour-skip { margin-left: auto; background: none; border: 0; padding: 8px 4px; font: inherit; font-size: 14px; color: var(--text-2); text-decoration: underline; cursor: pointer; }
 @media (max-width: 599px) { .tour-card { left: 12px; right: 12px; bottom: 12px; top: auto; width: auto; } }
 @media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
+
+/* ---- DEMO_MODE: the demo sign-ins ---- */
+.logins { max-width: 640px; margin: 0 auto; padding: 40px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 20px; }
+.logins h1 { font-size: 30px; font-weight: 700; color: var(--navy); } .logins h1:focus { outline: none; }
+.keep { margin: 0; padding: 12px 16px; border: 2px solid var(--coral); border-radius: var(--radius); background: #FFF3F1; }
+.keep b { display: block; color: var(--red); }
+.logintable { width: 100%; border-collapse: collapse; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.logintable th { background: var(--navy); color: #fff; text-align: left; font-size: 13px; padding: 10px 12px; }
+.logintable td { padding: 10px 12px; border-top: 1px solid var(--border); }
+.mono { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--navy); letter-spacing: 0.04em; white-space: nowrap; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

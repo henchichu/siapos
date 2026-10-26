@@ -1,6 +1,6 @@
 // A full-screen guided tour: <TourProvider steps> holds the state, useTour() reads and drives it, and the dimmed page, the spotlight
 // and the step card are drawn into document.body (createPortal), so no page's stacking or clipping can hide them.
-// A step is { target?: CSS selector, title, body, placement?: "right" | "left" | "bottom" | "top", cta?: { label, href } }.
+// A step is { target?: CSS selector, title, body, placement?: "right" | "left" | "bottom" | "top", cta?: { label, href | onClick } }.
 // No target (or one that never appears) shows the card in the middle of the window. A target is looked up in
 // getRoot(step) (default: this page), which may be the document of an iframe: its position is worked out in this window.
 const html = htm.bind(React.createElement);
@@ -152,7 +152,8 @@ function TourLayer({ getRoot }) {
       <div className="tour-dots" aria-hidden="true">${Array.from({ length: total }, (_, i) => html`<i key=${i} className=${i === index ? "on" : ""}></i>`)}</div>
       <div className="tour-actions">
         ${!isFirst && html`<button className="tour-btn" onClick=${back}>Back</button>`}
-        ${isLast && step.cta ? html`<a className="tour-btn primary" href=${step.cta.href}>${step.cta.label}</a>`
+        ${isLast && step.cta ? (step.cta.href ? html`<a className="tour-btn primary" href=${step.cta.href}>${step.cta.label}</a>`
+            : html`<button className="tour-btn primary" onClick=${step.cta.onClick}>${step.cta.label}</button>`)
           : !isLast && html`<button className="tour-btn primary" onClick=${next}>Next</button>`}
         ${!isLast && html`<button className="tour-skip" onClick=${close}>Skip tour</button>`}
       </div>

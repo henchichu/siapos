@@ -79,6 +79,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
     const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/", pretendToBeVisual: true, virtualConsole: vc }).window;
     w.ResizeObserver = class { observe() {} disconnect() {} };
     w.Element.prototype.scrollIntoView = function () {};
+    w.fetch = (u, o) => fetch(base + u, o);
     react(w);
     w.errors = []; w.console.error = (...a) => w.errors.push(a.join(" ").slice(0, 300));
     w.eval(read("public/js/tour-kit.js") + "\n" + read("public/js/tour.js") + "\nwindow.STEPS = STEPS;");
@@ -98,6 +99,46 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
     w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(100);
     check("page: Escape goes straight to sign-up", nav() === 2, w.errors.join(" | "));
     check("page: no React warnings", w.errors.length === 0, w.errors.join(" | "));
+
+    // ---- DEMO_MODE ----
+    check("demo off: no demo sign-ins are given out", (await here("/api/demo")).status === 404);
+    process.env.DEMO_MODE = "1";
+    try {
+      setup.signupClosed = async () => true; // the demo shop exists
+      r = await here("/");
+      check("demo: / shows the tour even though a business exists", r.status === 200 && /id="root"/.test(await r.text()));
+      check("demo: the sample pages are served", (await here("/tour/kitchen.html")).status === 200);
+      const given = await (await here("/api/demo")).json();
+      check("demo: the six dev employees, with number and PIN", given.credentials.length === 6 && given.credentials[0].number === "10420001" && given.credentials[0].pin === "111111"
+        && given.credentials.every((c) => c.name && c.role && /^\d{8}$/.test(c.number) && /^\d{6}$/.test(c.pin)));
+
+      const open = async (after) => {
+        const d = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/", pretendToBeVisual: true, virtualConsole: vc }).window;
+        d.ResizeObserver = class { observe() {} disconnect() {} };
+        d.Element.prototype.scrollIntoView = function () {};
+        d.fetch = (u, o) => fetch(base + u, o);
+        react(d);
+        d.errors = []; d.console.error = (...a) => d.errors.push(a.join(" ").slice(0, 300));
+        d.eval(read("public/js/tour-kit.js") + "\n" + read("public/js/tour.js") + "\nwindow.STEPS = STEPS;");
+        await sleep(400);
+        await after(d);
+        return d;
+      };
+      const before = navigations;
+      const shown = (d) => ({ rows: [...d.document.querySelectorAll(".logintable tbody tr")].map((tr) => tr.textContent), keep: d.document.querySelector(".keep"), go: d.document.querySelector("a.tour-btn.primary") });
+      const checkLogins = (name, d) => {
+        const x = shown(d);
+        check(`demo: ${name} shows the sign-ins with a keep-this warning and a way on`, x.rows.length === 6 && /Maya.*Owner.*10420001.*111111/.test(x.rows[0]) && /Ana.*Assistant Manager.*10420006.*666666/.test(x.rows[5])
+          && /picture.*write it down/.test(x.keep?.textContent) && x.keep.getAttribute("role") === "alert" && x.go?.getAttribute("href") === "/login.html" && navigations === before, JSON.stringify(x.rows));
+      };
+      checkLogins("Skip tour", await open(async (d) => { [...d.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === "Skip tour").click(); await sleep(150); }));
+      checkLogins("Escape", await open(async (d) => { d.document.dispatchEvent(new d.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(150); }));
+      checkLogins("the last step", await open(async (d) => {
+        const click = async (t) => { [...d.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === t).click(); await sleep(60); };
+        for (let i = 0; i < d.STEPS.length - 1; i++) await click("Next");
+        await click("Show demo sign-ins"); await sleep(100);
+      }));
+    } finally { delete process.env.DEMO_MODE; setup.signupClosed = async () => false; }
 
     // ---- every step's target is on its page, which runs on sample data ----
     const steps = w.STEPS.filter((s) => s.target);

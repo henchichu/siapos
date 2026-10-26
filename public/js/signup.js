@@ -81,7 +81,7 @@ function Side({ name, step, done }) {
         })}
       </ol>
     </div>
-    <p className="side-links"><a className="home" href="/">← ClockIt home</a><span>Already set up? <a href="/login.html">Go to staff sign-in</a></span></p>
+    <p className="side-links"><a className="home" href="/">← Back to Tutorial</a></p>
   </aside>`;
 }
 
@@ -198,12 +198,13 @@ function Done({ result }) {
   return html`<div className="done">
     <span className="bigcheck"><${Check} /></span>
     <h1 ref=${title} tabIndex="-1">You're all set, ${result.firstName}!</h1>
-    <p className="number"><span>Sign in with employee number</span><b>${result.employeeNumber}</b></p>
+    <p className="number"><span>Your employee number</span><b>${result.employeeNumber}</b></p>
+    <p className="keep" role="alert"><b>Take a picture of this number or write it down now.</b> You sign in with it, and your 6-digit PIN, on the next page.</p>
     <section className="next" aria-labelledby="next-title">
       <h2 id="next-title">Next, inside ClockIt</h2>
       <ul>${NEXT.map(([where, what], i) => html`<li key=${i}><b>${where}</b> · ${what}</li>`)}</ul>
     </section>
-    <a className="btn primary" href=${result.redirect}>Open ClockIt</a>
+    <a className="btn primary" href=${result.redirect}>Continue to sign-in</a>
   </div>`;
 }
 
@@ -223,6 +224,7 @@ function App() {
   const [result, setResult] = useState(null);
   const heading = useRef();
   const first = useRef(true);
+  useEffect(() => { fetch("/api/setup/open").then((r) => r.json()).then((o) => { if (!o.open) window.location.replace("/login.html"); }).catch(() => {}); }, []); // one business per app: closed once there is one
   useEffect(() => { if (first.current) { first.current = false; return; } heading.current?.focus(); }, [step]); // a new step is announced
   useEffect(() => { document.title = result ? "You're all set · ClockIt" : `Step ${step + 1} of 4: ${STEPS[step][0]} · Set up ClockIt`; }, [step, result]);
 

@@ -122,6 +122,8 @@ fieldset { border: 0; min-width: 0; }
 .done h1 { font-size: 27px; font-weight: 700; color: var(--navy); }
 .done h1:focus { outline: none; }
 .number { background: var(--navy); border-radius: var(--radius); padding: 10px 22px; display: flex; flex-direction: column; gap: 2px; }
+.keep { max-width: 460px; margin: 0; padding: 12px 16px; border: 2px solid var(--coral); border-radius: var(--radius); background: #FFF3F1; color: var(--text); text-align: left; }
+.keep b { display: block; color: var(--red); }
 .number span { font-size: 13px; color: #D9DDF7; }
 .number b { font-size: 30px; font-weight: 700; letter-spacing: 0.12em; color: var(--cyan); font-variant-numeric: tabular-nums; } /* 6.1:1 */
 .next { align-self: stretch; text-align: left; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }

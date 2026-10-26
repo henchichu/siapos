@@ -1,0 +1,2301 @@
+{
+ "capturedAt": "2026-10-26T07:10:43.787Z",
+ "responses": {
+  "GET /session": {
+   "employeeName": "Maya Okafor",
+   "roleName": "Owner",
+   "nav": [
+    "Register",
+    "Kitchen",
+    "Needs attention",
+    "Orders",
+    "Rewards",
+    "Products",
+    "Inventory",
+    "Reports",
+    "Employees",
+    "Settings",
+    "My shift"
+   ],
+   "tiles": [
+    "Inventory",
+    "Rewards",
+    "Employees",
+    "Needs attention",
+    "Products",
+    "Settings",
+    "Kitchen",
+    "Orders",
+    "Sign out",
+    "Reports",
+    "Register",
+    "My shift"
+   ],
+   "home": "/register.html",
+   "locationName": "Brewbean Campus",
+   "registerName": "Counter",
+   "canSwitch": true
+  },
+  "GET /register/catalog": {
+   "products": [
+    {
+     "id": "prd-americano",
+     "name": "Americano",
+     "category": "Coffee",
+     "variants": [
+      {
+       "id": "var-amer-s",
+       "name": "Small 12 oz",
+       "sku": "AME-12",
+       "priceCents": 325,
+       "available": true
+      },
+      {
+       "id": "var-amer-l",
+       "name": "Large 16 oz",
+       "sku": "AME-16",
+       "priceCents": 375,
+       "available": true
+      }
+     ],
+     "groups": [
+      {
+       "id": "mg-flavour",
+       "name": "Flavour",
+       "min": 0,
+       "max": 2,
+       "defaultId": null,
+       "modifiers": [
+        {
+         "id": "mod-caramel",
+         "name": "Caramel",
+         "deltaCents": 60
+        },
+        {
+         "id": "mod-vanilla",
+         "name": "Vanilla",
+         "deltaCents": 60
+        }
+       ]
+      },
+      {
+       "id": "mg-extras",
+       "name": "Extras",
+       "min": 0,
+       "max": null,
+       "defaultId": null,
+       "modifiers": [
+        {
+         "id": "mod-extra-shot",
+         "name": "Extra shot",
+         "deltaCents": 100
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "prd-muffin",
+     "name": "Blueberry muffin",
+     "category": "Bakery",
+     "variants": [
+      {
+       "id": "var-muffin",
+       "name": "Regular",
+       "sku": "BAK-MUF",
+       "priceCents": 325,
+       "available": true
+      }
+     ],
+     "groups": []
+    },
+    {
+     "id": "prd-croissant",
+     "name": "Butter croissant",
+     "category": "Bakery",
+     "variants": [
+      {
+       "id": "var-croissant",
+       "name": "Regular",
+       "sku": "BAK-CRO",
+       "priceCents": 350,
+       "available": true
+      }
+     ],
+     "groups": []
+    },
+    {
+     "id": "prd-chai",
+     "name": "Chai latte",
+     "category": "Tea",
+     "variants": [
+      {
+       "id": "var-chai",
+       "name": "Regular",
+       "sku": "CHAI-16",
+       "priceCents": 475,
+       "available": true
+      }
+     ],
+     "groups": [
+      {
+       "id": "mg-milk",
+       "name": "Milk",
+       "min": 0,
+       "max": 1,
+       "defaultId": "mod-whole",
+       "modifiers": [
+        {
+         "id": "mod-whole",
+         "name": "Whole milk",
+         "deltaCents": 0
+        },
+        {
+         "id": "mod-oat",
+         "name": "Oat milk",
+         "deltaCents": 75
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "prd-bag",
+     "name": "House blend, whole bean",
+     "category": "Retail",
+     "variants": [
+      {
+       "id": "var-bag",
+       "name": "Regular",
+       "sku": "RET-HB12",
+       "priceCents": 1600,
+       "available": true
+      }
+     ],
+     "groups": []
+    },
+    {
+     "id": "prd-latte",
+     "name": "Latte",
+     "category": "Coffee",
+     "variants": [
+      {
+       "id": "var-latte-s",
+       "name": "Small 12 oz",
+       "sku": "LAT-12",
+       "priceCents": 425,
+       "available": true
+      },
+      {
+       "id": "var-latte-l",
+       "name": "Large 16 oz",
+       "sku": "LAT-16",
+       "priceCents": 525,
+       "available": true
+      }
+     ],
+     "groups": [
+      {
+       "id": "mg-milk",
+       "name": "Milk",
+       "min": 0,
+       "max": 1,
+       "defaultId": "mod-whole",
+       "modifiers": [
+        {
+         "id": "mod-whole",
+         "name": "Whole milk",
+         "deltaCents": 0
+        },
+        {
+         "id": "mod-oat",
+         "name": "Oat milk",
+         "deltaCents": 75
+        }
+       ]
+      },
+      {
+       "id": "mg-flavour",
+       "name": "Flavour",
+       "min": 0,
+       "max": 2,
+       "defaultId": null,
+       "modifiers": [
+        {
+         "id": "mod-caramel",
+         "name": "Caramel",
+         "deltaCents": 60
+        },
+        {
+         "id": "mod-vanilla",
+         "name": "Vanilla",
+         "deltaCents": 60
+        }
+       ]
+      },
+      {
+       "id": "mg-extras",
+       "name": "Extras",
+       "min": 0,
+       "max": null,
+       "defaultId": null,
+       "modifiers": [
+        {
+         "id": "mod-extra-shot",
+         "name": "Extra shot",
+         "deltaCents": 100
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "categories": [
+    "Bakery",
+    "Coffee",
+    "Retail",
+    "Tea"
+   ],
+   "promotions": [
+    {
+     "id": "promo-morning-pastry",
+     "name": "Morning pastry: 20% off before 10am"
+    }
+   ],
+   "staffRules": {
+    "needsApproval": false,
+    "maxPercent": 20
+   }
+  },
+  "GET /kitchen/tickets": {
+   "now": "2026-10-26T07:10:28.653Z",
+   "timeZone": "America/Chicago",
+   "canPickUp": true,
+   "queues": {
+    "new": [
+     {
+      "id": "ord-kds-1",
+      "number": 217,
+      "online": true,
+      "pickupAt": "2026-10-26T07:24:08.000Z",
+      "placedAt": "2026-10-26T07:04:08.000Z",
+      "statusAt": "2026-10-26T07:04:08.000Z",
+      "statusBy": null,
+      "customer": "Ava Nguyen",
+      "note": "Extra hot, please",
+      "items": [
+       {
+        "quantity": 2,
+        "name": "Latte",
+        "size": "Large 16 oz",
+        "options": [
+         "Extra shot",
+         "Oat milk"
+        ]
+       },
+       {
+        "quantity": 1,
+        "name": "Butter croissant",
+        "size": null,
+        "options": []
+       }
+      ]
+     },
+     {
+      "id": "ord-kds-2",
+      "number": 218,
+      "online": false,
+      "pickupAt": null,
+      "placedAt": "2026-10-26T07:07:08.000Z",
+      "statusAt": "2026-10-26T07:07:08.000Z",
+      "statusBy": "Priya",
+      "customer": "Guest",
+      "note": null,
+      "items": [
+       {
+        "quantity": 1,
+        "name": "Chai latte",
+        "size": null,
+        "options": []
+       }
+      ]
+     }
+    ],
+    "preparing": [
+     {
+      "id": "ord-kds-4",
+      "number": 220,
+      "online": true,
+      "pickupAt": "2026-10-26T07:15:08.000Z",
+      "placedAt": "2026-10-26T06:55:08.000Z",
+      "statusAt": "2026-10-26T06:57:08.000Z",
+      "statusBy": "Jordan",
+      "customer": "Chloe Moreau",
+      "note": null,
+      "items": [
+       {
+        "quantity": 1,
+        "name": "Blueberry muffin",
+        "size": null,
+        "options": []
+       }
+      ]
+     },
+     {
+      "id": "ord-kds-3",
+      "number": 219,
+      "online": false,
+      "pickupAt": null,
+      "placedAt": "2026-10-26T06:59:08.000Z",
+      "statusAt": "2026-10-26T07:01:08.000Z",
+      "statusBy": "Jordan",
+      "customer": "Ben Carter",
+      "note": null,
+      "items": [
+       {
+        "quantity": 1,
+        "name": "Americano",
+        "size": "Small 12 oz",
+        "options": []
+       },
+       {
+        "quantity": 3,
+        "name": "Latte",
+        "size": "Small 12 oz",
+        "options": [
+         "Vanilla"
+        ]
+       }
+      ]
+     }
+    ],
+    "ready": [
+     {
+      "id": "ord-kds-5",
+      "number": 221,
+      "online": false,
+      "pickupAt": null,
+      "placedAt": "2026-10-26T06:50:08.000Z",
+      "statusAt": "2026-10-26T06:59:08.000Z",
+      "statusBy": "Jordan",
+      "customer": "Guest",
+      "note": null,
+      "items": [
+       {
+        "quantity": 1,
+        "name": "Americano",
+        "size": "Large 16 oz",
+        "options": []
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "GET /attention": {
+   "location": "Brewbean Campus",
+   "timeZone": "America/Chicago",
+   "losses": {
+    "count": 1,
+    "rows": [
+     {
+      "at": "2026-10-26T07:10:08.000Z",
+      "item": "Whole milk",
+      "amount": 500,
+      "unit": "ml",
+      "reason": "Broken or spilled",
+      "by": "Jordan"
+     }
+    ]
+   },
+   "low": {
+    "count": 0,
+    "rows": []
+   },
+   "timecards": {
+    "count": 36,
+    "periodId": "pp-curr",
+    "rows": [
+     {
+      "employee": "Priya Shah",
+      "date": "2026-10-13",
+      "hours": 8
+     },
+     {
+      "employee": "Leo Brandt",
+      "date": "2026-10-13",
+      "hours": 8
+     },
+     {
+      "employee": "Priya Shah",
+      "date": "2026-10-14",
+      "hours": 8
+     },
+     {
+      "employee": "Leo Brandt",
+      "date": "2026-10-14",
+      "hours": 8
+     },
+     {
+      "employee": "Jordan Lee",
+      "date": "2026-10-14",
+      "hours": 7
+     },
+     {
+      "employee": "Sam Rivera",
+      "date": "2026-10-15",
+      "hours": 8
+     },
+     {
+      "employee": "Leo Brandt",
+      "date": "2026-10-15",
+      "hours": 8
+     },
+     {
+      "employee": "Jordan Lee",
+      "date": "2026-10-15",
+      "hours": 7
+     }
+    ]
+   },
+   "refunds": {
+    "count": 0,
+    "rows": []
+   }
+  },
+  "GET /orders": {
+   "from": "2026-10-26",
+   "to": "2026-10-26",
+   "count": 6,
+   "shown": 200,
+   "filters": {
+    "locations": [
+     {
+      "id": "loc-campus",
+      "name": "Brewbean Campus"
+     },
+     {
+      "id": "loc-downtown",
+      "name": "Brewbean Downtown"
+     }
+    ],
+    "employees": [
+     {
+      "id": "emp-ana",
+      "name": "Ana Torres"
+     },
+     {
+      "id": "emp-jordan",
+      "name": "Jordan Lee"
+     },
+     {
+      "id": "emp-leo",
+      "name": "Leo Brandt"
+     },
+     {
+      "id": "emp-maya",
+      "name": "Maya Okafor"
+     },
+     {
+      "id": "emp-priya",
+      "name": "Priya Shah"
+     },
+     {
+      "id": "emp-sam",
+      "name": "Sam Rivera"
+     }
+    ],
+    "statuses": [
+     {
+      "code": 1,
+      "name": "Pending payment"
+     },
+     {
+      "code": 2,
+      "name": "Confirmed"
+     },
+     {
+      "code": 3,
+      "name": "Preparing"
+     },
+     {
+      "code": 4,
+      "name": "Ready"
+     },
+     {
+      "code": 5,
+      "name": "Completed"
+     },
+     {
+      "code": 6,
+      "name": "Cancelled"
+     },
+     {
+      "code": 7,
+      "name": "Refunded"
+     }
+    ]
+   },
+   "orders": [
+    {
+     "id": "ord-dt-now",
+     "placedAt": "2026-10-26T07:10:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 216,
+     "source": "Front counter",
+     "employee": "Sam Rivera",
+     "member": "Walk-in",
+     "status": "Pending payment",
+     "total": 5.79
+    },
+    {
+     "id": "ord-kds-2",
+     "placedAt": "2026-10-26T07:07:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 218,
+     "source": "Counter",
+     "employee": "Priya Shah",
+     "member": "Walk-in",
+     "status": "Confirmed",
+     "total": 5.24
+    },
+    {
+     "id": "ord-kds-1",
+     "placedAt": "2026-10-26T07:04:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 217,
+     "source": "Online",
+     "employee": null,
+     "member": "Ava Nguyen",
+     "status": "Confirmed",
+     "total": 17.09
+    },
+    {
+     "id": "ord-kds-3",
+     "placedAt": "2026-10-26T06:59:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 219,
+     "source": "Counter",
+     "employee": "Priya Shah",
+     "member": "Ben Carter",
+     "status": "Preparing",
+     "total": 17.64
+    },
+    {
+     "id": "ord-kds-4",
+     "placedAt": "2026-10-26T06:55:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 220,
+     "source": "Online",
+     "employee": null,
+     "member": "Chloe Moreau",
+     "status": "Preparing",
+     "total": 3.58
+    },
+    {
+     "id": "ord-kds-5",
+     "placedAt": "2026-10-26T06:50:08.000Z",
+     "timeZone": "America/Chicago",
+     "orderNumber": 221,
+     "source": "Counter",
+     "employee": "Priya Shah",
+     "member": "Walk-in",
+     "status": "Ready",
+     "total": 4.13
+    }
+   ]
+  },
+  "GET /rewards/members": {
+   "canEdit": true,
+   "more": false,
+   "members": [
+    {
+     "id": "cus-chloe",
+     "firstName": "Chloe",
+     "lastName": "Moreau",
+     "email": "chloe@example.com",
+     "phone": "312-555-0177",
+     "tier": "Bean",
+     "points": 106,
+     "active": true
+    },
+    {
+     "id": "cus-ava",
+     "firstName": "Ava",
+     "lastName": "Nguyen",
+     "email": "ava@example.com",
+     "phone": null,
+     "tier": "Gold",
+     "points": 79,
+     "active": true
+    }
+   ]
+  },
+  "GET /products/list": {
+   "canEdit": true,
+   "canCosts": true,
+   "categories": [
+    {
+     "id": "cat-bakery",
+     "name": "Bakery"
+    },
+    {
+     "id": "cat-coffee",
+     "name": "Coffee"
+    },
+    {
+     "id": "cat-retail",
+     "name": "Retail"
+    },
+    {
+     "id": "cat-tea",
+     "name": "Tea"
+    }
+   ],
+   "products": [
+    {
+     "id": "prd-americano",
+     "name": "Americano",
+     "description": "Espresso and hot water",
+     "category": "Coffee",
+     "categoryId": "cat-coffee",
+     "hasPhoto": false,
+     "skus": [
+      "AME-16",
+      "AME-12"
+     ],
+     "sizes": 2,
+     "priceFrom": 3.25,
+     "active": true,
+     "available": true,
+     "cost": 0.51,
+     "margin": 84
+    },
+    {
+     "id": "prd-muffin",
+     "name": "Blueberry muffin",
+     "description": null,
+     "category": "Bakery",
+     "categoryId": "cat-bakery",
+     "hasPhoto": false,
+     "skus": [
+      "BAK-MUF"
+     ],
+     "sizes": 1,
+     "priceFrom": 3.25,
+     "active": true,
+     "available": true,
+     "cost": 0.95,
+     "margin": 71
+    },
+    {
+     "id": "prd-croissant",
+     "name": "Butter croissant",
+     "description": null,
+     "category": "Bakery",
+     "categoryId": "cat-bakery",
+     "hasPhoto": false,
+     "skus": [
+      "BAK-CRO"
+     ],
+     "sizes": 1,
+     "priceFrom": 3.5,
+     "active": true,
+     "available": true,
+     "cost": 1.13,
+     "margin": 68
+    },
+    {
+     "id": "prd-chai",
+     "name": "Chai latte",
+     "description": "Spiced black tea with steamed milk",
+     "category": "Tea",
+     "categoryId": "cat-tea",
+     "hasPhoto": false,
+     "skus": [
+      "CHAI-16"
+     ],
+     "sizes": 1,
+     "priceFrom": 4.75,
+     "active": true,
+     "available": true,
+     "cost": 1.42,
+     "margin": 70
+    },
+    {
+     "id": "prd-bag",
+     "name": "House blend, whole bean",
+     "description": "12 oz bag to brew at home",
+     "category": "Retail",
+     "categoryId": "cat-retail",
+     "hasPhoto": false,
+     "skus": [
+      "RET-HB12"
+     ],
+     "sizes": 1,
+     "priceFrom": 16,
+     "active": true,
+     "available": true,
+     "cost": 7.65,
+     "margin": 52
+    },
+    {
+     "id": "prd-latte",
+     "name": "Latte",
+     "description": "Double shot with steamed milk",
+     "category": "Coffee",
+     "categoryId": "cat-coffee",
+     "hasPhoto": false,
+     "skus": [
+      "LAT-16",
+      "LAT-12"
+     ],
+     "sizes": 2,
+     "priceFrom": 4.25,
+     "active": true,
+     "available": true,
+     "cost": 0.78,
+     "margin": 82
+    }
+   ]
+  },
+  "GET /inventory": {
+   "canChange": true,
+   "locations": [
+    {
+     "id": "loc-campus",
+     "name": "Brewbean Campus"
+    },
+    {
+     "id": "loc-downtown",
+     "name": "Brewbean Downtown"
+    }
+   ],
+   "location": {
+    "id": "loc-campus",
+    "name": "Brewbean Campus",
+    "today": "2026-10-26",
+    "timeZone": "America/Chicago"
+   },
+   "suppliers": [
+    {
+     "id": "sup-supply",
+     "name": "Counter Supply Co.",
+     "active": true
+    },
+    {
+     "id": "sup-roaster",
+     "name": "Northside Roasters",
+     "active": true
+    },
+    {
+     "id": "sup-dairy",
+     "name": "Prairie Dairy",
+     "active": true
+    },
+    {
+     "id": "sup-bakery",
+     "name": "Sunrise Bakery",
+     "active": true
+    }
+   ],
+   "units": [
+    {
+     "code": 1,
+     "symbol": "each",
+     "description": "Each"
+    },
+    {
+     "code": 2,
+     "symbol": "g",
+     "description": "Gram"
+    },
+    {
+     "code": 3,
+     "symbol": "kg",
+     "description": "Kilogram"
+    },
+    {
+     "code": 7,
+     "symbol": "l",
+     "description": "Litre"
+    },
+    {
+     "code": 6,
+     "symbol": "ml",
+     "description": "Millilitre"
+    },
+    {
+     "code": 5,
+     "symbol": "oz",
+     "description": "Ounce"
+    },
+    {
+     "code": 4,
+     "symbol": "lb",
+     "description": "Pound"
+    },
+    {
+     "code": 8,
+     "symbol": "fl oz",
+     "description": "US fluid ounce"
+    }
+   ],
+   "quotes": [
+    {
+     "stockItemId": "stk-bag",
+     "supplierId": "sup-roaster",
+     "unitCost": 7.8
+    },
+    {
+     "stockItemId": "stk-beans",
+     "supplierId": "sup-roaster",
+     "unitCost": 0.023
+    },
+    {
+     "stockItemId": "stk-caramel",
+     "supplierId": "sup-supply",
+     "unitCost": 0.0125
+    },
+    {
+     "stockItemId": "stk-chai",
+     "supplierId": "sup-supply",
+     "unitCost": 0.009
+    },
+    {
+     "stockItemId": "stk-croissant",
+     "supplierId": "sup-bakery",
+     "unitCost": 1.15
+    },
+    {
+     "stockItemId": "stk-cup-12",
+     "supplierId": "sup-supply",
+     "unitCost": 0.11
+    },
+    {
+     "stockItemId": "stk-cup-16",
+     "supplierId": "sup-supply",
+     "unitCost": 0.13
+    },
+    {
+     "stockItemId": "stk-milk",
+     "supplierId": "sup-dairy",
+     "unitCost": 0.0012
+    },
+    {
+     "stockItemId": "stk-muffin",
+     "supplierId": "sup-bakery",
+     "unitCost": 0.95
+    },
+    {
+     "stockItemId": "stk-oat",
+     "supplierId": "sup-dairy",
+     "unitCost": 0.0025
+    },
+    {
+     "stockItemId": "stk-vanilla",
+     "supplierId": "sup-supply",
+     "unitCost": 0.012
+    }
+   ],
+   "items": [
+    {
+     "id": "stk-cup-12",
+     "name": "12 oz cup",
+     "unit": "each",
+     "fraction": false
+    },
+    {
+     "id": "stk-cup-16",
+     "name": "16 oz cup",
+     "unit": "each",
+     "fraction": false
+    },
+    {
+     "id": "stk-muffin",
+     "name": "Blueberry muffin",
+     "unit": "each",
+     "fraction": false
+    },
+    {
+     "id": "stk-croissant",
+     "name": "Butter croissant",
+     "unit": "each",
+     "fraction": false
+    },
+    {
+     "id": "stk-caramel",
+     "name": "Caramel syrup",
+     "unit": "ml",
+     "fraction": true
+    },
+    {
+     "id": "stk-chai",
+     "name": "Chai concentrate",
+     "unit": "ml",
+     "fraction": true
+    },
+    {
+     "id": "stk-beans",
+     "name": "Espresso beans",
+     "unit": "g",
+     "fraction": true
+    },
+    {
+     "id": "stk-bag",
+     "name": "House blend 12 oz bag",
+     "unit": "each",
+     "fraction": false
+    },
+    {
+     "id": "stk-oat",
+     "name": "Oat milk",
+     "unit": "ml",
+     "fraction": true
+    },
+    {
+     "id": "stk-vanilla",
+     "name": "Vanilla syrup",
+     "unit": "ml",
+     "fraction": true
+    },
+    {
+     "id": "stk-milk",
+     "name": "Whole milk",
+     "unit": "ml",
+     "fraction": true
+    }
+   ],
+   "rows": [
+    {
+     "id": "stk-cup-12",
+     "name": "12 oz cup",
+     "active": true,
+     "unit": "each",
+     "onHand": 521,
+     "reorderAt": 100,
+     "avgCost": 0.11,
+     "supplierIds": [
+      "sup-supply"
+     ]
+    },
+    {
+     "id": "stk-cup-16",
+     "name": "16 oz cup",
+     "active": true,
+     "unit": "each",
+     "onHand": 513,
+     "reorderAt": 100,
+     "avgCost": 0.13,
+     "supplierIds": [
+      "sup-supply"
+     ]
+    },
+    {
+     "id": "stk-muffin",
+     "name": "Blueberry muffin",
+     "active": true,
+     "unit": "each",
+     "onHand": 171,
+     "reorderAt": 20,
+     "avgCost": 0.95,
+     "supplierIds": [
+      "sup-bakery"
+     ]
+    },
+    {
+     "id": "stk-croissant",
+     "name": "Butter croissant",
+     "active": true,
+     "unit": "each",
+     "onHand": 158,
+     "reorderAt": 20,
+     "avgCost": 1.125,
+     "supplierIds": [
+      "sup-bakery"
+     ]
+    },
+    {
+     "id": "stk-caramel",
+     "name": "Caramel syrup",
+     "active": true,
+     "unit": "ml",
+     "onHand": 1005,
+     "reorderAt": 1000,
+     "avgCost": 0.012208,
+     "supplierIds": [
+      "sup-supply"
+     ]
+    },
+    {
+     "id": "stk-chai",
+     "name": "Chai concentrate",
+     "active": true,
+     "unit": "ml",
+     "onHand": 13360,
+     "reorderAt": 4000,
+     "avgCost": 0.009,
+     "supplierIds": [
+      "sup-supply"
+     ]
+    },
+    {
+     "id": "stk-beans",
+     "name": "Espresso beans",
+     "active": true,
+     "unit": "g",
+     "onHand": 8528,
+     "reorderAt": 3000,
+     "avgCost": 0.022,
+     "supplierIds": [
+      "sup-roaster"
+     ]
+    },
+    {
+     "id": "stk-bag",
+     "name": "House blend 12 oz bag",
+     "active": true,
+     "unit": "each",
+     "onHand": 38,
+     "reorderAt": 10,
+     "avgCost": 7.65,
+     "supplierIds": [
+      "sup-roaster"
+     ]
+    },
+    {
+     "id": "stk-oat",
+     "name": "Oat milk",
+     "active": true,
+     "unit": "ml",
+     "onHand": 16020,
+     "reorderAt": 5000,
+     "avgCost": 0.00245,
+     "supplierIds": [
+      "sup-dairy"
+     ]
+    },
+    {
+     "id": "stk-vanilla",
+     "name": "Vanilla syrup",
+     "active": true,
+     "unit": "ml",
+     "onHand": 3580,
+     "reorderAt": 1000,
+     "avgCost": 0.012,
+     "supplierIds": [
+      "sup-supply"
+     ]
+    },
+    {
+     "id": "stk-milk",
+     "name": "Whole milk",
+     "active": true,
+     "unit": "ml",
+     "onHand": 36280,
+     "reorderAt": 15000,
+     "avgCost": 0.00115,
+     "supplierIds": [
+      "sup-dairy"
+     ]
+    }
+   ],
+   "movements": [
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Espresso beans",
+     "unit": "g",
+     "type": "SALE",
+     "delta": -36,
+     "by": "Priya",
+     "orderNumber": 217
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "16 oz cup",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -2,
+     "by": "Priya",
+     "orderNumber": 217
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Whole milk",
+     "unit": "ml",
+     "type": "SALE",
+     "delta": -680,
+     "by": "Priya",
+     "orderNumber": 217
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Butter croissant",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -1,
+     "by": "Priya",
+     "orderNumber": 217
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Chai concentrate",
+     "unit": "ml",
+     "type": "SALE",
+     "delta": -120,
+     "by": "Priya",
+     "orderNumber": 218
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "16 oz cup",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -1,
+     "by": "Priya",
+     "orderNumber": 218
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Whole milk",
+     "unit": "ml",
+     "type": "SALE",
+     "delta": -180,
+     "by": "Priya",
+     "orderNumber": 218
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Espresso beans",
+     "unit": "g",
+     "type": "SALE",
+     "delta": -72,
+     "by": "Priya",
+     "orderNumber": 219
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "12 oz cup",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -4,
+     "by": "Priya",
+     "orderNumber": 219
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Whole milk",
+     "unit": "ml",
+     "type": "SALE",
+     "delta": -720,
+     "by": "Priya",
+     "orderNumber": 219
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Blueberry muffin",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -1,
+     "by": "Priya",
+     "orderNumber": 220
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Espresso beans",
+     "unit": "g",
+     "type": "SALE",
+     "delta": -27,
+     "by": "Priya",
+     "orderNumber": 221
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "16 oz cup",
+     "unit": "each",
+     "type": "SALE",
+     "delta": -1,
+     "by": "Priya",
+     "orderNumber": 221
+    },
+    {
+     "at": "2026-10-26T07:10:08.000Z",
+     "item": "Whole milk",
+     "unit": "ml",
+     "type": "ADJUSTMENT · Broken or spilled",
+     "delta": -500,
+     "by": "Jordan",
+     "orderNumber": null
+    },
+    {
+     "at": "2026-10-25T23:00:00.000Z",
+     "item": "12 oz cup",
+     "unit": "each",
+     "type": "ADJUSTMENT · Count correction",
+     "delta": 6,
+     "by": "Leo",
+     "orderNumber": null
+    }
+   ],
+   "deliveries": [
+    {
+     "id": "dlv-2-cp-bakery",
+     "date": "2026-10-20",
+     "supplier": "Sunrise Bakery",
+     "total": 210,
+     "lines": 2
+    },
+    {
+     "id": "dlv-2-cp-dairy",
+     "date": "2026-10-20",
+     "supplier": "Prairie Dairy",
+     "total": 66,
+     "lines": 2
+    },
+    {
+     "id": "dlv-2-cp-roaster",
+     "date": "2026-10-20",
+     "supplier": "Northside Roasters",
+     "total": 325.2,
+     "lines": 2
+    },
+    {
+     "id": "dlv-2-cp-supply",
+     "date": "2026-10-20",
+     "supplier": "Counter Supply Co.",
+     "total": 174.25,
+     "lines": 5
+    },
+    {
+     "id": "dlv-1-cp-bakery",
+     "date": "2026-10-06",
+     "supplier": "Sunrise Bakery",
+     "total": 205,
+     "lines": 2
+    },
+    {
+     "id": "dlv-1-cp-dairy",
+     "date": "2026-10-06",
+     "supplier": "Prairie Dairy",
+     "total": 61.8,
+     "lines": 2
+    },
+    {
+     "id": "dlv-1-cp-roaster",
+     "date": "2026-10-06",
+     "supplier": "Northside Roasters",
+     "total": 306,
+     "lines": 2
+    },
+    {
+     "id": "dlv-1-cp-supply",
+     "date": "2026-10-06",
+     "supplier": "Counter Supply Co.",
+     "total": 176.4,
+     "lines": 5
+    }
+   ]
+  },
+  "GET /reports/options": {
+   "canPickAll": true,
+   "locations": [
+    {
+     "id": "loc-campus",
+     "name": "Brewbean Campus"
+    },
+    {
+     "id": "loc-downtown",
+     "name": "Brewbean Downtown"
+    }
+   ],
+   "location": "all",
+   "today": "2026-10-26",
+   "payPeriods": [
+    {
+     "id": "pp-next",
+     "start": "2026-10-27",
+     "end": "2026-11-09",
+     "closed": false
+    },
+    {
+     "id": "pp-curr",
+     "start": "2026-10-13",
+     "end": "2026-10-26",
+     "closed": false
+    },
+    {
+     "id": "pp-prev",
+     "start": "2026-09-29",
+     "end": "2026-10-12",
+     "closed": true
+    }
+   ],
+   "payPeriod": "pp-curr",
+   "seesLabor": true,
+   "categories": [
+    {
+     "id": "cat-bakery",
+     "name": "Bakery"
+    },
+    {
+     "id": "cat-coffee",
+     "name": "Coffee"
+    },
+    {
+     "id": "cat-retail",
+     "name": "Retail"
+    },
+    {
+     "id": "cat-tea",
+     "name": "Tea"
+    }
+   ],
+   "reasons": [
+    {
+     "id": "broken",
+     "name": "Broken or spilled"
+    },
+    {
+     "id": "spoiled",
+     "name": "Spoiled or expired"
+    },
+    {
+     "id": "stolen",
+     "name": "Stolen"
+    }
+   ],
+   "seesCosts": true
+  },
+  "GET /reports/live": {
+   "day": "2026-10-26",
+   "by": "hour",
+   "from": "2026-10-26",
+   "isToday": true,
+   "location": "All locations",
+   "timeZone": "America/Chicago",
+   "updatedAt": "2026-10-26T07:10:37.765Z",
+   "seesCosts": true,
+   "cards": {
+    "gross": 4325,
+    "discounts": 0,
+    "refunds": 0,
+    "net": 4325,
+    "cost": 891,
+    "profit": 3434,
+    "tips": 0
+   },
+   "rows": [
+    {
+     "key": 1,
+     "orders": 3,
+     "gross": 2300,
+     "discounts": 0,
+     "refunds": 0,
+     "net": 2300,
+     "cost": 453,
+     "profit": 1847,
+     "runningNet": 2300
+    },
+    {
+     "key": 2,
+     "orders": 2,
+     "gross": 2025,
+     "discounts": 0,
+     "refunds": 0,
+     "net": 2025,
+     "cost": 438,
+     "profit": 1587,
+     "runningNet": 4325
+    }
+   ],
+   "total": {
+    "orders": 5,
+    "gross": 4325,
+    "discounts": 0,
+    "refunds": 0,
+    "net": 4325,
+    "cost": 891,
+    "profit": 3434
+   }
+  },
+  "GET /employees": {
+   "me": "emp-maya",
+   "today": "2026-10-26",
+   "canPay": true,
+   "roles": [
+    {
+     "id": "role-owner",
+     "name": "Owner"
+    },
+    {
+     "id": "role-asst",
+     "name": "Assistant manager"
+    },
+    {
+     "id": "role-barista",
+     "name": "Chef / barista"
+    },
+    {
+     "id": "role-manager",
+     "name": "Manager"
+    },
+    {
+     "id": "role-server",
+     "name": "Server"
+    }
+   ],
+   "assignable": [
+    "role-owner",
+    "role-asst",
+    "role-barista",
+    "role-manager",
+    "role-server"
+   ],
+   "locations": [
+    {
+     "id": "loc-campus",
+     "name": "Brewbean Campus"
+    },
+    {
+     "id": "loc-downtown",
+     "name": "Brewbean Downtown"
+    }
+   ],
+   "employees": [
+    {
+     "id": "emp-leo",
+     "firstName": "Leo",
+     "lastName": "Brandt",
+     "number": "••••0002",
+     "email": "leo@brewbean.example.com",
+     "roleId": "role-manager",
+     "role": "Manager",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-campus",
+       "name": "Brewbean Campus"
+      },
+      {
+       "id": "loc-downtown",
+       "name": "Brewbean Downtown"
+      }
+     ],
+     "rate": 24,
+     "next": null,
+     "latest": {
+      "rate": 24,
+      "startsOn": "2026-04-29"
+     }
+    },
+    {
+     "id": "emp-jordan",
+     "firstName": "Jordan",
+     "lastName": "Lee",
+     "number": "••••0005",
+     "email": "jordan@brewbean.example.com",
+     "roleId": "role-barista",
+     "role": "Chef / barista",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-campus",
+       "name": "Brewbean Campus"
+      }
+     ],
+     "rate": 16,
+     "next": null,
+     "latest": {
+      "rate": 16,
+      "startsOn": "2026-07-28"
+     }
+    },
+    {
+     "id": "emp-maya",
+     "firstName": "Maya",
+     "lastName": "Okafor",
+     "number": "••••0001",
+     "email": "maya@brewbean.example.com",
+     "roleId": "role-owner",
+     "role": "Owner",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-campus",
+       "name": "Brewbean Campus"
+      },
+      {
+       "id": "loc-downtown",
+       "name": "Brewbean Downtown"
+      }
+     ],
+     "rate": null,
+     "next": null,
+     "latest": null
+    },
+    {
+     "id": "emp-sam",
+     "firstName": "Sam",
+     "lastName": "Rivera",
+     "number": "••••0003",
+     "email": "sam@brewbean.example.com",
+     "roleId": "role-server",
+     "role": "Server",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-downtown",
+       "name": "Brewbean Downtown"
+      }
+     ],
+     "rate": 17.25,
+     "next": null,
+     "latest": {
+      "rate": 17.25,
+      "startsOn": "2026-10-13"
+     }
+    },
+    {
+     "id": "emp-priya",
+     "firstName": "Priya",
+     "lastName": "Shah",
+     "number": "••••0004",
+     "email": "priya@brewbean.example.com",
+     "roleId": "role-server",
+     "role": "Server",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-campus",
+       "name": "Brewbean Campus"
+      }
+     ],
+     "rate": 16.75,
+     "next": null,
+     "latest": {
+      "rate": 16.75,
+      "startsOn": "2026-04-29"
+     }
+    },
+    {
+     "id": "emp-ana",
+     "firstName": "Ana",
+     "lastName": "Torres",
+     "number": "••••0006",
+     "email": "ana@brewbean.example.com",
+     "roleId": "role-asst",
+     "role": "Assistant manager",
+     "active": true,
+     "locked": false,
+     "status": "Active",
+     "manageable": true,
+     "locations": [
+      {
+       "id": "loc-campus",
+       "name": "Brewbean Campus"
+      }
+     ],
+     "rate": 19.5,
+     "next": null,
+     "latest": {
+      "rate": 19.5,
+      "startsOn": "2026-04-29"
+     }
+    }
+   ]
+  },
+  "GET /settings/access": {
+   "general": true,
+   "roles": true
+  },
+  "GET /settings/general": {
+   "business": {
+    "name": "Brewbean Coffee",
+    "email": "hello@brewbean.example.com",
+    "phone": "312-555-0100",
+    "includesTax": 0,
+    "amount": "25.00",
+    "days": 7
+   },
+   "categories": [
+    {
+     "id": "cat-bakery",
+     "name": "Bakery",
+     "active": 1
+    },
+    {
+     "id": "cat-coffee",
+     "name": "Coffee",
+     "active": 1
+    },
+    {
+     "id": "cat-retail",
+     "name": "Retail",
+     "active": 1
+    },
+    {
+     "id": "cat-tea",
+     "name": "Tea",
+     "active": 1
+    }
+   ],
+   "taxes": [
+    {
+     "id": "tax-none",
+     "name": "Not taxable"
+    },
+    {
+     "id": "tax-packaged",
+     "name": "Packaged food"
+    },
+    {
+     "id": "tax-prepared",
+     "name": "Prepared food and drink"
+    }
+   ],
+   "locations": [
+    {
+     "id": "loc-campus",
+     "name": "Brewbean Campus",
+     "address": "88 Quad Walk, Chicago, IL",
+     "phone": "312-555-0102",
+     "timeZone": "America/Chicago",
+     "active": 1,
+     "online": 0,
+     "rates": {
+      "tax-none": "0",
+      "tax-packaged": "2.25",
+      "tax-prepared": "10.25"
+     },
+     "registers": [
+      {
+       "id": "reg-cp-1",
+       "name": "Counter"
+      }
+     ]
+    },
+    {
+     "id": "loc-downtown",
+     "name": "Brewbean Downtown",
+     "address": "120 Example St, Chicago, IL",
+     "phone": "312-555-0101",
+     "timeZone": "America/Chicago",
+     "active": 1,
+     "online": 1,
+     "rates": {
+      "tax-none": "0",
+      "tax-packaged": "2.25",
+      "tax-prepared": "10.25"
+     },
+     "registers": [
+      {
+       "id": "reg-dt-1",
+       "name": "Front counter"
+      },
+      {
+       "id": "reg-dt-2",
+       "name": "Pickup window"
+      }
+     ]
+    }
+   ],
+   "orderBase": ""
+  },
+  "GET /shift": {
+   "now": "2026-10-26T07:10:42.291Z",
+   "employee": "Maya Okafor",
+   "role": "Owner",
+   "location": "Brewbean Campus",
+   "timeZone": "America/Chicago",
+   "open": null,
+   "hours": {
+    "today": 0,
+    "week": 0,
+    "period": 0
+   },
+   "sales": {
+    "orders": 5,
+    "netCents": 4325,
+    "items": 10
+   },
+   "period": {
+    "start": "2026-10-13",
+    "end": "2026-10-26"
+   },
+   "entries": [],
+   "totalHours": 0,
+   "rate": null,
+   "estimatedCents": 0,
+   "canTeam": true
+  },
+  "GET /team/timecards": {
+   "now": "2026-10-26T07:10:42.314Z",
+   "filters": {
+    "periods": [
+     {
+      "id": "pp-next",
+      "start": "2026-10-27",
+      "end": "2026-11-09",
+      "closed": 0
+     },
+     {
+      "id": "pp-curr",
+      "start": "2026-10-13",
+      "end": "2026-10-26",
+      "closed": 0
+     },
+     {
+      "id": "pp-prev",
+      "start": "2026-09-29",
+      "end": "2026-10-12",
+      "closed": 1
+     }
+    ],
+    "locations": [
+     {
+      "id": "loc-campus",
+      "name": "Brewbean Campus"
+     },
+     {
+      "id": "loc-downtown",
+      "name": "Brewbean Downtown"
+     }
+    ]
+   },
+   "selected": {
+    "payPeriodId": "pp-curr",
+    "locationId": "all",
+    "status": "SUBMITTED"
+   },
+   "period": {
+    "id": "pp-curr",
+    "start": "2026-10-13",
+    "end": "2026-10-26",
+    "closed": 0
+   },
+   "rows": [
+    {
+     "id": "te-jordan-01",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-25T16:00:00.000Z",
+     "clockOutAt": "2026-10-25T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-priya-01",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-25T12:00:00.000Z",
+     "clockOutAt": "2026-10-25T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-sam-01",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-25T11:30:00.000Z",
+     "clockOutAt": "2026-10-25T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-02",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-24T16:00:00.000Z",
+     "clockOutAt": "2026-10-24T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-02",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-24T13:00:00.000Z",
+     "clockOutAt": "2026-10-24T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-sam-02",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-24T11:30:00.000Z",
+     "clockOutAt": "2026-10-24T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-03",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-23T16:00:00.000Z",
+     "clockOutAt": "2026-10-23T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-03",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-23T13:00:00.000Z",
+     "clockOutAt": "2026-10-23T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-sam-03",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-23T11:30:00.000Z",
+     "clockOutAt": "2026-10-23T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-leo-04",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-22T13:00:00.000Z",
+     "clockOutAt": "2026-10-22T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-sam-04",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-22T11:30:00.000Z",
+     "clockOutAt": "2026-10-22T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-05",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-21T16:00:00.000Z",
+     "clockOutAt": "2026-10-21T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-05",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-21T13:00:00.000Z",
+     "clockOutAt": "2026-10-21T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-priya-05",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-21T12:00:00.000Z",
+     "clockOutAt": "2026-10-21T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-leo-06",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-20T13:00:00.000Z",
+     "clockOutAt": "2026-10-20T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-priya-06",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-20T12:00:00.000Z",
+     "clockOutAt": "2026-10-20T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-priya-07",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-19T12:00:00.000Z",
+     "clockOutAt": "2026-10-19T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-sam-07",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-19T11:30:00.000Z",
+     "clockOutAt": "2026-10-19T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-08",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-18T16:00:00.000Z",
+     "clockOutAt": "2026-10-18T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-priya-08",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-18T12:00:00.000Z",
+     "clockOutAt": "2026-10-18T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-sam-08",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-18T11:30:00.000Z",
+     "clockOutAt": "2026-10-18T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-09",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-17T16:00:00.000Z",
+     "clockOutAt": "2026-10-17T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-09",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-17T13:00:00.000Z",
+     "clockOutAt": "2026-10-17T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-priya-09",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-17T12:00:00.000Z",
+     "clockOutAt": "2026-10-17T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-sam-09",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-17T11:30:00.000Z",
+     "clockOutAt": "2026-10-17T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-10",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-16T16:00:00.000Z",
+     "clockOutAt": "2026-10-16T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-10",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-16T13:00:00.000Z",
+     "clockOutAt": "2026-10-16T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-sam-10",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-16T11:30:00.000Z",
+     "clockOutAt": "2026-10-16T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-11",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-15T16:00:00.000Z",
+     "clockOutAt": "2026-10-15T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-11",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-15T13:00:00.000Z",
+     "clockOutAt": "2026-10-15T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-sam-11",
+     "employee": "Sam Rivera",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-15T11:30:00.000Z",
+     "clockOutAt": "2026-10-15T20:00:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 17.25
+    },
+    {
+     "id": "te-jordan-12",
+     "employee": "Jordan Lee",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-14T16:00:00.000Z",
+     "clockOutAt": "2026-10-14T23:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 7,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16
+    },
+    {
+     "id": "te-leo-12",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Downtown",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-14T13:00:00.000Z",
+     "clockOutAt": "2026-10-14T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-priya-12",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-14T12:00:00.000Z",
+     "clockOutAt": "2026-10-14T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    },
+    {
+     "id": "te-leo-13",
+     "employee": "Leo Brandt",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-13T13:00:00.000Z",
+     "clockOutAt": "2026-10-13T21:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 24
+    },
+    {
+     "id": "te-priya-13",
+     "employee": "Priya Shah",
+     "location": "Brewbean Campus",
+     "timeZone": "America/Chicago",
+     "clockInAt": "2026-10-13T12:00:00.000Z",
+     "clockOutAt": "2026-10-13T20:30:00.000Z",
+     "breakMinutes": 30,
+     "onBreak": false,
+     "hours": 8,
+     "status": "SUBMITTED",
+     "approvedBy": null,
+     "rate": 16.75
+    }
+   ],
+   "waiting": 36,
+   "canApprove": true
+  }
+ }
+}

@@ -13,3 +13,4 @@ services:
       - "127.0.0.1:3001:3001"         # so tests and the load test can reach the public server from this machine
     environment:
       KIOSK_PHONE_SIGNIN: "1"         # the demo customers are made up, so the public address may offer phone sign-in
+      MOCK_PAY: "1"                   # offer Card, Apple Pay and Google Pay through the mock processor; no money moves

@@ -56,6 +56,7 @@ function PageTitle({ children }) {
 const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join("").toUpperCase();
 
 async function signOut() {
+  if (DEMO) return; // the tour's sample pages have nobody to sign out
   try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
   try { sessionStorage.clear(); localStorage.clear(); } catch (err) { /* storage can be blocked */ }
   window.location.replace("/login.html");
@@ -148,7 +149,7 @@ function noteActivity() {
   try { localStorage.setItem("idle.touched", String(now)); } catch (err) { /* storage can be blocked */ }
   api("/session/touch", {}).catch(() => {});
 }
-["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
+if (!DEMO) ["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
 
 function IdleWarning() {
   const [level, setLevel] = useState(0);
@@ -166,5 +167,4 @@ function IdleWarning() {
 }
 document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/css/idle.css" }));
 const idleRoot = document.body.appendChild(document.createElement("div"));
-ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`);
-noteActivity(); // opening a page counts as activity
+if (!DEMO) { ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity

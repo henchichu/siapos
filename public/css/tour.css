@@ -1,0 +1,33 @@
+/* Front page (tour.html): a sample screen and the tour over it. Colors are theme.css tokens */
+body { font: 16px/1.5 "IBM Plex Sans", sans-serif; }
+h1, h2, p { margin: 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+/* ---- the page: a slim bar over the real staff pages ---- */
+.shell { height: 100vh; display: flex; flex-direction: column; }
+.tbar { flex: none; height: 56px; background: var(--navy); color: #fff; display: flex; align-items: center; gap: 16px; padding: 0 16px; }
+.logo { line-height: 0; border-radius: 6px; } .logo img { width: 120px; height: auto; }
+.sample { font-size: 13px; color: #D9DDF7; }
+.tbar-cta { margin-left: auto; display: flex; gap: 8px; }
+#screen { flex: 1; width: 100%; border: 0; background: var(--page); pointer-events: none; }
+@media (max-width: 700px) { .sample { display: none; } .logo img { width: 96px; } }
+
+/* ---- the tour (tour-kit.js) ---- */
+.tour-btn { font: inherit; font-size: 14px; font-weight: 600; min-height: 40px; padding: 8px 16px; border-radius: var(--radius); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+  background: #fff; color: var(--navy); border: 1.5px solid var(--navy); }
+.tour-btn:hover { background: var(--hover); }
+.tour-btn.primary { background: var(--navy); color: #fff; } .tour-btn.primary:hover { background: var(--navy-dark); }
+.tour-layer { position: fixed; inset: 0; z-index: 1000; } /* takes every click, so the page behind can't be used mid-tour */
+.tour-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 200vmax rgba(13, 22, 112, 0.72); outline: 3px solid var(--cyan);
+  transition: top 0.25s, left 0.25s, width 0.25s, height 0.25s; pointer-events: none; }
+.tour-spot.none { outline: 0; }
+.tour-card { position: fixed; width: min(360px, calc(100vw - 24px)); background: #fff; color: var(--text); border-radius: var(--radius-card); border-top: 6px solid var(--cyan);
+  padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); }
+.tour-card:focus { outline: none; } .tour-card :focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.tour-card h2 { font-size: 20px; font-weight: 700; color: var(--navy); line-height: 1.25; }
+.tour-count { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.tour-dots { display: flex; gap: 6px; } .tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); } .tour-dots i.on { background: var(--navy); }
+.tour-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.tour-skip { margin-left: auto; background: none; border: 0; padding: 8px 4px; font: inherit; font-size: 14px; color: var(--text-2); text-decoration: underline; cursor: pointer; }
+@media (max-width: 599px) { .tour-card { left: 12px; right: 12px; bottom: 12px; top: auto; width: auto; } }
+@media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }

@@ -68,9 +68,9 @@
 .customer .filters { display: flex; gap: 8px; overflow-x: auto; flex-shrink: 0; }
 .customer .filters button { flex-shrink: 0; border: 1px solid var(--line); padding: 10px 16px; font-size: 14px; background: #fff; }
 .customer .filters button.on { background: var(--accent); color: #fff; }
-.customer .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; overflow-y: auto; min-height: 0; padding-right: 4px; }
+.customer .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 280px)); gap: 16px; overflow-y: auto; min-height: 0; padding-right: 4px; }
 .customer .tile { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); background: #fff; padding: 12px; min-height: 230px; }
-.customer .tile img { height: 92px; width: 100%; object-fit: cover; }
+.customer .tile img { height: auto; width: 100%; object-fit: contain; flex-shrink: 0; border-radius: 6px; }
 .customer .tile h3 { font-size: 15px; font-weight: 600; }
 .customer .tile .desc { font-size: 13px; line-height: 1.3; color: var(--muted); flex: 1; overflow: hidden; }
 .customer .tile .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -269,12 +269,12 @@
   .customer .checkout-overlay .body { flex-direction: column; }
   .customer .checkout-overlay .summary { width: 100%; }
   .customer .checkout-overlay .methods { grid-template-columns: repeat(2, 1fr); }
-  .customer .grid { grid-template-columns: repeat(2, 1fr); }
+  .customer .grid { grid-template-columns: repeat(2, minmax(0, 280px)); }
   .customer .customize .two-col { grid-template-columns: 1fr; }
   .customer .header { flex-wrap: wrap; }
 }
 @media (max-width: 600px) {
-  .customer .grid { grid-template-columns: 1fr; }
+  .customer .grid { grid-template-columns: minmax(0, 280px); }
   .customer .entry .body { padding: 20px; }
   .customer .menu-body { padding: 16px; }
   .customer .header { padding: 12px 16px; gap: 8px 12px; }

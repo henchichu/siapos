@@ -3,6 +3,7 @@
 .pview .pfilters .select { width: auto; min-width: 144px; }
 .table td.low { color: var(--error); }
 .table td.state { white-space: nowrap; }
+.table td.r { white-space: nowrap; } /* a six-decimal cost like $0.012208 never stacks; the column is wide enough for the longest ($0.099999) */
 .wide-form { width: 638px; max-width: 100%; flex: none; }
 .w210 { width: 210px; max-width: 100%; }
 .pactions.left { justify-content: flex-start; } .pactions.left .pbtn { flex: none; }

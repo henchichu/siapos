@@ -17,6 +17,7 @@ const tag = crypto.randomBytes(3).toString("hex");
 
 (async () => {
   const { server, base } = await start();
+  require("../../server/setup").signupClosed = async () => false; // the demo business is already there; this test signs up a second
   let businessId;
   try {
     const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/signup.html", pretendToBeVisual: true }).window;
@@ -50,7 +51,7 @@ const tag = crypto.randomBytes(3).toString("hex");
       && states() === "is-now is-next is-next is-next" && $(".eyebrow")?.textContent === "Setting up", states());
     check("no Back on the first step, and the message area is a live region", !button("Back") && $(".msg").getAttribute("aria-live") === "assertive");
     check("the tax question is two choice cards, No chosen", $$(".choice").length === 2 && $(".choice.on").textContent.startsWith("No, tax is added"));
-    check("links home and to the staff sign-in", $(".side-links .home")?.getAttribute("href") === "/" && $$(".side-links a").some((a) => a.getAttribute("href") === "/login.html"));
+    check("one link back to the tutorial, none to staff sign-in", $(".side-links .home")?.textContent === "← Back to Tutorial" && $(".side-links .home").getAttribute("href") === "/" && $$(".side-links a").length === 1);
 
     await click(button("Continue"));
     check("Continue with no name says so and stays", msg() === "Enter your business name." && title() === "Tell us about your business", msg());
@@ -122,7 +123,8 @@ const tag = crypto.randomBytes(3).toString("hex");
     check("every step is ticked", states() === "is-done is-done is-done is-done", states());
     check("the checklist names screens that exist, as plain text", $$(".next li").length === 6 && !$(".next input") && /Settings → General · set tax rates/.test($(".next").textContent)
       && !/Pay and rewards|Sales tax/.test($(".next").textContent));
-    check("Open ClockIt goes Home", $(".done a.btn")?.textContent === "Open ClockIt" && $(".done a.btn").getAttribute("href") === "/home.html");
+    check("the number must be recorded: a picture or writing it down", /picture.*write it down/.test($(".keep")?.textContent) && $(".keep").getAttribute("role") === "alert");
+    check("Continue goes to sign-in", $(".done a.btn")?.textContent === "Continue to sign-in" && $(".done a.btn").getAttribute("href") === "/login.html");
 
     const [[emp]] = await pool.query("SELECT BusinessID AS id FROM Employee WHERE EmployeeNumber = ?", [number]);
     businessId = emp?.id;
@@ -130,8 +132,7 @@ const tag = crypto.randomBytes(3).toString("hex");
     const [[biz]] = await pool.query("SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?", [businessId]);
     check("what was typed is what was saved", loc?.Name === "Uptown" && loc.TimeZone === "America/Denver" && !!biz?.PricesIncludeTax, JSON.stringify([loc, biz]));
     const me = await fetch(base + "/api/session", { headers: { cookie } });
-    const session = await me.json();
-    check("the owner is signed in", me.status === 200 && session.employeeName === "Dana Reyes" && session.roleName === "Owner" && session.locationName === "Uptown", JSON.stringify(session));
+    check("the owner is not signed in", me.status === 401, me.status);
     check("no React warnings", w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w.errors));
   } finally {
     if (businessId) await removeBusiness(businessId);

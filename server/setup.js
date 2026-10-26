@@ -1,12 +1,11 @@
 // Public business sign-up (public/signup.html): one POST creates a business, its owner and first café, all in one transaction,
-// and signs the owner in. Mounted before the staff session check, so it needs no sign-in.
+// and gives back the owner's new employee number (the owner then signs in as anyone does). Mounted before the staff session check, so it needs no sign-in.
+// One business per app: it works only while the database holds no business at all, and is closed for good after the first.
 const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { hashSecret } = require("./auth");
-const { findEmployee } = require("./pin");
-const { signInAs } = require("./signin");
 const check = require("./validate");
 const rateLimit = require("./ratelimit");
 
@@ -17,7 +16,6 @@ const TIME_ZONES = ["America/New_York", "America/Chicago", "America/Denver", "Am
 const MAX_REGISTERS = 20;
 const PAY_PERIODS = 26; // a year of two-week periods; nothing adds more yet
 const NUMBER_TRIES = 5;
-const dailyCap = () => Number(process.env.SIGNUP_DAILY_CAP) || 50; // new businesses a day, across every address
 
 const bad = (message) => { throw new HttpError(400, message); };
 
@@ -71,8 +69,16 @@ function readSetup(b) {
 const newNumber = () => String(crypto.randomInt(10000000, 100000000));
 const numberTaken = (err) => err.code === "ER_DUP_ENTRY" && /UQ_Employee_EmployeeNumber/.test(err.sqlMessage);
 
-// Sign-up is open to anyone: a few a day from one address, and a modest cap on new businesses overall
+// Sign-up is open to whoever reaches an empty app first, so a few tries an hour from one address
 const signupLimit = rateLimit(5, 60 * 60 * 1000);
+
+// FOR UPDATE inside the sign-up transaction, so two sign-ups at the same moment can't both see an empty app. A test replaces this
+// to sign up on a database that already holds the demo business.
+router.signupClosed = async (db) => (await db.query("SELECT 1 FROM Business LIMIT 1 FOR UPDATE"))[0].length > 0;
+const CLOSED = "This app already has a business. Ask its owner to add you.";
+
+// The pages ask this to send people to sign-in instead of showing a form that would be refused
+router.get("/setup/open", async (req, res) => res.json({ open: !(await router.signupClosed(pool)) }));
 router.resetSetupLimit = () => signupLimit.reset();
 
 router.post("/setup", signupLimit, async (req, res) => {
@@ -81,11 +87,9 @@ router.post("/setup", signupLimit, async (req, res) => {
     if (err.step) return res.status(400).json({ error: err.message, step: err.step });
     throw err;
   }
-  const [[today]] = await pool.query("SELECT COUNT(*) AS n FROM Business WHERE CreatedAt > UTC_TIMESTAMP() - INTERVAL 1 DAY");
-  if (today.n >= dailyCap()) throw new HttpError(429, "We're setting up a lot of businesses today. Try again tomorrow.");
-
   const pinHash = hashSecret(f.owner.pin);
   const number = await pool.tx(async (conn) => {
+    if (await router.signupClosed(conn)) throw new HttpError(403, CLOSED);
     const businessId = crypto.randomUUID(), roleId = crypto.randomUUID(), locationId = crypto.randomUUID(), employeeId = crypto.randomUUID();
     await conn.query("INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, PricesIncludeTax) VALUES (?, ?, ?, ?, ?)",
       [businessId, f.business.name, f.business.email, f.business.phone, f.business.includesTax]);
@@ -122,10 +126,8 @@ router.post("/setup", signupLimit, async (req, res) => {
     return number;
   });
 
-  // Signed straight in, through the same café check as the sign-in page
-  const refused = await signInAs(res, await findEmployee(pool, number));
-  if (refused) throw new HttpError(403, refused);
-  res.json({ employeeNumber: number, firstName: f.owner.firstName, businessName: f.business.name, redirect: "/home.html" });
+  // Not signed in: the owner is shown the number to write down, then signs in on the sign-in page with it and the PIN
+  res.json({ employeeNumber: number, firstName: f.owner.firstName, businessName: f.business.name, redirect: "/login.html" });
 });
 
 router.TIME_ZONES = TIME_ZONES;

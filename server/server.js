@@ -15,11 +15,19 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-// "/" is the public homepage for business owners; anyone signed in goes straight to their home screen.
-// The phones' order page is a separate server (server/kiosk.js).
-app.get("/", (req, res) => {
+// "/" is the front page with the tour that leads to the one-time sign-up. Once the business exists, or for anyone signed in, it is
+// the staff sign-in or home screen. The phones' order page is a separate server (server/kiosk.js).
+app.get("/", async (req, res) => {
   if (session.fromRequest(req)) return res.redirect("/home.html");
-  res.sendFile(path.resolve(__dirname, "../public/welcome.html"));
+  if (await require("./setup").signupClosed(pool)) return res.redirect("/login.html");
+  res.sendFile(path.resolve(__dirname, "../public/tour.html"));
+});
+
+// The tour's sample pages: the real staff pages, run on recorded sample data by public/js/api.js. Open only until the one business exists.
+const TOUR_PAGES = ["home", "register", "kitchen", "attention", "orders", "rewards", "products", "inventory", "reports", "employees", "settings", "shift"];
+app.get("/tour/:page.html", async (req, res, next) => {
+  if (!TOUR_PAGES.includes(req.params.page) || await require("./setup").signupClosed(pool)) return next();
+  res.sendFile(path.resolve(__dirname, `../public/${req.params.page}.html`));
 });
 
 app.use(require("./vendor"));

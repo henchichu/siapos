@@ -82,7 +82,7 @@ function StockTab({ data, reload, onLocation, showInactive, setShowInactive }) {
         </div>
         ${note && html`<p className="status" role="status">${note}</p>`}
         <table className="table mg">
-          <colgroup><col /><col style=${{ width: 96 }} /><col style=${{ width: 78 }} /><col style=${{ width: 72 }} /><col style=${{ width: 52 }} />${data.canChange && html`<col style=${{ width: 250 }} />`}</colgroup>
+          <colgroup><col /><col style=${{ width: 96 }} /><col style=${{ width: 78 }} /><col style=${{ width: 104 }} /><col style=${{ width: 52 }} />${data.canChange && html`<col style=${{ width: 250 }} />`}</colgroup>
           <thead><tr><th>Stock item</th><th>On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
           <tbody>${rows.map((r) => html`<tr key=${r.id} className=${`${form?.stockItemId === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
             <td>${r.name}${!r.active && html`<span className="tag">deactivated</span>`}</td><td>${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)}</td><td className="r">${unitMoney(r.avgCost)}</td>
@@ -204,7 +204,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       </div>`}
       <label className="pf"><b>Invoice number</b><input className="field" maxLength="50" value=${invoice} onChange=${(e) => setInvoice(e.target.value)} /></label>
       <table className="table mg dlines">
-        <colgroup><col /><col style=${{ width: 44 }} /><col style=${{ width: 106 }} /><col style=${{ width: 96 }} /><col style=${{ width: 84 }} /><col style=${{ width: 84 }} /></colgroup>
+        <colgroup><col /><col style=${{ width: 44 }} /><col style=${{ width: 106 }} /><col style=${{ width: 96 }} /><col style=${{ width: 104 }} /><col style=${{ width: 84 }} /></colgroup>
         <thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th className="r">Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
         <tbody>${lines.map((l) => html`<tr key=${l.stockItemId}><td>${item(l.stockItemId)?.name}</td><td>${item(l.stockItemId)?.unit}</td>
           <td><input className="field cell" aria-label=${`Quantity of ${item(l.stockItemId)?.name}`} inputMode="decimal" value=${l.quantity} onChange=${(e) => setLine(l.stockItemId, { quantity: e.target.value.replace(/[^\d.]/g, "") })} /></td>

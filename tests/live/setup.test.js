@@ -1,4 +1,5 @@
-// Public business sign-up (POST /api/setup), and keeping businesses apart once there are several in one database.
+// Public business sign-up (POST /api/setup), closed once the app has a business, and keeping businesses apart in one database.
+// The app allows one business, so these tests open sign-up by replacing setup.signupClosed (the demo business is already there).
 // Every business a test creates is deleted afterwards, with everything in it.
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -7,10 +8,11 @@ const { start, client, pool, removeBusiness } = require("./env");
 const setup = require("../../server/setup");
 const router = require("../../server/router");
 
+const realClosed = setup.signupClosed;
 let env;
 const made = []; // business ids to delete
 const tag = crypto.randomBytes(3).toString("hex");
-test.before(async () => { env = await start(); });
+test.before(async () => { env = await start(); setup.signupClosed = async () => false; });
 test.beforeEach(() => { setup.resetSetupLimit(); router.resetLookupLimits(); });
 test.after(async () => {
   try { for (const id of made) await removeBusiness(id); } finally { env.server.close(); await pool.end(); }
@@ -24,21 +26,27 @@ const form = (over = {}) => ({
   ...over.top,
 });
 
-// Signs up a business and gives back its owner's browser (signed in) and the ids
+// Signs up a business and gives back its owner's browser (signed in with the new number, as the owner does next) and the ids
 async function signUp(over) {
-  const owner = client(env.base);
-  const r = await owner.call("/setup", form(over));
+  const r = await client(env.base).call("/setup", form(over));
   assert.equal(r.status, 200, JSON.stringify(r.body));
+  const owner = await signIn(r.body.employeeNumber, form(over).owner.pin);
   const [[emp]] = await pool.query("SELECT EmployeeID AS id, BusinessID AS businessId FROM Employee WHERE EmployeeNumber = ?", [r.body.employeeNumber]);
   made.push(emp.businessId);
   return { owner, number: r.body.employeeNumber, body: r.body, employeeId: emp.id, businessId: emp.businessId };
 }
 const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
 
-test("sign-up creates the business, owner, café and defaults in one go, and signs the owner in", async () => {
+test("sign-up creates the business, owner, café and defaults in one go, without signing the owner in", async () => {
+  const bare = client(env.base);
+  assert.equal((await bare.call("/setup", form({ business: { name: `No session ${tag}` }, owner: { email: `nosession.${tag}@example.com` } }))).status, 200);
+  assert.equal((await bare.call("/session")).status, 401, "the sign-up leaves no session");
+  const [[stray]] = await pool.query("SELECT BusinessID AS id FROM Business WHERE Name = ?", [`No session ${tag}`]);
+  made.push(stray.id);
+
   const { owner, number, body, businessId, employeeId } = await signUp();
   assert.match(number, /^[1-9]\d{7}$/, "8 digits, no leading zero");
-  assert.deepEqual([body.firstName, body.businessName, body.redirect], ["Dana", `Test Shop ${tag}`, "/home.html"]);
+  assert.deepEqual([body.firstName, body.businessName, body.redirect], ["Dana", `Test Shop ${tag}`, "/login.html"]);
 
   const me = (await owner.call("/session")).body;
   assert.deepEqual([me.employeeName, me.roleName, me.locationName, me.registerName], ["Dana Reyes", "Owner", "Downtown", "Drive-thru"]);
@@ -123,18 +131,24 @@ test("a failure partway through rolls everything back", async () => {
   assert.deepEqual([b.n, l.n], [0, 0], "no business, café or registers left behind");
 });
 
-test("sign-up is rate limited per address, and capped per day overall", async () => {
+test("sign-up is rate limited per address", async () => {
   for (let i = 0; i < 5; i++) assert.equal((await client(env.base).call("/setup", form({ top: { agreed: false } }))).status, 400);
   const sixth = await client(env.base).call("/setup", form());
   assert.equal(sixth.status, 429, "the 6th try in an hour from one address");
-  setup.resetSetupLimit();
-  const [[today]] = await pool.query("SELECT COUNT(*) AS n FROM Business WHERE CreatedAt > UTC_TIMESTAMP() - INTERVAL 1 DAY");
-  process.env.SIGNUP_DAILY_CAP = String(Math.max(1, today.n)); // the day's cap already reached
+});
+
+test("sign-up is closed once the app has a business: refused, nothing written, pages told", async () => {
+  await signUp(); // with the check open, so a business is certainly there whatever the database held before
+  setup.signupClosed = realClosed;
   try {
-    const capped = await client(env.base).call("/setup", form());
-    assert.equal(capped.status, 429);
-    assert.match(capped.body.error, /Try again tomorrow/);
-  } finally { delete process.env.SIGNUP_DAILY_CAP; }
+    const [[before]] = await pool.query("SELECT COUNT(*) AS n FROM Business");
+    const r = await client(env.base).call("/setup", form());
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.match(r.body.error, /already has a business/);
+    const [[after]] = await pool.query("SELECT COUNT(*) AS n FROM Business");
+    assert.equal(after.n, before.n);
+    assert.deepEqual((await client(env.base).call("/setup/open")).body, { open: false });
+  } finally { setup.signupClosed = async () => false; }
 });
 
 test("the sign-in name lookup is rate limited", async () => {

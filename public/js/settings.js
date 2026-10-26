@@ -4,6 +4,11 @@ const TABS = [["general", "General"], ["roles", "Roles and permissions"]];
 // The browser's own list of IANA time zones (the server checks the choice again). An old browser without it gets the US zones.
 const ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone")
   : ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
+// A short label for the table, like "Central (Chicago)": the US zone name, else the region, with the zone's city
+const US_ZONES = { "America/New_York": "Eastern", "America/Chicago": "Central", "America/Denver": "Mountain", "America/Phoenix": "Arizona",
+  "America/Los_Angeles": "Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii" };
+const zoneLabel = (z) => { const parts = z.split("/"); const city = parts[parts.length - 1].replace(/_/g, " ");
+  return parts.length < 2 ? z : `${US_ZONES[z] || parts[0]} (${city})`; };
 const NEW_CATEGORY = { name: "" };
 const NEW_LOCATION = { name: "", address: "", phone: "", timeZone: "America/Chicago", active: true, online: false, rates: {}, registers: [{ name: "Register 1" }] };
 const NEW_ROLE = { name: "", active: true, permissions: [] };
@@ -110,7 +115,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
 
       <div className="stack">
         <header className="phead"><h3>Categories</h3><button className="pbtn" onClick=${() => open("category", NEW_CATEGORY)}>Add category</button></header>
-        <table className="table mg" aria-label="Categories">
+        <table className="table mg cats" aria-label="Categories">
           <colgroup><col /><col style=${{ width: 240 }} /></colgroup>
           <thead><tr><th>Category</th><th>Actions</th></tr></thead>
           <tbody>${data.categories.map((c) => html`<tr key=${c.id} className=${`${panel?.kind === "category" && editing === c.id ? "sel" : ""} ${c.active ? "" : "off"}`}>
@@ -124,13 +129,13 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
 
       <div className="stack">
         <header className="phead"><h3>Locations</h3><button className="pbtn" onClick=${() => open("location", NEW_LOCATION)}>Add location</button></header>
-        <table className="table mg" aria-label="Locations">
-          <colgroup><col /><col style=${{ width: 140 }} /><col style=${{ width: 230 }} /><col style=${{ width: 90 }} /><col style=${{ width: 110 }} /><col style=${{ width: 240 }} /></colgroup>
+        <table className="table mg locs" aria-label="Locations">
+          <colgroup><col /><col style=${{ width: 130 }} /><col style=${{ width: 140 }} /><col style=${{ width: 76 }} /><col style=${{ width: 64 }} /><col style=${{ width: 150 }} /></colgroup>
           <thead><tr><th>Location</th><th>Time zone</th><th>Tax rates</th><th>Registers</th><th>Online orders</th><th>Actions</th></tr></thead>
           <tbody>${data.locations.map((l) => html`<tr key=${l.id} className=${`${panel?.kind === "location" && editing === l.id ? "sel" : ""} ${l.active ? "" : "off"}`}>
             <td>${l.name}<${Tag} off=${!l.active} /><span className="sub">${l.address}</span></td>
-            <td>${l.timeZone}</td>
-            <td>${data.taxes.map((t) => html`<div key=${t.id}>${t.name}: ${l.rates[t.id] ?? "Not set"}%</div>`)}</td>
+            <td title=${l.timeZone} data-zone=${l.timeZone}>${zoneLabel(l.timeZone)}</td>
+            <td className="rates">${data.taxes.map((t) => html`<div key=${t.id}>${t.name}: <span className="nw">${l.rates[t.id] == null ? "Not set" : `${l.rates[t.id]}%`}</span></div>`)}</td>
             <td>${l.registers.length}</td><td>${l.online ? "On" : "Off"}</td>
             <td><div className="acts">
               <button className="act" disabled=${busy} onClick=${() => open("location", { ...l, active: !!l.active, online: !!l.online, registers: l.registers.map((r) => ({ ...r })), rates: { ...l.rates } })}>Edit</button>

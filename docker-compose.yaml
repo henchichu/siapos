@@ -86,7 +86,6 @@ services:
       DB_POOL_SIZE: 8
       UPLOAD_DIR: /app/uploads
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
-      BUSINESS_ID: ${BUSINESS_ID:-}                 # the one business this app serves; optional when the database has only one
       KIOSK_SHARED_DEVICE: ${KIOSK_SHARED_DEVICE:-} # 1 when the order screen is one shared iPad: it signs customers out quickly
       KIOSK_PHONE_SIGNIN: ${KIOSK_PHONE_SIGNIN:-}   # 1 lets customers sign in by phone on the public address: demos with made-up customers only
     volumes:

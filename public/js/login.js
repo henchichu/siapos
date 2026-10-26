@@ -143,11 +143,11 @@ function App() {
     </main>`;
   }
 
-  // No name here: the number alone isn't proof of who is at the keypad, so the PIN step doesn't greet anyone by name
+  // The first name comes from the number alone; the server limits how fast numbers can be looked up (server/router.js)
   return html`<main className="signin">
     ${brand}
     <p className="eyebrow">${[who.businessName, who.locationName].filter(Boolean).join(" · ")}</p>
-    <h2 className="prompt">Enter your PIN</h2>
+    <h2 className="prompt">Hi ${who.firstName}, enter your PIN</h2>
     <div className="pins" role="img" aria-label=${`${pin.length} of ${PIN_LEN} digits entered`}>
       ${Array.from({ length: PIN_LEN }, (_, i) => html`<span key=${i} className=${i < pin.length ? "pin on" : "pin"} />`)}
     </div>

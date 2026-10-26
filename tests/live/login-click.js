@@ -55,8 +55,8 @@ const PRIYA = { id: "emp-priya", number: "10420004", pin: "444444" };
     check("an unknown number says so, in the live region, and clears the slots", /does not exist/.test(live()) && slots() === "" && !$(".pins"), live());
 
     await type(PRIYA.number.split(""));
-    check("8 digits move on to the PIN step by themselves", $(".prompt")?.textContent === "Enter your PIN" && $$(".pin").length === 6, $(".prompt")?.textContent);
-    check("the PIN step names the business and café but not the person", $(".eyebrow")?.textContent === "Brewbean Coffee · Brewbean Campus" && !/Priya/.test(w.document.body.textContent), $(".eyebrow")?.textContent);
+    check("8 digits move on to the PIN step by themselves, greeting the person", $(".prompt")?.textContent === "Hi Priya, enter your PIN" && $$(".pin").length === 6, $(".prompt")?.textContent);
+    check("the PIN step names the business and café", $(".eyebrow")?.textContent === "Brewbean Coffee · Brewbean Campus", $(".eyebrow")?.textContent);
     check("no step bar on the PIN step, and Not you? Start over", !$(".step") && /Not you\?\s*Start over/.test($(".again")?.textContent || ""));
 
     await tap("12");

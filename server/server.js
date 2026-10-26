@@ -15,8 +15,12 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-// The staff side always starts at the sign-in page. The phones' order page is a separate server (server/kiosk.js).
-app.get("/", (req, res) => res.redirect("/login.html"));
+// "/" is the public homepage for business owners; anyone signed in goes straight to their home screen.
+// The phones' order page is a separate server (server/kiosk.js).
+app.get("/", (req, res) => {
+  if (session.fromRequest(req)) return res.redirect("/home.html");
+  res.sendFile(path.resolve(__dirname, "../public/welcome.html"));
+});
 
 app.use(require("./vendor"));
 

@@ -69,20 +69,19 @@ function kiosk(base) {
 
     const americano = [...k.w.document.querySelectorAll(".tile")].find((t) => /Americano/.test(t.textContent));
     americano.querySelector("button").click(); await sleep(400);
-    check("Add opens the item options", !!k.button("Add to my order"));
+    check("Add opens the item options", !![...k.w.document.querySelectorAll(".customize .confirm")][0]);
     await k.click("Large 16 oz · $3.75");
     const caramel = [...k.w.document.querySelectorAll(".opt label")].find((l) => /Caramel/.test(l.textContent)).querySelector("input");
     caramel.click(); await sleep(200);
-    check("the item total adds the option", /Item total \$4\.35/.test(k.text()), k.text().match(/Item total \$[\d.]+/)?.[0]);
-    await k.click("Add to my order");
+    check("the item total adds the option", /Add to order · \$4\.35/.test(k.text()), k.text().match(/Add to order · \$[\d.]+/)?.[0]);
+    k.$(".customize .confirm").click(); await sleep(300);
     check("the item lands in the cart", /Americano, Large 16 oz/.test(k.text()) && /Caramel/.test(k.text()));
     k.$('[aria-label="Add one Americano"]').click(); await sleep(200);
     check("+ raises the quantity", /Subtotal\$8\.70/.test(k.text().replace(/\s/g, "")), k.text().match(/Subtotal\s*\$[\d.]+/)?.[0]);
 
-    await k.type(k.$(".cart .note input"), "Extra hot");
     await k.click("Checkout");
     check("checkout shows the account", /Chloe · \(\*\*\*\) \*\*\*-0177/.test(k.text()));
-    check("the barista note carries into checkout", [...k.w.document.querySelectorAll(".checkout-overlay input")].some((i) => i.value === "Extra hot"));
+    await k.type([...k.w.document.querySelectorAll(".checkout-overlay input")].find((i) => i.maxLength === 120), "Extra hot");
     await sleep(400);
     await k.click("Place order");
     check("a payment method is required", /Choose how you'll pay/.test(k.text()));
@@ -134,7 +133,7 @@ function kiosk(base) {
     check("guest has no Your Orders", !k.button("Your Orders"));
     const muffin = [...k.w.document.querySelectorAll(".tile")].find((t) => /muffin/i.test(t.textContent));
     muffin.querySelector("button").click(); await sleep(400);
-    await k.click("Add to my order");
+    k.$(".customize .confirm").click(); await sleep(300);
     await k.click("Checkout"); await sleep(400);
     await k.click("Cash");
     await k.click("Place order");

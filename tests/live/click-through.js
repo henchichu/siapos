@@ -51,7 +51,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   await click(byText("button", "Customize Latte"));
   check("modal: Size, Milk, Extras, included", !!$("dialog[open]") && /Size/.test(text()) && /Milk/.test(text()) && /Extras/.test(text()) && /included/.test(text()));
   await click(byText("dialog button", "Large 16 oz")); await click(opt("Oat milk")); await click(opt("Extra shot"));
-  check("item total 5.25+0.75+1.00", /Item total \$7\.00/.test(text()));
+  check("item total 5.25+0.75+1.00", /Add to order · \$7\.00/.test(text()));
   await click(byText("dialog button", "Cancel"));
   check("Cancel adds nothing", !$("dialog") && !$(".order"));
   await click(byText("button", "Customize Latte"));

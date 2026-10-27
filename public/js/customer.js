@@ -229,7 +229,7 @@ function HeaderActions({ canOpenOrders, onOpenOrders, onExit }) {
 }
 
 //  Checkout overlay 
-function Checkout({ cart, mode, memberInfo, locationName, payHere, note, onNoteChange, onBack, onOrderPlaced }) {
+function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere, note, onNoteChange, onBack, onOrderPlaced }) {
   const [guestName, setGuestName] = useState("");
   const [payMethod, setPayMethod] = useState(null);
   const [card, setCard] = useState({ number: "", expiry: "", cvc: "" }); // a test card: this kiosk takes mock payments
@@ -270,13 +270,13 @@ function Checkout({ cart, mode, memberInfo, locationName, payHere, note, onNoteC
   };
 
   if (done) {
-    return html`<${Confirmation} receipt=${done} onBack=${onBack} />`;
+    return html`<${Confirmation} businessName=${businessName} receipt=${done} onBack=${onBack} />`;
   }
 
   return html`
     <div className="checkout-overlay screen">
       <div className="header">
-        <h1>ClockIt Cafe</h1>
+        <h1>${businessName}</h1>
         <button className="back-menu" onClick=${onBack}>Back to menu</button>
       </div>
       <div className="body">
@@ -353,7 +353,7 @@ function Checkout({ cart, mode, memberInfo, locationName, payHere, note, onNoteC
 }
 
 //  Confirmation 
-function Confirmation({ receipt, onBack }) {
+function Confirmation({ businessName, receipt, onBack }) {
   const { cart, note, payMethod, guestName, mode, memberInfo, orderNumber, orderId, totalCents, paid } = receipt;
   const name = mode === "guest" ? guestName : (memberInfo && memberInfo.firstName) || "there";
   // The order's real status, so a phone shows "Ready for pickup" without the customer asking; it stops once the order is over
@@ -382,7 +382,7 @@ function Confirmation({ receipt, onBack }) {
       </div>
       <div className="center">
         <section className="card">
-          <p className="where">ClockIt Cafe · Pickup at this counter</p>
+          <p className="where">${businessName} · Pickup at this counter</p>
           <h1>Order received</h1>
           <p className="thanks">Thanks, ${name}. ${paid ? "We're preparing your order." : "We'll prepare your order after payment."}</p>
           <div className="lines">
@@ -423,11 +423,11 @@ function Confirmation({ receipt, onBack }) {
 }
 
 // ---- Rewards catalog (points redemption not yet supported by backend) ------
-function RewardsPage({ memberInfo, onBrowseMenu, headerActions }) {
+function RewardsPage({ businessName, memberInfo, onBrowseMenu, headerActions }) {
   return html`
     <div className="screen">
       <div className="header">
-        <h1>ClockIt Cafe</h1>
+        <h1>${businessName}</h1>
         <div className="who">
           <p className="name">Hi, ${memberInfo.firstName}!</p>
           ${memberInfo.member
@@ -452,7 +452,7 @@ function RewardsPage({ memberInfo, onBrowseMenu, headerActions }) {
 }
 
 
-function Menu({ mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
+function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
   const [showRewards, setShowRewards] = useState(false);
   const [cat, setCat] = useState("All");
   const [customizing, setCustomizing] = useState(null);
@@ -469,7 +469,7 @@ function Menu({ mode, memberInfo, hasOrders, locationName, payHere, products, ca
   const headerActions = html`<${HeaderActions} canOpenOrders=${mode === "signed-in" || hasOrders} onOpenOrders=${onOpenOrders} onExit=${onExit} />`;
 
   if (showRewards) {
-    return html`<${RewardsPage} memberInfo=${memberInfo} headerActions=${headerActions} onBrowseMenu=${() => setShowRewards(false)} />`;
+    return html`<${RewardsPage} businessName=${businessName} memberInfo=${memberInfo} headerActions=${headerActions} onBrowseMenu=${() => setShowRewards(false)} />`;
   }
 
   if (customizing) {
@@ -478,20 +478,20 @@ function Menu({ mode, memberInfo, hasOrders, locationName, payHere, products, ca
   }
 
   if (checkoutOpen) {
-    return html`<${Checkout} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
+    return html`<${Checkout} businessName=${businessName} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
       onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
   }
 
   if (lastOrder) {
-    return html`<${Confirmation} receipt=${lastOrder} onBack=${() => setLastOrder(null)} />`;
+    return html`<${Confirmation} businessName=${businessName} receipt=${lastOrder} onBack=${() => setLastOrder(null)} />`;
   }
 
   return html`
     <div className="screen">
       <div className="header">
-        <h1>ClockIt Cafe</h1>
+        <h1>${businessName}</h1>
         <div className="who">
           ${mode === "signed-in" ? html`<${React.Fragment}>
             <p className="name">Hi, ${memberInfo.firstName}!</p>
@@ -570,7 +570,7 @@ function Menu({ mode, memberInfo, hasOrders, locationName, payHere, products, ca
 }
 
 //  Order history 
-function OrderHistory({ memberInfo, guestIds, onBackToMenu, onExit, onOpenOrder }) {
+function OrderHistory({ businessName, memberInfo, guestIds, onBackToMenu, onExit, onOpenOrder }) {
   const [orders, setOrders] = useState(null);
   const [err, setErr] = useState("");
   useEffect(() => {
@@ -589,7 +589,7 @@ function OrderHistory({ memberInfo, guestIds, onBackToMenu, onExit, onOpenOrder 
   return html`
     <div className="history screen">
       <div className="header">
-        <h1>ClockIt Cafe</h1>
+        <h1>${businessName}</h1>
         ${html`<${HeaderActions} canOpenOrders=${false} onExit=${onExit} />`}
         <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
       </div>
@@ -626,7 +626,7 @@ function OrderHistory({ memberInfo, guestIds, onBackToMenu, onExit, onOpenOrder 
 //  Order details (status) 
 const STATUS_STEPS = ["Confirmed","Preparing","Ready","Picked up"];
 const STEP_OF = { 2: 0, 3: 1, 4: 2, 5: 3, 7: 3 }; // the order's status code -> its step; the status wording changes ("Ready for pickup"), the code does not
-function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onExit }) {
+function OrderDetails({ businessName, orderId, memberInfo, onBackToHistory, onBackToMenu, onExit }) {
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState("");
   const load = useCallback(() => {
@@ -646,7 +646,7 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
   return html`
     <div className="details screen">
       <div className="header">
-        <h1>ClockIt Cafe</h1>
+        <h1>${businessName}</h1>
         ${html`<${HeaderActions} canOpenOrders=${!!onBackToHistory} onOpenOrders=${onBackToHistory} onExit=${onExit} />`}
         <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
       </div>
@@ -665,8 +665,12 @@ function OrderDetails({ orderId, memberInfo, onBackToHistory, onBackToMenu, onEx
         </div>
 
         <div className="card">
-          <p className="where">ClockIt Cafe</p>
-          <p className="when">Pickup time: as soon as possible</p>
+          <p className="where">${businessName}</p>
+          <p className="when">${order.statusCode === 6 ? "Order cancelled"
+            : order.statusCode === 4 ? "Ready for pickup"
+            : order.statusCode === 5 || order.statusCode === 7
+              ? (order.completedAt ? `Picked up at: ${fmt(order.completedAt, order.tz)}` : order.statusCode === 7 ? "Order refunded" : "Picked up")
+              : `Estimated ready time: ${fmt(new Date(new Date(order.placedAt).getTime() + 7 * 60 * 1000), order.tz)}`}</p>
         </div>
 
         <div className="card">
@@ -773,19 +777,19 @@ function App() {
       phoneSignIn=${ctx.phoneSignIn} onGuest=${onGuest} onSignedIn=${onSignedIn} />`;
 
   if (view === "history") return html`
-    <${OrderHistory} memberInfo=${memberInfo} guestIds=${guestOrders}
+    <${OrderHistory} businessName=${ctx.businessName} memberInfo=${memberInfo} guestIds=${guestOrders}
       onBackToMenu=${() => setView("menu")}
       onExit=${signOut}
       onOpenOrder=${(id) => { setOpenOrderId(id); setView("order"); }} />`;
 
   if (view === "order") return html`
-    <${OrderDetails} orderId=${openOrderId} memberInfo=${memberInfo}
+    <${OrderDetails} businessName=${ctx.businessName} orderId=${openOrderId} memberInfo=${memberInfo}
       onBackToHistory=${() => setView("history")}
       onBackToMenu=${() => setView("menu")}
       onExit=${signOut} />`;
 
   return html`
-    <${Menu}
+    <${Menu} businessName=${ctx.businessName}
       mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0}
       locationName=${ctx.locationName} payHere=${ctx.payHere}
       products=${catalog.products} categories=${catalog.categories}

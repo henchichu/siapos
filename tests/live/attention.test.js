@@ -32,17 +32,23 @@ test("only roles with something to act on see Needs attention", async () => {
 
   const data = await attention();
   assert.equal(data.location, "Brewbean Campus");
-  for (const k of ["losses", "low", "timecards", "refunds"]) assert.ok(data[k] && Number.isInteger(data[k].count) && Array.isArray(data[k].rows) && data[k].rows.length <= 8, k);
-  assert.ok(data.low.rows.every((r) => r.onHand <= r.reorderAt));
+  for (const k of ["losses", "pendingDeliveries", "timecards", "refunds"]) assert.ok(data[k] && Number.isInteger(data[k].count) && Array.isArray(data[k].rows) && data[k].rows.length <= 8, k);
+  assert.ok(data.pendingDeliveries.rows.every((r) => /^PO-\d+$/.test(r.orderNumber) && r.quantity > 0 && ["Ordered", "Needs supplier"].includes(r.status)));
+  const inventory = (await leo.call("/inventory")).body;
+  assert.equal(data.pendingDeliveries.count, inventory.pendingDeliveries.length);
+  assert.deepEqual(data.pendingDeliveries.rows.map((r) => r.id), inventory.pendingDeliveries.slice(0, 8).map((r) => r.id));
 });
 
-test("low stock and losses reported today", async () => {
+test("pending purchase orders and losses reported today", async () => {
   const cup = async () => (await leo.call("/inventory")).body.rows.find((r) => r.id === "stk-cup-12");
   const before = await cup();
-  const before0 = (await attention()).low.count;
   try {
     assert.equal((await leo.call("/inventory/change", { stockItemId: "stk-cup-12", threshold: String(before.onHand + 1) })).status, 200);
-    assert.equal((await attention()).low.count, before0 + 1, "cups at their reorder level join the list");
+    const inventory = (await leo.call("/inventory")).body;
+    const pending = (await attention()).pendingDeliveries;
+    assert.ok(inventory.pendingDeliveries.some((p) => p.stockItemId === "stk-cup-12"));
+    assert.equal(pending.count, inventory.pendingDeliveries.length, "attention counts unreceived purchase orders");
+    assert.deepEqual(pending.rows.map((p) => p.id), inventory.pendingDeliveries.slice(0, 8).map((p) => p.id));
   } finally {
     await leo.call("/inventory/change", { stockItemId: "stk-cup-12", threshold: String(before.reorderAt) });
   }

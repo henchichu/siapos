@@ -41,9 +41,9 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const count = (title) => Number(panel(title).querySelector(".count").textContent);
 
   check("heading and where and when", /Needs attention/.test($(".heading").textContent) && /Brewbean Campus · today/.test($(".heading").textContent));
-  check("four panels, as in the wireframe", $$("section.panel h3").map((h) => h.textContent).join("|") === "Stock losses reported today|Low stock|Timecards waiting for approval|Refunds waiting for an override");
+  check("four panels, as in the wireframe", $$("section.panel h3").map((h) => h.textContent).join("|") === "Stock losses reported today|Pending deliveries|Timecards waiting for approval|Refunds waiting for an override");
   check("menu: Needs attention is current, with all ten links for a manager", byText(".nav a.link", "Needs attention")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 10);
-  check("Open inventory and Restock go to Inventory (Restock with Low stock only)", panel("Stock losses reported today").querySelector("a").getAttribute("href") === "/inventory.html" && panel("Low stock").querySelector("a").getAttribute("href") === "/inventory.html#low");
+  check("Open inventory and Receive delivery go to the correct inventory tabs", panel("Stock losses reported today").querySelector("a").getAttribute("href") === "/inventory.html" && panel("Pending deliveries").querySelector("a").getAttribute("href") === "/inventory.html#delivery");
   const review = panel("Timecards waiting for approval").querySelector("a");
   check("Review timecards opens the team page at the waiting card's pay period", count("Timecards waiting for approval") === 0 || /^\/shift\.html\?payPeriodId=.+#team$/.test(review.getAttribute("href")), review.getAttribute("href"));
   check("each panel's table has the wireframe's columns", panel("Refunds waiting for an override").querySelectorAll("th").length === 4 && [...panel("Refunds waiting for an override").querySelectorAll("th")].map((t) => t.textContent).join("|") === "Order|Amount|Asked by|Why");

@@ -320,7 +320,7 @@ router.get("/customer/orders/:id", async (req, res) => {
   const s = currentCustomer(req, (await place(req)).BusinessID);
   const [[o]] = await pool.query(
     `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.Total AS total,
-            o.CustomerNote AS note, o.OrderStatusCode AS statusCode, st.Description AS status, l.TimeZone AS tz
+            o.CompletedAt AS completedAt, o.CustomerNote AS note, o.OrderStatusCode AS statusCode, st.Description AS status, l.TimeZone AS tz
        FROM Orders o JOIN OrderStatus st ON st.OrderStatusCode = o.OrderStatusCode JOIN Location l ON l.LocationID = o.LocationID
       WHERE o.OrderID = ? AND o.ChannelCode IN (2, 3) AND (o.CustomerID <=> ?)`,
     [String(req.params.id), s ? s.customerId : null]);
@@ -332,7 +332,7 @@ router.get("/customer/orders/:id", async (req, res) => {
       WHERE oi.OrderID = ? ORDER BY oi.OrderItemID`, [o.id]);
   res.json({
     id: o.id, orderNumber: o.orderNumber, placedAt: o.placedAt, tz: o.tz, total: Number(o.total),
-    status: statusLabel(o.status), statusCode: o.statusCode,
+    status: statusLabel(o.status), statusCode: o.statusCode, completedAt: o.completedAt,
     items: items.map((i) => ({ name: i.sized ? `${i.product}, ${i.size}` : i.product, qty: Number(i.qty), lineTotal: Number(i.line) })),
   });
 });

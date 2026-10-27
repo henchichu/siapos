@@ -265,9 +265,9 @@
   .customer .cart .line .qty button { width: 44px; height: 44px; }
   .customer .entry .cards { grid-template-columns: 1fr; gap: 20px; }
   .customer .customize .body { flex-direction: column; }
-  .customer .customize .order-side { width: 100%; }
+  .customer .customize .form, .customer .customize .order-side { width: 100%; }
   .customer .checkout-overlay .body { flex-direction: column; }
-  .customer .checkout-overlay .summary { width: 100%; }
+  .customer .checkout-overlay .form, .customer .checkout-overlay .summary { width: 100%; }
   .customer .checkout-overlay .methods { grid-template-columns: repeat(2, 1fr); }
   .customer .grid { grid-template-columns: repeat(2, minmax(0, 280px)); }
   .customer .customize .two-col { grid-template-columns: 1fr; }
@@ -276,16 +276,19 @@
 @media (max-width: 600px) {
   .customer .grid { grid-template-columns: minmax(0, 280px); }
   .customer .entry .body { padding: 20px; }
-  .customer .menu-body { padding: 16px; }
+  .customer .menu-body { padding: 16px 16px calc(88px + env(safe-area-inset-bottom)); }
   .customer .header { padding: 12px 16px; gap: 8px 12px; }
-  .customer .header h1 { font-size: 20px; }
+  .customer .header h1 { font-size: 20px; flex-shrink: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
   /* row 1: title left, Back to Customer Login top right; row 2: who; row 3: pickup */
   .customer .header h1 { order: 1; }
   .customer .header .actions { order: 2; margin-left: auto; }
   .customer .header .who { order: 3; flex: 1 1 100%; }
   .customer .header .pickup { order: 4; flex: 1 1 100%; }
   .customer .header .who .name { font-size: 18px; }
-  .customer .header .pickup button { flex: 1; justify-content: space-between; }
+  .customer .header .pickup button { flex: 1; min-width: 0; overflow-wrap: anywhere; justify-content: space-between; }
+  .customer .header .actions { flex-shrink: 1; max-width: 100%; }
+  .customer .details .steps, .customer .confirm-overlay .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer .history .order-card, .customer .history .order-card .main .top { flex-wrap: wrap; }
 }
 
 /* Surface treatments only: retain every existing layout and type metric. */

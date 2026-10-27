@@ -300,6 +300,21 @@ test("an order in progress blocks the next one until it is picked up", async () 
   assert.equal((await order(c)).status, 200, "once picked up, this phone can order again");
 });
 
+test("a member enrolled with only an email signs in by that email", async () => {
+  const [[{ b }]] = await pool.query("SELECT BusinessID AS b FROM Location WHERE LocationID = 'loc-campus'");
+  const id = crypto.randomUUID();
+  await pool.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, ?, 'Eli', 'eli.only@example.com')", [id, b]);
+  try {
+    const r = await phone(pub.base).call("/customer/login", { email: " Eli.Only@Example.com " });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual([r.body.firstName, r.body.maskedPhone, r.body.maskedEmail], ["Eli", null, "e***@example.com"]);
+    const none = await phone(pub.base).call("/customer/login", { email: "nobody@example.com" });
+    assert.equal(none.status, 404);
+    assert.match(none.body.error, /that email/);
+    assert.equal((await phone(pub.base).call("/customer/login", { email: "not an email" })).status, 400);
+  } finally { await pool.query("DELETE FROM Customer WHERE CustomerID = ?", [id]); }
+});
+
 // last, because it uses up this address's orders for a minute
 test("order spam is slowed down: one phone is capped, and so is a script with no cookie", async () => {
   const c = phone(pub.base);

@@ -47,7 +47,7 @@ function kiosk(base) {
   try {
     const k = kiosk(base);
     await sleep(800);
-    check("entry asks how you'd like to order", /How would you like to order\?/.test(k.text()));
+    check("entry asks how you'd like to order", /Members earn points/.test(k.text()) && !!k.button("Order as Guest"));
     check("no staff sign-in on the page", !/employee/i.test(k.text()));
 
     await k.type(k.$("input"), "123");

@@ -138,14 +138,10 @@ test("a declined or bad card at the register makes no sale", async () => {
   assert.equal((await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } })).status, 200, "cash needs no card");
 });
 
-test("visitors get the homepage at /, signed-in staff go Home, and the old scaffold pages are gone", async () => {
+test("configured shops send visitors to sign-in and signed-in staff Home; old scaffold pages are gone", async () => {
   const at = (path, headers = {}) => fetch(env.base + path, { redirect: "manual", headers });
   const root = await at("/");
-  assert.equal(root.status, 200);
-  const page = await root.text();
-  assert.match(page, /Your checkout,/);
-  assert.match(page, /href="\/login\.html"/, "Sign in goes to the staff sign-in");
-  assert.ok(!/href="\/register\.html"/.test(page), "Register your business isn't the staff register");
+  assert.deepEqual([root.status, root.headers.get("location")], [302, "/login.html"], "a configured shop sends visitors to sign-in");
   const sam = await signIn("10420003", "333333");
   const home = await at("/", { cookie: sam.cookie() });
   assert.deepEqual([home.status, home.headers.get("location")], [302, "/home.html"], "signed in: straight to Home");

@@ -124,3 +124,15 @@ node tests/live/settings-write-smoke.cjs
 ```
 
 The write check creates temporary records and removes them afterward. Keep local secrets, node_modules and any personal .gitignore out of commits using .git/info/exclude.
+
+## Automatic restock purchase orders
+
+Inventory > Receive delivery shows simulated purchase orders under Pending deliveries, below Recent deliveries. When stock reaches a positive reorder threshold, database triggers create one open order per item and location, including during sales, counts and adjustments. Zero disables new automatic orders.
+
+Each purchase order has a unique `PO-` number, supplier, ordered quantity, saved quoted unit cost, creation date, and status. The preferred active supplier is selected first, falling back to another active supplier for that stock item. Quantity replenishes to twice the threshold, rounded up to a whole stock unit, with the supplier minimum applied. Supplier, quantity and quote remain saved even if supplier settings later change. The simulated order is placed inside this class project; no external ordering service is required.
+
+Orders start as **Ordered**. Items with no available supplier show **Needs supplier**: use **Assign supplier**, select a supplier, and choose **Place simulated order**. Use **Receive** when an ordered delivery arrives, check the actual quantity and total, and save. This adds the stock ledger entries and marks the order **Received** atomically. Recent deliveries shows the same PO number and Received status. A short delivery that leaves stock low creates a follow-up order. Concurrent receipts cannot receive the same PO twice. Orders remain open if stock recovers or thresholds change. The dashboard refreshes every 15 seconds while visible.
+
+Fresh databases include purchase orders automatically. To upgrade the existing database from `main`, stop the staff and kiosk API writers and apply `sql/migrations/20261026-restock-orders.sql` as the database administrator before restarting the updated apps. This direct migration preserves stock and delivery history, backfills low stock, and can be rerun without duplicating open orders or changing their saved supplier/quantity/cost. No database reset is needed.
+
+The two earlier migration files are retained only for installations that used the first draft of this feature. If the database still has a `PendingDelivery` table, run `20261026-purchase-orders.sql` to convert those records first, then run the direct migration. Do not run `20261026-pending-deliveries.sql` on a fresh or already upgraded database.

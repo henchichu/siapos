@@ -272,3 +272,71 @@ test("an ingredient that only a deactivated product uses can't be deactivated ei
   assert.equal(blocked.status, 409, "the product is switched off, but could come back");
   assert.match(blocked.body.error, /1 product recipe/);
 });
+
+test("pending receipts are location scoped, atomic, and cannot be received twice", async () => {
+  const original = await row();
+  const [originalPending] = await pool.query("SELECT p.* FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID=p.InventoryID WHERE i.LocationID='loc-campus' AND i.StockItemID=?", [ITEM]);
+  try {
+    await change({ threshold: String(original.onHand + 1) });
+    const data = (await leo.call("/inventory")).body;
+    const pending = data.pendingDeliveries.find((p) => p.stockItemId === ITEM);
+    assert.ok(pending);
+    assert.ok(pending.quantity > 0);
+    assert.match(pending.orderNumber, /^PO-\d{6,}$/);
+    assert.equal(pending.status, "Ordered");
+    assert.equal(pending.supplierId, "sup-supply");
+    assert.equal((await leo.call("/inventory?locationId=loc-downtown")).body.pendingDeliveries?.some((p) => p.id === pending.id), false);
+    const body = { supplierId: "sup-supply", deliveredOn: data.location.today, purchaseOrderId: pending.id,
+      lines: [{ stockItemId: ITEM, quantity: "1", total: "0.11" }] };
+    assert.equal((await sam.call("/inventory/delivery", body)).status, 403);
+    const missing = await leo.call("/inventory/delivery", { ...body, lines: [{ stockItemId: "stk-cup-16", quantity: "1", total: "0.11" }] });
+    assert.equal(missing.status, 400);
+    assert.equal((await row()).onHand, original.onHand);
+    assert.equal((await leo.call("/inventory/delivery", { ...body, supplierId: "sup-bakery" })).status, 409, "the order supplier is fixed");
+    const results = await Promise.all([leo.call("/inventory/delivery", body), leo.call("/inventory/delivery", body)]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+    assert.equal((await row()).onHand, original.onHand + 1);
+    const received = (await leo.call("/inventory")).body.deliveries.find((d) => d.id === results.find((r) => r.status === 200).body.id);
+    assert.equal(received.orderNumber, pending.orderNumber);
+    assert.equal(received.status, "Received");
+    const [[saved]] = await pool.query("SELECT Status FROM PurchaseOrder WHERE PurchaseOrderID = ?", [pending.id]);
+    assert.equal(saved.Status, "Received");
+    const remaining = (await leo.call("/inventory")).body.pendingDeliveries.filter((p) => p.stockItemId === ITEM);
+    assert.equal(remaining.length, 1, "partial receipt below threshold creates one follow-up");
+    assert.notEqual(remaining[0].id, pending.id);
+  } finally {
+    await change({ threshold: String(original.reorderAt) });
+    await leo.call("/inventory/count", { counts: [{ stockItemId: ITEM, counted: String(original.onHand) }] });
+    const ids = originalPending.map((p) => p.PurchaseOrderID);
+    const [current] = await pool.query("SELECT p.PurchaseOrderID AS id FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID=p.InventoryID WHERE i.LocationID='loc-campus' AND i.StockItemID=?", [ITEM]);
+    const added = current.filter((p) => !ids.includes(p.id)).map((p) => p.id);
+    if (added.length) await pool.query("DELETE FROM PurchaseOrder WHERE PurchaseOrderID IN (?)", [added]);
+    for (const p of originalPending) await pool.query("UPDATE PurchaseOrder SET ReceivedDeliveryID=? WHERE PurchaseOrderID=?", [p.ReceivedDeliveryID, p.PurchaseOrderID]);
+  }
+});
+
+test("supplierless orders require assignment before receiving", async () => {
+  const data = (await leo.call("/inventory")).body;
+  const made = await leo.call("/inventory/item", { name: `Test purchase order ${stamp}`, unitCode: data.units.find((u) => u.symbol === "g").code, threshold: "5" });
+  assert.equal(made.status, 200);
+  madeItems.push(made.body.id);
+  const draft = (await leo.call("/inventory")).body.pendingDeliveries.find((p) => p.stockItemId === made.body.id);
+  assert.equal(draft.status, "Needs supplier");
+  const receive = await leo.call("/inventory/delivery", { supplierId: "sup-supply", deliveredOn: data.location.today, purchaseOrderId: draft.id, lines: [{ stockItemId: made.body.id, quantity: "1", total: "1" }] });
+  assert.equal(receive.status, 409);
+  const path = `/inventory/purchase-order/${draft.id}/supplier`;
+  assert.equal((await sam.call(path, { supplierId: "sup-supply" })).status, 403);
+  assert.equal((await leo.call(path, { supplierId: "sup-supply", locationId: "loc-downtown" })).status, 409);
+  assert.equal((await leo.call(path, { supplierId: "nope" })).status, 400);
+  assert.equal((await leo.call(path, { supplierId: "sup-supply" })).status, 200);
+  const placed = (await leo.call("/inventory")).body.pendingDeliveries.find((p) => p.id === draft.id);
+  assert.equal(placed.status, "Ordered");
+  assert.equal(placed.orderNumber, draft.orderNumber);
+  assert.equal(placed.supplierId, "sup-supply");
+  assert.ok((await row(made.body.id)).supplierIds.includes("sup-supply"), "the supplier is retained for future automatic orders");
+  assert.equal((await leo.call("/inventory/change", { locationId: "loc-downtown", stockItemId: made.body.id, threshold: "5" })).status, 200);
+  const nextOrder = (await leo.call("/inventory?locationId=loc-downtown")).body.pendingDeliveries.find((p) => p.stockItemId === made.body.id);
+  assert.equal(nextOrder.supplierId, "sup-supply", "future automatic orders use the assigned supplier");
+  assert.equal(nextOrder.status, "Ordered");
+  assert.equal((await leo.call(path, { supplierId: "sup-bakery" })).status, 409);
+});

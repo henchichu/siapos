@@ -59,7 +59,7 @@ function App() {
   const load = useCallback(() => api("/attention").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
-  const { losses, low, timecards, refunds } = data || {};
+  const { losses, pendingDeliveries, timecards, refunds } = data || {};
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Needs attention" />
     <section className="main scrolls" aria-label="Needs attention">
@@ -71,10 +71,10 @@ function App() {
             <${Table} cols=${[64, 120, 84, 0, 72]} heads=${[["Time"], ["Stock item"], ["Amount"], ["Reason"], ["By"]]}>
               ${losses.rows.map((l, i) => html`<tr key=${i}><td>${clock(l.at, data.timeZone)}</td><td>${l.item}</td><td>${qty(l.amount)} ${l.unit}</td><td>${l.reason}</td><td>${l.by || "—"}</td></tr>`)}<//>
           <//>`}
-          ${low && html`<${Panel} title="Low stock" count=${low.count} empty="Nothing is at or below its reorder level."
-            action=${html`<a className="pbtn outline" href="/inventory.html#low">Restock</a>`}>
-            <${Table} cols=${[0, 110, 90]} heads=${[["Stock item"], ["On hand"], ["Reorder at", true]]}>
-              ${low.rows.map((l, i) => html`<tr key=${i}><td>${l.item}</td><td>${qty(l.onHand)} ${l.unit}</td><td className="r">${qty(l.reorderAt)}</td></tr>`)}<//>
+          ${pendingDeliveries && html`<${Panel} title="Pending deliveries" count=${pendingDeliveries.count} empty="No deliveries are pending."
+            action=${html`<a className="pbtn outline" href="/inventory.html#delivery">Receive delivery</a>`}>
+            <${Table} cols=${[100, 0, 90, 110]} heads=${[["Purchase order"], ["Stock item / supplier"], ["Quantity", true], ["Status"]]}>
+              ${pendingDeliveries.rows.map((p) => html`<tr key=${p.id}><td>${p.orderNumber}</td><td>${p.item}<div className="sub">${p.supplier || "No supplier assigned"}</div></td><td className="r">${qty(p.quantity)} ${p.unit}</td><td>${p.status}</td></tr>`)}<//>
           <//>`}
           ${timecards && html`<${Panel} title="Timecards waiting for approval" count=${timecards.count} empty="No timecards are waiting."
             action=${html`<a className="pbtn outline" href=${`/shift.html${timecards.periodId ? `?payPeriodId=${timecards.periodId}` : ""}#team`}>Review timecards</a>`}>

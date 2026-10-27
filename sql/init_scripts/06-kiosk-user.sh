@@ -1,3 +1,6 @@
+#!/bin/sh
+set -e
+
 # The public order server's own database login. It can read the menu and the customer's own orders and write new orders, and
 # nothing else: no staff, roles, PINs, pay, timecards, refunds or settings. (Triggers run with their definer's rights, so the
 # stock and numbering rules still apply to what it writes.)

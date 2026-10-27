@@ -162,14 +162,16 @@ const loginLimits = [rateLimit(60, 60 * 1000), rateLimit(10, 60 * 1000, { by: "d
 router.post("/customer/login", loginLimits, async (req, res) => {
   if (req.noPhoneSignIn) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
   const k = await place(req);
-  const digits = check.phoneDigits(req.body.phone);
-  if (!digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
+  // A member is found by phone or by email: some were enrolled with only an email. Either is as easy to know as the other, so the rules around this switch are the same.
+  const email = String(req.body.email || "").trim() && check.email(req.body.email);
+  const digits = email ? null : check.phoneDigits(req.body.phone);
+  if (!email && !digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
   const [[c]] = await pool.query(
     `SELECT c.CustomerID AS id FROM Customer c
-      WHERE c.BusinessID = ? AND c.Active AND c.PhoneDigits = ?
+      WHERE c.BusinessID = ? AND c.Active AND ${email ? "LOWER(c.Email) = ?" : "c.PhoneDigits = ?"}
       ORDER BY c.CustomerID LIMIT 1`,
-    [k.BusinessID, digits]);
-  if (!c) return res.status(404).json({ error: "We don't have an account for that number. Continue as a guest, or ask a team member." });
+    [k.BusinessID, email || digits]);
+  if (!c) return res.status(404).json({ error: `We don't have an account for that ${email ? "email" : "number"}. Continue as a guest, or ask a team member.` });
   signIn(req, res, c.id, k.BusinessID);
   res.json(await me(c.id));
 });
@@ -184,7 +186,7 @@ router.post("/customer/logout", (req, res) => {
 // Who is signed in on this iPad, with points read live from the ledger
 async function me(customerId) {
   const [[c]] = await pool.query(
-    `SELECT c.FirstName AS firstName, c.Phone AS phone, t.Name AS tier, la.LoyaltyAccountID AS account,
+    `SELECT c.FirstName AS firstName, c.Phone AS phone, c.Email AS email, t.Name AS tier, la.LoyaltyAccountID AS account,
             COALESCE((SELECT SUM(lt.PointsChange) FROM LoyaltyTransaction lt WHERE lt.LoyaltyAccountID = la.LoyaltyAccountID), 0) AS points
        FROM Customer c
        LEFT JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
@@ -193,6 +195,7 @@ async function me(customerId) {
   return {
     firstName: c.firstName || "there",
     maskedPhone: c.phone ? `(***) ***-${String(c.phone).replace(/\D/g, "").slice(-4)}` : null,
+    maskedEmail: c.email ? c.email.replace(/^(.).*(@.*)$/, "$1***$2") : null, // for a member enrolled with only an email
     member: !!c.account,
     points: c.account ? Number(c.points) : null,
     tier: c.tier || null,

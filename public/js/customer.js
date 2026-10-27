@@ -27,17 +27,23 @@ async function post(path, body) {
 }
 
 //  Entry screen
+const formatPhone = (v) => {
+  const d = v.replace(/\D/g, "").slice(0, 10);
+  return d.length > 6 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : d.length > 3 ? `(${d.slice(0, 3)}) ${d.slice(3)}` : d;
+};
 function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn }) {
-  const [phone, setPhone] = useState("");
+  const [who, setWho] = useState(""); // a phone number or an email
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
   const logIn = async () => {
-    const digits = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""); // same rule as the server
-    if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) { setMsg("Enter a valid 10-digit US phone number."); return; }
+    const isEmail = /[a-z@]/i.test(who);
+    const digits = who.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""); // same rule as the server
+    const email = who.trim().toLowerCase();
+    if (isEmail ? !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email) : !/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) { setMsg("Enter a valid 10-digit US phone number or an email."); return; }
     setBusy(true); setMsg("");
     try {
-      const d = await post("/customer/login", { phone: digits });
+      const d = await post("/customer/login", isEmail ? { email } : { phone: digits });
       onSignedIn(d);
     } catch (e) { setMsg(e.message); }
     finally { setBusy(false); }
@@ -47,35 +53,29 @@ function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn })
     <div className="entry">
       <div className="topbar"><p>${businessName}</p></div>
       <div className="body">
-        <div className="wrap">
-          <div className="hero">
+        <div className="signin">
+          <div className="brand">
+            <span className="pill">${locationName}</span>
             <h1>${businessName}</h1>
-            <h2>How would you like to order?</h2>
-            <p>${phoneSignIn ? "Log in to your account or continue as a guest." : "Continue as a guest to place an order."}</p>
+            <p>${phoneSignIn ? "Members earn points on every order." : "Continue as a guest to place an order."}</p>
           </div>
-          <div className="cards">
-            ${phoneSignIn && html`<section className="card">
-              <div>
-                <h3>Customer login</h3>
-                <p className="sub">Use your customer account to order.</p>
-              </div>
-              <label>Phone Number
-                <input inputMode="tel" autoComplete="tel" maxLength="20" value=${phone}
-                  onChange=${(e) => { setPhone(e.target.value); setMsg(""); }} />
+          <section className="panel">
+            ${phoneSignIn && html`<${React.Fragment}>
+              <label className="field">Phone or email
+                <span className="box">
+                  <input inputMode="email" autoComplete="username" autoFocus maxLength="254" placeholder="(312) 555-0142 or name@example.com" value=${who}
+                    onChange=${(e) => { const v = e.target.value; setWho(/[a-z@]/i.test(v) ? v : formatPhone(v)); setMsg(""); }}
+                    onKeyDown=${(e) => e.key === "Enter" && !busy && logIn()} />
+                  ${who && html`<button className="clear" aria-label="Clear" onClick=${() => { setWho(""); setMsg(""); }}><${NavIcon} name="close" /></button>`}
+                </span>
               </label>
               ${msg && html`<p className="alert" role="alert">${msg}</p>`}
               <button className="login" disabled=${busy} onClick=${logIn}>Log In</button>
-              <button className="restart" onClick=${() => { setPhone(""); setMsg(""); }}>Start Over</button>
-            </section>`}
-            <section className="card">
-              <div>
-                <h3>Continue as a guest</h3>
-                <p className="sub">No account needed. Browse the menu and place an order for pickup.</p>
-              </div>
-              <button className="guest" onClick=${onGuest}>Order as Guest</button>
-            </section>
-          </div>
-          <p className="sub">${locationName}</p>
+              <p className="or"><span>or</span></p>
+            <//>`}
+            <button className="guest" onClick=${onGuest}>Order as Guest</button>
+          </section>
+          <p className="where">Pickup at ${locationName}</p>
         </div>
       </div>
     </div>`;
@@ -365,7 +365,7 @@ function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere,
                 <input placeholder="Enter your first name" value=${guestName}
                   onChange=${(e) => setGuestName(e.target.value)} />
               </div>` : html`
-              <p className="semi" style=${{ fontSize: "16px" }}>${memberInfo.firstName} · ${memberInfo.maskedPhone}</p>`}
+              <p className="semi" style=${{ fontSize: "16px" }}>${memberInfo.firstName}${memberInfo.maskedPhone || memberInfo.maskedEmail ? " · " + (memberInfo.maskedPhone || memberInfo.maskedEmail) : ""}</p>`}
           </div>
 
           <div className="section">

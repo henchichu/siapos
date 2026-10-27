@@ -39,6 +39,7 @@ function Kitchen({ onReport }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [shown, setShown] = useState("new"); // the queue a phone shows; wider screens show all three
 
   const load = useCallback(() => api("/kitchen/tickets").then((d) => { setData(d); setError(""); }).catch((e) => setError(e.message)), []);
   useEffect(() => {
@@ -63,12 +64,16 @@ function Kitchen({ onReport }) {
       <button className="kbtn outline" onClick=${onReport}>Report a loss</button>
     </div>
     ${error && html`<p className="err" role="alert">${error}</p>`}
+    <div className="qtabs" role="group" aria-label="Queue">
+      ${QUEUES.map(([key, title]) => html`<button key=${key} aria-pressed=${shown === key} onClick=${() => setShown(key)}>
+        ${title}<span className="badge">${(data?.queues[key] || []).length}</span></button>`)}
+    </div>
     <div className="queues">
       ${QUEUES.map(([key, title, step]) => {
         const tickets = data?.queues[key] || [];
         const action = step ? { label: step.label, run: (t) => move(step.path, t) }
           : data?.canPickUp ? { label: "Picked up", run: (t) => move("pickup", t) } : null;
-        return html`<section className="queue" key=${key} aria-label=${title}>
+        return html`<section className=${shown === key ? "queue on" : "queue"} key=${key} aria-label=${title}>
           <header><h3>${title}</h3><span className="badge" aria-label=${`${tickets.length} orders`}>${tickets.length}</span></header>
           ${tickets.map((t) => html`<${Ticket} key=${t.id} stage=${key} t=${t} tz=${data.timeZone} now=${now} action=${action} busy=${busy} />`)}
         </section>`;

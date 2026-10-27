@@ -25,11 +25,15 @@
 .badge { background: var(--cyan); color: var(--navy-dark); font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
 
 .ticket { flex: none; border: 1.5px solid var(--border); border-radius: var(--radius-card); background: #fff; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-.ticket .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.ticket .top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 2px 8px; }
 .ticket .top b { font-size: 14px; font-weight: 600; color: var(--navy); }
 .ticket .top span { font-size: 12px; color: var(--muted); text-align: right; }
-.ticket .meta, .ticket .opts, .ticket .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.ticket .item { font-size: 14px; overflow-wrap: anywhere; }
+/* Text wraps between words; only a single word wider than the whole ticket is split */
+.ticket .meta, .ticket .opts, .ticket .note { font-size: 13px; color: var(--muted); overflow-wrap: break-word; }
+.ticket .item { font-size: 14px; overflow-wrap: break-word; }
+.ticket .kbtn { min-height: 44px; }
+/* Phone tabs for the queues; hidden until the screen is too narrow for three columns */
+.qtabs { display: none; }
 
 .err { color: var(--error); flex: none; }
 
@@ -56,10 +60,25 @@
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
   .kitchen.app { padding: 16px; }
     .main { overflow: visible; flex: none; }
-  .queues, .loss { flex-direction: column; flex: none; }
-  .queue { overflow: visible; padding: 0; }
+  .loss { flex-direction: column; flex: none; }
+  /* Tablets keep the three queues side by side, each as tall as its tickets, and the page scrolls */
+  .queues { flex: none; gap: 12px; align-items: flex-start; }
+  .queue { overflow: visible; padding: 0; gap: 12px; }
   .queue > header { position: static; padding: 0; margin: 0; }
+  .ticket { padding: 12px; gap: 8px; }
   .panel { padding: 16px; }
   .panel.form { width: auto; overflow: visible; }
   .panel.log { overflow-x: auto; }
+}
+
+/* Phones: one queue at a time, picked with tabs that carry each queue's count */
+@media (max-width: 599px) {
+  .qtabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; flex: none; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); }
+  .qtabs button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text); padding: 6px 8px; font-size: 14px; font-weight: 600;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; line-height: 1.2; }
+  .qtabs button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+  .qtabs button[aria-pressed="true"] .badge { background: #fff; }
+  .queues { display: block; }
+  .queue:not(.on) { display: none; }
+  .queue > header { display: none; }
 }

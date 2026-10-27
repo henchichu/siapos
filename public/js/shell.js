@@ -34,6 +34,10 @@ const ICONS = {
   percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
   alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
   pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  chevron: '<path d="m15 18-6-6 6-6"/>',
+  signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  close: '<path d="M18 6 6 18M6 6l12 12"/>',
 };
 const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
 const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Needs attention": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
@@ -58,8 +62,8 @@ const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0
 async function signOut() {
   if (DEMO) return; // the tour's sample pages have nobody to sign out
   try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
-  try { sessionStorage.clear(); localStorage.clear(); } catch (err) { /* storage can be blocked */ }
-  window.location.replace("/login.html");
+  try { const navPick = localStorage.getItem(NAV_KEY); sessionStorage.clear(); localStorage.clear(); if (navPick) localStorage.setItem(NAV_KEY, navPick); } catch (err) { /* storage can be blocked */ }
+  window.location.replace("/login.html"); // the menu's collapsed or open choice outlives the sign-out
 }
 
 // The overlay menu: an owner picks another of their locations and the whole page follows it
@@ -79,24 +83,114 @@ function PickLocation({ onClose, onPicked }) {
   <//>`;
 }
 
+// Three layouts, from the same breakpoints as the pages' own stylesheets: on a phone or a window taller than it is wide the menu is
+// a drawer opened from a slim top bar; on a tablet it is icons only; on a laptop it is open, and folds to icons with its button.
+// The fold choice is kept in this browser and outlives sign-out. Classes go on <body>, outside React, and nav.css does the rest.
+const NAV_KEY = "nav.collapsed";
+const DRAWER = "(max-width: 760px), (max-aspect-ratio: 1/1)";
+const RAIL = "(max-width: 1024px)";
+const navMode = () => (!window.matchMedia ? "full" : window.matchMedia(DRAWER).matches ? "drawer" : window.matchMedia(RAIL).matches ? "rail" : "full");
+function savedCollapsed() {
+  try { return localStorage.getItem(NAV_KEY) === "1"; } catch (err) { return false; }
+}
+
+// The clock icon on its own; until that image exists, the full logo cropped to its mark
+function Mark() {
+  const [ok, setOk] = useState(true);
+  return ok ? html`<img className="mark" src="/img/clockit-mark-light.png" alt="ClockIt" width="40" height="40" onError=${() => setOk(false)} />`
+    : html`<span className="mark crop"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /></span>`;
+}
+
 function Sidebar({ me, current, onSignOut = signOut }) {
   const [places, setPlaces] = useState(false);
-  return html`<nav className="nav" aria-label="Main">
-    <div>
-      <h1><a href="/home.html"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /></a></h1>
-      <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
-        <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined}><${Icon} name=${MENU_ICONS[n]} />${n}</a></li>`)}</ul>
-    </div>
-    <div className="who">
-      <span className="avatar" aria-hidden="true">${initials(me?.employeeName)}</span>
-      <span className="name">${me?.employeeName}</span>
-      ${me?.canSwitch
-        ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
-        : html`<span>${me?.roleName} · ${me?.locationName}</span>`}
-      <button className="link" onClick=${onSignOut}>Sign out</button>
-    </div>
-    ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
-  </nav>`;
+  const [mode, setMode] = useState(navMode);
+  const [collapsed, setCollapsed] = useState(savedCollapsed);
+  const [open, setOpen] = useState(false); // the phone drawer
+  const [tip, setTip] = useState(null); // { text, x, y } beside the hovered or focused icon while folded
+  const navRef = useRef(null), burger = useRef(null), closer = useRef(null);
+  const folded = mode === "rail" || (mode === "full" && collapsed);
+
+  useEffect(() => { // follow the window across the breakpoints
+    if (!window.matchMedia) return;
+    const queries = [DRAWER, RAIL].map((q) => window.matchMedia(q));
+    const onChange = () => { setMode(navMode()); setTip(null); };
+    queries.forEach((q) => q.addEventListener("change", onChange));
+    return () => queries.forEach((q) => q.removeEventListener("change", onChange));
+  }, []);
+  useEffect(() => { if (mode !== "drawer") setOpen(false); }, [mode]);
+  React.useLayoutEffect(() => {
+    document.body.classList.toggle("nav-collapsed", folded);
+    document.body.classList.toggle("nav-open", open); // nav.css stops the page behind from scrolling
+  }, [folded, open]);
+
+  // While the drawer is open the rest of the page is inert, Tab stays inside it and Escape closes it; focus goes back to the menu button
+  useEffect(() => {
+    if (!open) return;
+    const nav = navRef.current;
+    const others = [...nav.parentElement.children].filter((el) => el !== nav && !el.classList.contains("navshade"));
+    others.forEach((el) => { el.inert = true; });
+    closer.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+      if (e.key !== "Tab") return;
+      const stops = [...nav.querySelectorAll("a[href], button:not(:disabled)")].filter((el) => el.offsetParent && getComputedStyle(el).visibility !== "hidden");
+      const first = stops[0], last = stops[stops.length - 1];
+      if (!nav.contains(document.activeElement)) { e.preventDefault(); first?.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); others.forEach((el) => { el.inert = false; }); burger.current?.focus(); };
+  }, [open]);
+
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next); setTip(null);
+    try { localStorage.setItem(NAV_KEY, next ? "1" : "0"); } catch (err) { /* storage can be blocked */ }
+  };
+  // The tooltip is fixed to the window so the menu's scroll area can't clip it
+  const tipFor = (text) => ({
+    onMouseEnter: (e) => show(text, e.currentTarget), onFocus: (e) => show(text, e.currentTarget),
+    onMouseLeave: () => setTip(null), onBlur: () => setTip(null),
+  });
+  const show = (text, el) => {
+    if (!document.body.classList.contains("nav-collapsed")) return;
+    const r = el.getBoundingClientRect();
+    setTip({ text, x: r.right + 12, y: r.top + r.height / 2 });
+  };
+  const closeAfter = () => { if (open) setOpen(false); }; // a tap on a menu item closes the drawer as the page changes
+  return html`<${React.Fragment}>
+    <header className="navbar">
+      <button className="burger" ref=${burger} aria-expanded=${open} aria-controls="main-nav" aria-label="Open navigation" onClick=${() => setOpen(true)}><${Icon} name="menu" /></button>
+      <a href="/home.html" className="navhome"><${Mark} /></a>
+      <span className="navtitle">${current}</span>
+    </header>
+    ${open && html`<div className="navshade" onClick=${() => setOpen(false)}></div>`}
+    <nav className="nav" id="main-nav" aria-label="Main" ref=${navRef}>
+      <div>
+        <button className="navclose" ref=${closer} aria-expanded=${open} aria-controls="main-nav" aria-label="Close navigation" onClick=${() => setOpen(false)}><${Icon} name="close" /></button>
+        <h1><a href="/home.html" onClick=${closeAfter} ...${tipFor("Home")}>
+          <img className="full" src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /><${Mark} />
+        </a></h1>
+        <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
+          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span></a></li>`)}</ul>
+      </div>
+      <div className="foot">
+        ${mode === "full" && html`<button className="navtoggle" aria-expanded=${!collapsed} aria-controls="main-nav" aria-label=${collapsed ? "Expand navigation" : "Collapse navigation"}
+          onClick=${toggle} ...${tipFor(collapsed ? "Expand navigation" : "Collapse navigation")}><${Icon} name="chevron" /></button>`}
+        <div className="who">
+          <span className="avatar" aria-hidden="true">${initials(me?.employeeName)}</span>
+          <span className="name">${me?.employeeName}</span>
+          ${me?.canSwitch
+            ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
+            : html`<span>${me?.roleName} · ${me?.locationName}</span>`}
+          <button className="link signout" onClick=${onSignOut} ...${tipFor("Sign out")}><${Icon} name="signout" /><span className="label">Sign out</span></button>
+        </div>
+      </div>
+      ${tip && html`<div className="navtip" aria-hidden="true" style=${{ left: tip.x, top: tip.y }}>${tip.text}</div>`}
+      ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
+    </nav>
+  <//>`;
 }
 
 // A dropdown that holds checkboxes: the native <details> keeps it keyboard-friendly with no extra code

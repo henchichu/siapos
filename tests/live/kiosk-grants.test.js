@@ -25,7 +25,7 @@ test.before(async () => {
   child = spawn("node", ["server/kiosk.js"], { cwd: root, env });
   child.stdout.on("data", (d) => { logs += d; }); child.stderr.on("data", (d) => { logs += d; });
   for (let i = 0; i < 50; i++) { if ((await fetch(`${base}/ready`).catch(() => ({ ok: false }))).ok) break; await new Promise((r) => setTimeout(r, 200)); }
-  db = await mysql.createConnection({ host: "127.0.0.1", database: "miniworld", user: "kiosk_user", password: fs.readFileSync(passwordFile, "utf8").trim() });
+  db = await mysql.createConnection({ host: "127.0.0.1", database: process.env.DB_NAME || "miniworld", user: "kiosk_user", password: fs.readFileSync(passwordFile, "utf8").trim() });
 });
 test.after(async () => { child?.kill(); await db?.end(); await pool.end(); });
 

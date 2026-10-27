@@ -120,6 +120,15 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   // Receive delivery
   await m.click(m.byText(".tab", "Receive delivery"), 500);
   check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Campus/.test(m.text()));
+  const pendingSection = m.$('section[aria-label="Pending deliveries"]');
+  check("pending dashboard appears below recent deliveries", !!pendingSection && !!(m.$('section[aria-label="Recent deliveries"]').compareDocumentPosition(pendingSection) & m.w.Node.DOCUMENT_POSITION_FOLLOWING));
+  const expandPending = pendingSection.querySelector('[aria-label="Expand pending deliveries"]');
+  if (expandPending) await m.click(expandPending, 200);
+  const pendingMuffin = [...pendingSection.querySelectorAll("tbody tr")].find((r) => /Blueberry muffin/.test(r.textContent));
+  check("low stock automatically places a numbered purchase order", !!pendingMuffin && /PO-\d+/.test(pendingMuffin.textContent) && /Ordered/.test(pendingMuffin.textContent));
+  await m.click(pendingMuffin.querySelector("button"), 300);
+  check("pending Receive fills supplier, item and quantity", m.$('section[aria-label="Receive delivery"] select').value === "sup-bakery" && !!m.$('input[aria-label="Quantity of Blueberry muffin"]') && Number(m.$('input[aria-label="Quantity of Blueberry muffin"]').value) > 0);
+  await m.click(m.byText('section[aria-label="Receive delivery"] button', "Clear"), 200);
   await m.choose(m.byText(".pform select, section[aria-label='Receive delivery'] select", "").closest("section").querySelectorAll("select")[0], "sup-supply");
   const addLine = async (id) => { await m.choose(m.$("select[aria-label='Stock item']"), id); await m.click(m.byText("button", "Add line"), 200); };
   const lineRows = () => m.$$(".dlines tbody tr").filter((r) => r.querySelector("input"));

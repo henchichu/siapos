@@ -5,6 +5,8 @@ const REASONS = [["broken", "Broken or spilled"], ["spoiled", "Spoiled or expire
 const qty = (n) => String(Math.round(n * 1000) / 1000);
 // A unit cost worked out from a total can need many places (a millilitre of milk costs a fraction of a cent)
 const unitMoney = (n) => (n == null ? "—" : n >= 0.1 ? `$${n.toFixed(2)}` : `$${n.toFixed(6).replace(/0+$/, "").padEnd(6, "0")}`);
+// The stock table's average cost: 2 places for a normal price, 4 for a tiny per-unit cost ($0.0122)
+const avgMoney = (n) => (n == null ? "—" : `$${n.toFixed(n >= 0.1 ? 2 : 4)}`);
 const delta = (n) => (n > 0 ? `+${qty(n)}` : n < 0 ? `−${qty(-n)}` : "±0");
 const moneyDelta = (n) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}$${Math.abs(n).toFixed(2)}`;
 const num = (s) => (s === "" || s == null || !Number.isFinite(Number(s)) ? null : Number(s));
@@ -68,8 +70,13 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
     } catch (e) { setMsg({ kind: "error", text: e.message }); }
   };
   const restock = form?.type === "restock";
+  const side = useRef(null);
+  useEffect(() => { // on a narrow page the form sits below the list
+    const el = side.current; if (!el || el.getBoundingClientRect().top < window.innerHeight) return;
+    el.scrollIntoView({ block: "start", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [!!form, !!adding]);
 
-  return html`<div className="split">
+  return html`<div className="split inv-split">
     <div className="stack grow">
       <section className="pview" aria-label="Inventory">
         <header className="phead"><h2>Inventory</h2>${data.canChange && html`<button className="pbtn" onClick=${showAdd}>Add stock item</button>`}</header>
@@ -80,31 +87,31 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
           <${ShowInactive} checked=${showInactive} onChange=${setShowInactive} />
         </div>
         ${note && html`<p className="status" role="status">${note}</p>`}
-        <table className="table mg">
-          <colgroup><col /><col style=${{ width: 96 }} /><col style=${{ width: 78 }} /><col style=${{ width: 104 }} /><col style=${{ width: 52 }} />${data.canChange && html`<col style=${{ width: 250 }} />`}</colgroup>
-          <thead><tr><th>Stock item</th><th>On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
+        <div className="tscroll"><table className=${data.canChange ? "table mg t-stock" : "table mg t-stock noacts"}>
+          <colgroup><col style=${{ width: "24%" }} /><col style=${{ width: "13%" }} /><col style=${{ width: "12%" }} /><col style=${{ width: "12%" }} /><col style=${{ width: "11%" }} />${data.canChange && html`<col style=${{ width: 260 }} />`}</colgroup>
+          <thead><tr><th>Stock item</th><th className="r">On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
           <tbody>${rows.map((r) => html`<tr key=${r.id} className=${`${form?.stockItemId === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
-            <td>${r.name}${!r.active && html`<span className="tag">deactivated</span>`}</td><td>${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)}</td><td className="r">${unitMoney(r.avgCost)}</td>
+            <td>${r.name}${!r.active && html`<span className="tag">deactivated</span>`}</td><td className="r">${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)}</td><td className="r">${avgMoney(r.avgCost)}</td>
             <td className=${r.active && isLow(r) ? "state low" : "state"}>${!r.active ? "—" : html`<${Status} tone=${isLow(r) ? "warn" : "on"}>${isLow(r) ? "LOW" : "OK"}<//>`}</td>
             ${data.canChange && html`<td><div className="acts">${r.active
               ? html`<${React.Fragment}><button className="act" onClick=${() => show(r, "restock")}>Restock</button><button className="act" onClick=${() => show(r, "adjust")}>Adjust</button>
                   <button className="act danger" onClick=${() => setActive(r, false)}>Deactivate</button><//>`
               : html`<button className="act" onClick=${() => setActive(r, true)}>Reactivate</button>`}</div></td>`}</tr>`)}
             ${!rows.length && html`<tr><td colSpan="6">No stock items match.</td></tr>`}</tbody>
-        </table>
+        </table></div>
       </section>
       <section className="pview" aria-label="Recent stock movements">
         <h2>Recent stock movements</h2>
-        <table className="table mg">
-          <colgroup><col style=${{ width: 120 }} /><col style=${{ width: 130 }} /><col /><col style=${{ width: 70 }} /><col style=${{ width: 80 }} /><col style=${{ width: 60 }} /></colgroup>
-          <thead><tr><th>Date and time</th><th>Stock item</th><th>Type</th><th className="r">Change</th><th>Employee</th><th>Order</th></tr></thead>
+        <div className="tscroll"><table className="table mg t-moves">
+          <colgroup><col style=${{ width: "19%" }} /><col style=${{ width: "21%" }} /><col style=${{ width: "14%" }} /><col style=${{ width: "15%" }} /><col style=${{ width: "18%" }} /><col style=${{ width: "13%" }} /></colgroup>
+          <thead><tr><th>Date and time</th><th>Stock item</th><th>Type</th><th className="r">Change</th><th>Employee</th><th className="r">Order</th></tr></thead>
           <tbody>${data.movements.map((m, i) => html`<tr key=${i}><td>${when(m.at, data.location.timeZone)}</td><td>${m.item}</td><td>${m.type}</td>
-            <td className="r">${delta(m.delta)} ${m.unit}</td><td>${m.by || "—"}</td><td>${m.orderNumber ?? "—"}</td></tr>`)}
+            <td className="r">${delta(m.delta)} ${m.unit}</td><td>${m.by || "—"}</td><td className="r">${m.orderNumber ?? "—"}</td></tr>`)}
             ${!data.movements.length && html`<tr><td colSpan="6">No movements yet.</td></tr>`}</tbody>
-        </table>
+        </table></div>
       </section>
     </div>
-    ${adding && html`<aside className="pform pside" aria-label="Add stock item">
+    ${adding && html`<aside className="pform pside" ref=${side} aria-label="Add stock item">
       <h2>Add stock item</h2>
       <label className="pf"><b>Name</b><input className="field" maxLength="150" value=${adding.name} onChange=${(e) => setNew({ name: e.target.value })} /></label>
       <label className="pf"><b>Unit</b><select className="select" value=${adding.unitCode} onChange=${(e) => setNew({ unitCode: e.target.value })}>
@@ -114,7 +121,7 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" onClick=${saveItem}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
     </aside>`}
-    ${form && html`<aside className="pform pside" aria-label="Record stock change">
+    ${form && html`<aside className="pform pside" ref=${side} aria-label="Record stock change">
       <h2>Record stock change</h2>
       <label className="pf"><b>Stock item</b><select className="select" value=${form.stockItemId} onChange=${(e) => pickItem(e.target.value)}>
         ${data.items.map((i) => html`<option key=${i.id} value=${i.id}>${i.name}</option>`)}</select></label>
@@ -203,7 +210,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
     setBusy(false);
   };
 
-  return html`<div className="split">
+  return html`<div className="split inv-split">
     <section className="pview wide-form" aria-label="Receive delivery">
       <h2>Receive delivery</h2>
       <p className="sub">Receiving at ${data.location.name}</p>
@@ -222,7 +229,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         <div className="pactions left"><button className="pbtn" onClick=${saveSupplier}>Save supplier</button><button className="pbtn outline" onClick=${() => setNewSupplier(null)}>Cancel</button></div>
       </div>`}
       <label className="pf"><b>Invoice number</b><input className="field" maxLength="50" value=${invoice} onChange=${(e) => setInvoice(e.target.value)} /></label>
-      <table className="table mg dlines">
+      <div className="tscroll"><table className="table mg dlines t-lines">
         <colgroup><col /><col style=${{ width: 44 }} /><col style=${{ width: 106 }} /><col style=${{ width: 96 }} /><col style=${{ width: 104 }} /><col style=${{ width: 84 }} /></colgroup>
         <thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th className="r">Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
         <tbody>${lines.map((l) => html`<tr key=${l.stockItemId}><td>${item(l.stockItemId)?.name}</td><td>${item(l.stockItemId)?.unit}</td>
@@ -231,7 +238,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
           <td className="r">${unitCost(l) == null ? "—" : unitMoney(unitCost(l))}</td>
           <td><button className="act" onClick=${() => setLines(lines.filter((x) => x !== l))}>Remove</button></td></tr>`)}
           ${!lines.length && html`<tr><td colSpan="6">No lines yet. Add a stock item below.</td></tr>`}</tbody>
-      </table>
+      </table></div>
       <div className="addrow">
         <select className="select grow" aria-label="Stock item" value=${add} onChange=${(e) => setAdd(e.target.value)}>
           <option value="">Stock item</option>${data.items.map((i) => html`<option key=${i.id} value=${i.id}>${i.name}</option>`)}</select>
@@ -252,7 +259,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         </button>`}
       </header>
       <div id="recent-deliveries-list" className=${recentExpanded ? "delivery-list expanded" : "delivery-list"}>
-      <table className="table mg">
+      <table className="table mg t-recent">
         <colgroup><col style=${{ width: 90 }} /><col /><col style=${{ width: 40 }} /><col style=${{ width: 70 }} /></colgroup>
         <thead><tr><th>Date</th><th>Supplier / purchase order</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
         <tbody>${(recentExpanded ? data.deliveries : data.deliveries.slice(0, 3)).map((d) => html`<tr key=${d.id}><td>${dayOf(d.date)}</td><td>${d.supplier}${d.orderNumber && html`<div className="sub">${d.orderNumber} · ${d.status}</div>`}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
@@ -270,7 +277,8 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         </div>
       </header>
       <div id="pending-deliveries-list" className=${pendingExpanded ? "delivery-list expanded" : "delivery-list"}>
-      <table className="table mg pending-deliveries">
+      <table className="table mg pending-deliveries t-pending">
+        <colgroup><col /><col style=${{ width: 92 }} /><col style=${{ width: 80 }} /><col style=${{ width: 96 }} /></colgroup>
         <thead><tr><th>Order / stock item / supplier</th><th>On hand / threshold</th><th>To receive</th><th>Action</th></tr></thead>
         <tbody>${(pendingExpanded ? pending : pending.slice(0, 3)).map((p) => html`<tr key=${p.id} className=${pendingId === p.id ? "sel" : ""}>
           <td><b>${p.orderNumber}</b><div>${p.item}</div><div className="sub">${p.supplier || "Choose a supplier to place this order"}</div><span className="tag">${p.status}</span>${!p.active && html`<span className="tag">deactivated</span>`}</td>
@@ -316,14 +324,14 @@ function CountTab({ data, reload }) {
       <div className="pfilters wrap">
         <label className="pf"><b>Supplier</b><${SupplierSelect} data=${data} value=${supplier} onChange=${setSupplier} showInactive=${false} /></label>
         <button className="pbtn outline noprint" onClick=${() => window.print()}>Print count sheet</button></div></header>
-    <table className="table mg">
+    <div className="tscroll"><table className="table mg t-count">
       <colgroup><col /><col style=${{ width: 70 }} /><col style=${{ width: 86 }} /><col style=${{ width: 130 }} /><col style=${{ width: 84 }} /><col style=${{ width: 84 }} /></colgroup>
       <thead><tr><th>Stock item</th><th>Unit</th><th className="r">In system</th><th>Counted</th><th className="r">Difference</th><th className="r">Value</th></tr></thead>
       <tbody>${figures.map(({ r, diff, value }) => html`<tr key=${r.id}><td>${r.name}</td><td>${r.unit}</td><td className="r">${qty(r.onHand)}</td>
         <td><input className="field cell" aria-label=${`Counted ${r.name}`} inputMode="decimal" value=${counted[r.id] ?? ""} onChange=${(e) => setCounted({ ...counted, [r.id]: e.target.value.replace(/[^\d.]/g, "") })} /></td>
         <td className="r">${diff == null ? "[±0]" : delta(diff)}</td><td className="r">${value == null ? "[$0.00]" : moneyDelta(value)}</td></tr>`)}
         ${!rows.length && html`<tr><td colSpan="6">Nothing to count here.</td></tr>`}</tbody>
-    </table>
+    </table></div>
     <div className="totals">
       <div className="box"><span>Items counted</span><b>${done.length} of ${rows.length}</b><${CardIcon} label="Items counted" /></div>
       <div className="box"><span>Items that differ</span><b>${differ}</b><${CardIcon} label="Items that differ" /></div>

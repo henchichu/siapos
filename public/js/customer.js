@@ -217,6 +217,8 @@ const NAV_ICONS = {
   signin: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17-5-5 5-5M5 12h12"/>',
   cup: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
   receipt: '<path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h6"/>',
+  check: '<path d="m5 12 5 5 9-10"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M16 13h.01"/>',
   star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/>',
 };
 const NavIcon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: NAV_ICONS[name] }}></svg>`;
@@ -308,6 +310,7 @@ function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere,
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null); // receipt after submit
   const idempKey = useRef(newKey());
+  const [phoneSheet] = useState(() => !!window.matchMedia && window.matchMedia("(max-width: 600px)").matches); // a phone starts with the summary folded
 
   const subtotalCents = cart.reduce((a, it) => a + it.unitCents * it.qty, 0);
   const [priced, setPriced] = useState(null);
@@ -344,29 +347,29 @@ function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere,
     return html`<${Confirmation} businessName=${businessName} receipt=${done} onBack=${onBack} />`;
   }
 
+  const items = cart.reduce((a, it) => a + it.qty, 0);
+  const due = totalCents != null ? money(totalCents) : "…";
+  const digits = (v, n) => v.replace(/\D/g, "").slice(0, n);
+  const METHOD_ICON = { Cash: "cash", Card: "card", "Apple Pay": "wallet", "Google Pay": "wallet" };
   return html`
-    <div className="checkout-overlay screen">
-      <div className="header">
-        <h1>${businessName}</h1>
-        <button className="back-menu" onClick=${onBack}>Back to menu</button>
-      </div>
+    <div className="checkout-overlay screen" role="dialog" aria-modal="true" aria-label="Checkout">
+      <button className="close" aria-label="Close" onClick=${onBack}><${NavIcon} name="close" /></button>
       <div className="body">
         <section className="form">
-          <h2>Review your order</h2>
+          <h2>Checkout</h2>
 
-          <div className="section gap3">
-            <h3>1. ${mode === "guest" ? "Guest details" : "Account"}</h3>
-            ${mode === "guest" ? html`<${React.Fragment}>
-              <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>Checking out as a guest</p>
-              <div className="label maxw">Name for the order
+          <div className="section">
+            <h3>${mode === "guest" ? "Guest details" : "Account"}</h3>
+            ${mode === "guest" ? html`
+              <div className="label">Name for the order
                 <input placeholder="Enter your first name" value=${guestName}
                   onChange=${(e) => setGuestName(e.target.value)} />
-              </div><//>` : html`
+              </div>` : html`
               <p className="semi" style=${{ fontSize: "16px" }}>${memberInfo.firstName} · ${memberInfo.maskedPhone}</p>`}
           </div>
 
-          <div className="section gap3 bordered">
-            <h3>2. Pickup</h3>
+          <div className="section">
+            <h3>Pickup</h3>
             <div style=${{ fontSize: "14px", color: "var(--muted)" }}>
               <p>Pickup at this counter</p>
               <p>We'll prepare your order after payment.</p>
@@ -376,49 +379,48 @@ function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere,
             </div>
           </div>
 
-          <div className="section gap3 bordered">
-            <h3>3. Payment</h3>
-            <p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>${payHere ? "Test mode: Card, Apple Pay and Google Pay are not charged for real. Cash is paid at the counter." : "Pay with cash at the counter when you pick up."}</p>
+          <div className="section">
+            <h3>Payment</h3>
+            <p style=${{ fontSize: "14px", color: "var(--muted)" }}>${payHere ? "Test mode: Card, Apple Pay and Google Pay are not charged for real. Cash is paid at the counter." : "Pay the cashier at the counter."}</p>
             <div className="methods">
               ${(payHere ? ["Cash", "Card", "Apple Pay", "Google Pay"] : ["Cash"]).map((m) => html`
                 <button key=${m} className=${"method" + (payMethod === m ? " on" : "")}
-                  onClick=${() => setPayMethod(m)}>${m}</button>`)}
+                  onClick=${() => setPayMethod(m)}><${NavIcon} name=${METHOD_ICON[m]} />${m}</button>`)}
             </div>
-            ${payMethod === "Card" && html`<div className="gap3">
-              <div className="label maxw">Card number
+            ${payMethod === "Card" && html`<div className="cardbox">
+              <div className="label wide">Card number
                 <input inputMode="numeric" autoComplete="off" placeholder="4242 4242 4242 4242" value=${card.number}
-                  onChange=${(e) => setCard({ ...card, number: e.target.value })} /></div>
-              <div className="label maxw">Expiry (MM/YY)
-                <input autoComplete="off" placeholder="12/30" value=${card.expiry} onChange=${(e) => setCard({ ...card, expiry: e.target.value })} /></div>
-              <div className="label maxw">Security code
-                <input inputMode="numeric" autoComplete="off" placeholder="123" value=${card.cvc} onChange=${(e) => setCard({ ...card, cvc: e.target.value })} /></div>
+                  onChange=${(e) => setCard({ ...card, number: digits(e.target.value, 19).replace(/(.{4})(?=.)/g, "$1 ") })} /></div>
+              <div className="label">Expiry (MM/YY)
+                <input autoComplete="off" placeholder="12/30" value=${card.expiry}
+                  onChange=${(e) => { const d = digits(e.target.value, 4); setCard({ ...card, expiry: d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d }); }} /></div>
+              <div className="label">Security code
+                <input inputMode="numeric" autoComplete="off" placeholder="123" value=${card.cvc} onChange=${(e) => setCard({ ...card, cvc: digits(e.target.value, 4) })} /></div>
             </div>`}
           </div>
         </section>
 
-        <aside className="summary">
-          <h2>Order summary</h2>
+        <details className="summary" open=${!phoneSheet}>
+          <summary><span>Order summary · ${items} ${items === 1 ? "item" : "items"}</span><strong>${due}</strong></summary>
           <div className="lines">
             ${cart.map((it) => html`
-              <div key=${it.key} style=${{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+              <div key=${it.key} className="line">
                 <span>${it.qty} × ${it.name}${it.variantName ? ", " + it.variantName : ""}</span>
-                <span style=${{ flexShrink: "0" }}>${money(it.unitCents * it.qty)}</span>
+                <span>${money(it.unitCents * it.qty)}</span>
               </div>`)}
           </div>
           <dl>
             <div className="row"><dt>Subtotal</dt><dd>${money(subtotalCents)}</dd></div>
             ${taxCents != null ? html`<div className="row"><dt>Tax</dt><dd>${money(taxCents)}</dd></div>` : null}
           </dl>
-          <dl className="total">
-            <div className="row grand"><dt>Order total</dt><dd>${totalCents != null ? money(totalCents) : "…"}</dd></div>
-            <div className="row"><dt>Payment method</dt><dd>${payMethod || "Not selected"}</dd></div>
-          </dl>
-          ${msg && html`<p className="alert" role="alert">${msg}</p>`}
-          <button className="place" disabled=${busy || !cart.length} onClick=${place}>
-            ${busy ? "Placing order…" : "Place order"}
-          </button>
-          <p className="hint">${payMethod === "Cash" ? "You'll pay at the counter." : "Test mode: nothing is charged for real."}</p>
-        </aside>
+        </details>
+      </div>
+      <div className="footer">
+        ${msg && html`<p className="alert" role="alert">${msg}</p>`}
+        <div className="due"><span>Total</span><strong>${due}</strong></div>
+        <button className="place" disabled=${busy || !cart.length} onClick=${place}>
+          ${busy ? "Placing order…" : "Place order"}
+        </button>
       </div>
     </div>`;
 }
@@ -445,52 +447,59 @@ function Confirmation({ businessName, receipt, onBack }) {
     : code === 3 ? ["Being prepared", "We're making your order now."]
     : paid || code === 2 ? ["Paid — your order is being prepared", paid ? `Paid with ${payMethod}. This is test mode, so nothing was charged for real.` : "We have your payment. Thank you."]
     : ["Order submitted — payment pending", "Pay the cashier at the counter within 15 minutes, and we'll start your order."];
+  const where = `${businessName} · Pickup at this counter`;
   return html`
     <div className="confirm-overlay screen">
-      <div className="bar">
-        <p className="semi" style=${{ fontSize: "16px" }}>Order confirmation</p>
-        <button className="back" onClick=${onBack}>Back to menu</button>
-      </div>
+      <button className="close" aria-label="Close" onClick=${onBack}><${NavIcon} name="close" /></button>
       <div className="center">
-        <section className="card">
-          <p className="where">${businessName} · Pickup at this counter</p>
-          <h1>Order received</h1>
-          <p className="thanks">Thanks, ${name}. ${paid ? "We're preparing your order." : "We'll prepare your order after payment."}</p>
-          <div className="lines">
-            ${cart.map((it) => html`
-              <div className="line" key=${it.key}>
-                <span>
-                  <span style=${{ display: "block" }}>${it.qty} × ${it.name}${it.variantName ? ", " + it.variantName : ""}</span>
-                  ${it.options.length > 0 && html`<span style=${{ display: "block", fontSize: "12px", color: "var(--muted)" }}>${it.options.join(", ")}</span>`}
-                </span>
-                <span style=${{ flexShrink: "0" }}>${money(it.unitCents * it.qty)}</span>
-              </div>`)}
-          </div>
-          ${note && html`<p style=${{ fontSize: "14px", marginBottom: "16px" }}><span className="semi">Kitchen note:</span> ${note}</p>`}
-          <dl>
-            <div className="row"><dt>Order total</dt><dd>${totalCents != null ? money(totalCents) : "–"}</dd></div>
-            <div className="row"><dt>Payment method</dt><dd>${payMethod}</dd></div>
-            <div className="row"><dt>Order number</dt><dd>#${orderNumber}</dd></div>
-          </dl>
-          <div className="pending-box">
-            <p className="ttl">${title}</p>
-            <p className="sub">${sub}</p>
-          </div>
-          ${code !== 6 && html`
-            <div className="steps">
-              ${STATUS_STEPS.map((s, i) => html`
-                <div key=${s} className=${"step" + (i < stepIdx ? " done" : i === stepIdx ? " current" : "")}>
-                  <p className="lbl">${s}</p>
-                </div>`)}
-            </div>`}
+        <${OrderStatus} where=${where} number=${orderNumber} cancelled=${code === 6} headline=${code === 6 ? "Order cancelled" : "Order received"}
+          title=${title} sub=${sub} stepIdx=${stepIdx} note=${note}
+          lines=${cart.map((it) => ({ label: `${it.qty} × ${it.name}${it.variantName ? ", " + it.variantName : ""}`, sub: it.options.join(", "), cents: it.unitCents * it.qty }))}
+          rows=${[["Order total", totalCents != null ? money(totalCents) : "–"], ["Payment method", payMethod]]}>
           ${mode === "signed-in" && memberInfo && memberInfo.member && html`
             <div className="pts-row">
               <p>${paid ? "Points you'll earn at pickup" : "Points to be earned once paid"}: ~${Math.floor((totalCents || 0) / 100)} pts</p>
               <span className="badge">${paid ? "At pickup" : "Pending"}</span>
             </div>`}
-        </section>
+          <button className="primary" onClick=${onBack}>Back to menu</button>
+        <//>
       </div>
     </div>`;
+}
+
+// The order's status as one screen: a check, the number, what is happening now, a progress line, and the receipt. The confirmation and the order page both use it.
+function OrderStatus({ where, number, headline, title, sub, stepIdx, cancelled, lines, note, rows, children }) {
+  return html`
+    <section className="status-card">
+      <p className="where">${where}</p>
+      <svg className=${"mark" + (cancelled ? " bad" : "")} viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d=${cancelled ? "M17 17l18 18M35 17L17 35" : "M15 27l8 8 14-16"}/></svg>
+      <h1>${headline}</h1>
+      <p className="num">#${number}</p>
+      <div className="now">
+        <p className="ttl when">${title}</p>
+        ${sub && html`<p className="sub">${sub}</p>`}
+      </div>
+      ${!cancelled && html`
+        <div className="steps">
+          ${STATUS_STEPS.map((s, i) => html`
+            <div key=${s} className=${"step" + (i < stepIdx ? " done" : i === stepIdx ? " current" : "")}>
+              <span className="dot">${i < stepIdx ? html`<${NavIcon} name="check" />` : i + 1}</span>
+              <p className="lbl">${s}</p>
+            </div>`)}
+        </div>`}
+      <div className="receipt">
+        <div className="lines">
+          ${lines.map((l, i) => html`
+            <div className="line" key=${i}>
+              <span><span className="nm">${l.label}</span>${l.sub && html`<span className="opt">${l.sub}</span>`}</span>
+              <span>${money(l.cents)}</span>
+            </div>`)}
+        </div>
+        ${note && html`<p className="note"><span className="semi">Kitchen note:</span> ${note}</p>`}
+        <dl>${rows.map(([k, v]) => html`<div className="row" key=${k}><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>
+      </div>
+      ${children}
+    </section>`;
 }
 
 // ---- Rewards catalog (points redemption not yet supported by backend) ------
@@ -513,29 +522,19 @@ function RewardsPage({ businessName, memberInfo, onBrowseMenu }) {
 }
 
 
-// Phones and small tablets (the same 900px the stylesheet switches at): customizing an item and checking out are pop-up windows over the menu
-const NARROW = "(max-width: 900px)";
-function useNarrow() {
-  const q = window.matchMedia ? window.matchMedia(NARROW) : { matches: false, addEventListener() {}, removeEventListener() {} }; // jsdom has no media queries
-  const [narrow, setNarrow] = useState(q.matches);
-  useEffect(() => { const f = () => setNarrow(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []);
-  return narrow;
-}
-
-function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
+function Menu({ businessName, mode, memberInfo, hasOrders, openOrder, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
   const [active, setActive] = useState(""); // the category whose section is at the top of the menu
   const [customizing, setCustomizing] = useState(null);
   const [note, setNote] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState(null);
   const [cartOpen, setCartOpen] = useState(false); // phones only: the cart is a full-screen sheet
-  const narrow = useNarrow();
   useEffect(() => { // Escape closes the pop-up window
-    if (!(customizing || (narrow && checkoutOpen))) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") { if (checkoutOpen) setCheckoutOpen(false); else setCustomizing(null); } };
+    if (!(customizing || checkoutOpen || cartOpen)) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { if (checkoutOpen) setCheckoutOpen(false); else if (customizing) setCustomizing(null); else setCartOpen(false); } };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [narrow, customizing, checkoutOpen]);
+  }, [customizing, checkoutOpen, cartOpen]);
 
   // The menu is one page of sections, a heading and a grid per category, with a bar that jumps to each; the bar follows the scroll
   const available = products.filter((p) => p.variants.some((v) => v.available));
@@ -577,15 +576,14 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
   const checkoutEl = checkoutOpen && html`<${Checkout} businessName=${businessName} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
-      onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
-  if (!narrow && checkoutEl) return checkoutEl;
+      onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); setCartOpen(false); onOrderPlaced(r); setNote(""); }} />`;
 
   if (lastOrder) {
     return html`<${Confirmation} businessName=${businessName} receipt=${lastOrder} onBack=${() => setLastOrder(null)} />`;
   }
 
   return html`
-    <div className=${customizing || (narrow && checkoutOpen) ? "screen has-popup" : "screen"}>
+    <div className=${customizing || checkoutOpen ? "screen has-popup" : "screen"}>
       <div className="menu-body">
         <section className="menu-main">
           ${sections.length > 1 && html`<nav className="cats" aria-label="Menu categories">
@@ -607,13 +605,13 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
 
         ${cart.length > 0 && html`
           <button className="cart-bar" onClick=${() => setCartOpen(true)}>
-            <span>View order · ${cart.reduce((a, it) => a + it.qty, 0)} items</span><span>${money(cartTotal)}</span>
+            <span className="lbl"><b className="count">${cart.reduce((a, it) => a + it.qty, 0)}</b>View order</span><span>${money(cartTotal)}</span>
           </button>`}
 
-        <aside className=${"cart" + (cartOpen ? " open" : "") + (cart.length > 0 && !customizing ? " shown" : "")}>
+        <aside className=${"cart" + (cartOpen ? " open" : "") + (cart.length > 0 && !customizing && !checkoutOpen ? " shown" : "")}>
           <div className="cart-head">
             <h2>Your order</h2>
-            <button className="cart-close" onClick=${() => setCartOpen(false)}>Keep browsing</button>
+            <button className="cart-close" aria-label="Keep browsing" onClick=${() => setCartOpen(false)}><${NavIcon} name="close" /></button>
           </div>
           <div className="items">
             ${cart.length === 0 ? html`<p className="empty">Your order is empty.</p>`
@@ -633,12 +631,13 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
           </div>
           <div className="totals">
             <div className="row dollar"><span>Subtotal</span><span>${money(cartTotal)}</span></div>
-            <button className="checkout" disabled=${cart.length === 0} onClick=${() => setCheckoutOpen(true)}>Checkout</button>
+            ${openOrder && html`<p className="held" role="status">Order #${openOrder.orderNumber} is still in progress. You can order again once it has been picked up.</p>`}
+            <button className="checkout" disabled=${cart.length === 0 || !!openOrder} onClick=${() => { setCartOpen(false); setCheckoutOpen(true); }}>Checkout</button>
           </div>
         </aside>
       </div>
       ${customizeEl}
-      ${narrow && checkoutEl}
+      ${checkoutEl}
     </div>`;
 }
 
@@ -709,51 +708,36 @@ function OrderDetails({ businessName, orderId, memberInfo, onBackToHistory, onBa
   if (err) return html`<div className="error-page"><h2>Could not load order</h2><p>${err}</p><button onClick=${load}>Try again</button></div>`;
   if (!order) return html`<div className="loading">Loading…</div>`;
 
-  const stepIdx = STEP_OF[order.statusCode] ?? -1; // -1: waiting for payment, or cancelled
+  const code = order.statusCode;
+  const stepIdx = STEP_OF[code] ?? -1; // -1: waiting for payment, or cancelled
+  const when = code === 6 ? "Order cancelled"
+    : code === 4 ? "Ready for pickup"
+    : code === 5 || code === 7
+      ? (order.completedAt ? `Picked up at: ${fmt(order.completedAt, order.tz)}` : code === 7 ? "Order refunded" : "Picked up")
+      : `Estimated ready time: ${fmt(new Date(new Date(order.placedAt).getTime() + 7 * 60 * 1000), order.tz)}`;
 
   return html`
     <div className="details screen">
       <div className="body">
-        <div className="card">
-          <p className="thanks">Thanks, ${memberInfo ? memberInfo.firstName : "there"}. Your order is in.</p>
-          <div className="num-row">
-            <h2>Order #${order.orderNumber}</h2>
-          </div>
-          ${order.statusCode === 6 ? html`<p className="thanks">This order was cancelled.</p>` : html`<div className="steps">
-            ${STATUS_STEPS.map((s, i) => html`
-              <div key=${s} className=${"step" + (i < stepIdx ? " done" : i === stepIdx ? " current" : "")}>
-                <p className="lbl">${s}</p>
-              </div>`)}
-          </div>`}
-        </div>
-
-        <div className="card">
-          <p className="where">${businessName}</p>
-          <p className="when">${order.statusCode === 6 ? "Order cancelled"
-            : order.statusCode === 4 ? "Ready for pickup"
-            : order.statusCode === 5 || order.statusCode === 7
-              ? (order.completedAt ? `Picked up at: ${fmt(order.completedAt, order.tz)}` : order.statusCode === 7 ? "Order refunded" : "Picked up")
-              : `Estimated ready time: ${fmt(new Date(new Date(order.placedAt).getTime() + 7 * 60 * 1000), order.tz)}`}</p>
-        </div>
-
-        <div className="card">
-          <h3>What you ordered</h3>
-          <div className="lines">
-            ${order.items.map((it, i) => html`
-              <div className="line" key=${i}>
-                <span>${it.qty} × ${it.name}</span>
-                <span>${money(Math.round(it.lineTotal * 100))}</span>
-              </div>`)}
-          </div>
-          <dl>
-            <div className="row"><dt>Order total</dt><dd>${money(Math.round(order.total * 100))}</dd></div>
-          </dl>
-        </div>
-
-        ${onBackToHistory ? html`
-          <button className="back-link" onClick=${onBackToHistory}>Back to order history</button>` : null}
+        <${OrderStatus} where=${businessName} number=${order.orderNumber} cancelled=${code === 6} headline="Your order"
+          title=${when} stepIdx=${stepIdx}
+          lines=${order.items.map((it) => ({ label: `${it.qty} × ${it.name}`, cents: Math.round(it.lineTotal * 100) }))}
+          rows=${[["Order total", money(Math.round(order.total * 100))]]}>
+          ${onBackToHistory ? html`<button className="link" onClick=${onBackToHistory}>Back to order history</button>` : null}
+        <//>
       </div>
     </div>`;
+}
+
+// A floating card for the customer's order that is still in progress: its number and status, and a tap opens it
+const ISLAND_WORDS = { 1: "Waiting for payment", 2: "Confirmed", 3: "Being prepared", 4: "Ready for pickup" };
+function StatusIsland({ order, onOpen }) {
+  const idx = STEP_OF[order.statusCode] ?? -1;
+  return html`<button className=${"island s" + order.statusCode} onClick=${onOpen} aria-live="polite">
+    <span className="pulse"></span>
+    <span className="txt"><b>Order #${order.orderNumber}</b><span>${ISLAND_WORDS[order.statusCode] || order.status}</span></span>
+    <span className="mini">${STATUS_STEPS.map((s, i) => html`<i key=${s} className=${i <= idx ? "on" : ""}></i>`)}</span>
+  </button>`;
 }
 
 //  App shell 
@@ -775,6 +759,7 @@ function App() {
   const [cart, setCart] = useState([]);
   const [openOrderId, setOpenOrderId] = useState(null);
   const [loadErr, setLoadErr] = useState("");
+  const [active, setActive] = useState(null); // this customer's order still in progress, kept fresh while they are past the entry screen
 
   // Check if a customer session already exists (e.g. page refresh mid-session)
   useEffect(() => {
@@ -790,15 +775,25 @@ function App() {
     }).catch((e) => setLoadErr(e.message));
   }, []);
 
+  const refreshActive = () => api("/customer/active-order").then((d) => setActive(d.order || null)).catch(() => {});
+  useEffect(() => {
+    if (view === "entry") { setActive(null); return undefined; }
+    refreshActive();
+    const t = setInterval(refreshActive, 10000);
+    document.addEventListener("visibilitychange", refreshActive);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", refreshActive); };
+  }, [view === "entry", mode]);
+  useEffect(() => { document.body.classList.toggle("has-island", !!active && view !== "entry"); }, [active, view]);
+
   const idleLimit = useRef(IDLE_MS);
   const signOut = async () => {
     idleLimit.current = IDLE_MS;
     await post("/customer/logout", {}).catch(() => {});
-    setMode(null); setMemberInfo(null); setCart([]); setView("entry"); setOpenOrderId(null);
+    setMode(null); setMemberInfo(null); setCart([]); setView("entry"); setOpenOrderId(null); setActive(null);
     if (ctx?.sharedDevice) { setGuestOrders([]); saveGuestOrders([]); } // the next person on a shared screen must not see these
   };
   const orderPlaced = (r) => {
-    setCart([]); idleLimit.current = IDLE_AFTER_ORDER_MS;
+    setCart([]); idleLimit.current = IDLE_AFTER_ORDER_MS; setTimeout(refreshActive, 300);
     if (mode === "guest" && r?.orderId) setGuestOrders((prev) => { const next = [r.orderId, ...prev]; saveGuestOrders(next); return next; });
   };
 
@@ -845,7 +840,8 @@ function App() {
     <${CustomerNav} businessName=${ctx.businessName} locationName=${ctx.locationName} mode=${mode} memberInfo=${memberInfo} current=${current}
       canOrders=${mode === "signed-in" || guestOrders.length > 0}
       onMenu=${() => setView("menu")} onOrders=${() => setView("history")} onRewards=${() => setView("rewards")} onExit=${signOut} />
-    <main className="page">${content}</main></div>`;
+    <main className="page">${content}</main>
+    ${active && !(view === "order" && openOrderId === active.id) && html`<${StatusIsland} order=${active} onOpen=${() => { setOpenOrderId(active.id); setView("order"); }} />`}</div>`;
 
   if (view === "history") return shell(html`
     <${OrderHistory} businessName=${ctx.businessName} memberInfo=${memberInfo} guestIds=${guestOrders}
@@ -864,7 +860,7 @@ function App() {
 
   return shell(html`
     <${Menu} businessName=${ctx.businessName}
-      mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0}
+      mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0} openOrder=${active}
       locationName=${ctx.locationName} payHere=${ctx.payHere}
       products=${catalog.products} categories=${catalog.categories}
       cart=${cart}

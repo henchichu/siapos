@@ -286,6 +286,20 @@ test("the menu is kept for 5 seconds, then shows changes", async () => {
   } finally { Date.now = real; await pool.query("UPDATE Product SET Name = ? WHERE ProductID = ?", [name, pid]); customers.resetCaches(); }
 });
 
+test("an order in progress blocks the next one until it is picked up", async () => {
+  const c = phone(pub.base);
+  const first = await order(c);
+  assert.equal(first.status, 200);
+  const second = await order(c);
+  assert.equal(second.status, 409);
+  assert.match(second.body.error, new RegExp(`#${first.body.orderNumber} is still in progress`));
+  assert.equal((await c.call("/customer/active-order")).body.order.id, first.body.orderId, "the island shows it");
+  assert.equal((await order(phone(pub.base))).status, 200, "another phone is not held up");
+  await pool.query("UPDATE Orders SET OrderStatusCode = 5 WHERE OrderID = ?", [first.body.orderId]); // picked up
+  assert.equal((await c.call("/customer/active-order")).body.order, null);
+  assert.equal((await order(c)).status, 200, "once picked up, this phone can order again");
+});
+
 // last, because it uses up this address's orders for a minute
 test("order spam is slowed down: one phone is capped, and so is a script with no cookie", async () => {
   const c = phone(pub.base);

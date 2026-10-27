@@ -111,7 +111,7 @@ function kiosk(base) {
     await k.click("Your Orders"); await sleep(400);
     check("Your Orders lists the new order", new RegExp(`Order #${number}`).test(k.text()));
     [...k.w.document.querySelectorAll(".order-card")].find((c) => c.textContent.includes(`#${number}`)).click(); await sleep(500);
-    check("an order opens with its status", new RegExp(`Order #${number}`).test(k.text()) && /What you ordered/.test(k.text()));
+    check("an order opens with its status", new RegExp(`#${number}`).test(k.text()) && /Order total/.test(k.text()) && !!k.$(".status-card .steps"));
     check("no Advance status control", !k.button("Advance status"));
     const stage = () => [...k.w.document.querySelectorAll(".step")].map((x) => x.className.replace("step", "").trim() || "-").join(",");
     check("Confirmed is the current step", stage() === "current,-,-,-", stage());
@@ -160,7 +160,7 @@ function kiosk(base) {
     await k.click("Your Orders"); await sleep(800);
     check("it lists the order from this visit", new RegExp(`Order #${guestNumber}`).test(k.text()) && /Orders you placed on this phone/.test(k.text()), k.text().slice(0, 200));
     k.$(".order-card").click(); await sleep(800);
-    check("and reopens its tracking screen", /This order was cancelled/.test(k.text()) && /What you ordered/.test(k.text()));
+    check("and reopens its tracking screen", /Order cancelled/.test(k.text()) && /Order total/.test(k.text()));
 
     ahead(31 * 1000); await sleep(1500);
     check("30 seconds after an order, the kiosk is back at the entry page", /How would you like to order\?/.test(k.text()), k.text().slice(0, 120));

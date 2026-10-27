@@ -81,7 +81,7 @@ function Entry({ businessName, locationName, phoneSignIn, onGuest, onSignedIn })
     </div>`;
 }
 //  Product customize panel 
-function Customize({ product, cart, headerActions, onAdd, onCancel }) {
+function Customize({ product, img, onAdd, onCancel }) {
   const variants = product.variants.filter((v) => v.available);
   const firstVariant = variants[0];
   const [variantId, setVariantId] = useState(firstVariant ? firstVariant.id : null);
@@ -141,20 +141,19 @@ function Customize({ product, cart, headerActions, onAdd, onCancel }) {
   };
 
   return html`
-    <div className="customize">
-      <div className="header">
-        <h1>${product.name}</h1>
-        ${headerActions}
-        <button className="back-menu" onClick=${onCancel}>Back to menu</button>
-      </div>
+    <div className="customize" role="dialog" aria-modal="true" aria-label=${product.name}>
+      <button className="close" aria-label="Close" onClick=${onCancel}><${NavIcon} name="close" /></button>
       <div className="body">
+        <img className="hero" src=${img} alt="" />
         <section className="form">
-          <h2>${product.name}</h2>
-          ${product.description && html`<p className="reg" style=${{ fontSize: "14px", color: "var(--muted)" }}>${product.description}</p>`}
+          <div className="head">
+            <h2>${product.name}</h2>
+            ${product.description && html`<p className="desc">${product.description}</p>`}
+          </div>
 
           ${variants.length > 1 && html`
             <fieldset className="fieldset">
-              <div className="legend"><span className="semi">Size</span><span className="req">· required</span></div>
+              <div className="legend"><span className="semi">Size</span><span className="badge req">Required</span></div>
               <div className="choices">
                 ${variants.map((v) => html`
                   <button key=${v.id} className=${"choice" + (v.id === variantId ? " on" : "")}
@@ -168,19 +167,19 @@ function Customize({ product, cart, headerActions, onAdd, onCancel }) {
             return html`
               <fieldset key=${g.id} className="fieldset">
                 <div className="legend"><span className="semi">${g.name}</span>
-                  <span className="req">· ${isRadio ? "choose 1" : "choose up to " + (g.max || 255)}</span></div>
+                  <span className=${"badge" + (g.min ? " req" : "")}>${g.min ? "Required" : "Optional"}</span>
+                  ${!isRadio && html`<span className="count">${sel.size} of ${g.max || 255}</span>`}</div>
                 <div className="opt-list">
                   ${g.modifiers.map((m) => {
                     const on = sel.has(m.id);
                     const atLimit = !on && sel.size >= (g.max || 255);
                     return html`
-                    <div key=${m.id} className=${"opt" + (atLimit ? " disabled" : "")}>
+                    <div key=${m.id} className=${"opt" + (on ? " on" : "") + (atLimit ? " disabled" : "")}>
                       <label>
                         <input type=${isRadio ? "radio" : "checkbox"} className="sr-only" style=${{ position: "absolute", width: "1px", height: "1px", opacity: "0" }}
                           name=${"g" + g.id} checked=${on} disabled=${atLimit}
                           onChange=${() => isRadio ? setRadio(g, m) : toggle(g, m)} />
-                        ${on ? html`<img src=${isRadio ? "/img/customer/option-radio.svg" : "/img/customer/option-checkbox.svg"} alt="" />`
-                             : html`<span className=${"box" + (isRadio ? " radio" : "")}></span>`}
+                        <span className=${"box" + (isRadio ? " radio" : "")}></span>
                         <span className="name">${m.name}</span>
                         <span className="delta">${m.deltaCents === 0 ? "included" : "+" + money(m.deltaCents)}</span>
                       </label>
@@ -189,46 +188,21 @@ function Customize({ product, cart, headerActions, onAdd, onCancel }) {
                 </div>
               </fieldset>`;
           })}
-
-          <div className="footer">
-            ${!canAdd && html`<p className="need" role="alert">Choose a size and all required options before adding this item.</p>`}
-            <div className="actions">
-              <div className="qty-ctrl">
-                <button aria-label="Decrease quantity" disabled=${qty === 1} onClick=${() => setQty(Math.max(1, qty - 1))}>−</button>
-                <span>${qty}</span>
-                <button aria-label="Increase quantity" onClick=${() => setQty(qty + 1)}>+</button>
-              </div>
-              <p className="item-total">Item total ${money(itemTotal)}</p>
-              <button className="cancel" onClick=${onCancel}>Cancel</button>
-              <button className="confirm" disabled=${!canAdd} onClick=${confirm}>Add to my order</button>
-            </div>
-          </div>
         </section>
-
-        <aside className="order-side">
-          <h2>Your order</h2>
-          <div className="items">
-            ${cart.length === 0 ? html`<p className="empty">Your order is empty.</p>`
-              : cart.map((it) => html`
-                <div className="line" key=${it.key}>
-                  <span>${it.qty} × ${it.name}${it.variantName ? ", " + it.variantName : ""}</span>
-                  ${it.options.length > 0 && html`<span style=${{ fontSize: "12px", color: "var(--muted)", paddingLeft: "16px" }}>${it.options.join(", ")}</span>`}
-                </div>`)}
+      </div>
+      <div className="footer">
+        ${!canAdd && html`<p className="need" role="alert">Choose a size and all required options before adding this item.</p>`}
+        <div className="actions">
+          <div className="qty-ctrl">
+            <button aria-label="Decrease quantity" disabled=${qty === 1} onClick=${() => setQty(Math.max(1, qty - 1))}>−</button>
+            <span>${qty}</span>
+            <button aria-label="Increase quantity" onClick=${() => setQty(qty + 1)}>+</button>
           </div>
-          <div className="sub"><span>Subtotal</span><span>${money(cart.reduce((a, it) => a + it.unitCents * it.qty, 0))}</span></div>
-        </aside>
+          <button className="confirm" disabled=${!canAdd} onClick=${confirm}>Add to order · ${money(itemTotal)}</button>
+        </div>
       </div>
     </div>`;
 }
-//  Shared header actions 
-function HeaderActions({ canOpenOrders, onOpenOrders, onExit }) {
-  return html`<div className="actions">
-    ${canOpenOrders && html`<button onClick=${onOpenOrders}>Your Orders</button>`}
-    <button className="exit" onClick=${onExit}>Back to Customer Login</button>
-  </div>`;
-}
-
-
 //  Navigation 
 // The staff pages' menu, in this page's colours: a slim top bar with a menu button on a phone (or a window taller than it is wide), icons beside the page
 // on a tablet, the open menu on a laptop with a button that folds it. The fold is kept in this browser. Classes go on <body>; customer.css does the rest.
@@ -549,7 +523,7 @@ function useNarrow() {
 }
 
 function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
-  const [cat, setCat] = useState("All");
+  const [active, setActive] = useState(""); // the category whose section is at the top of the menu
   const [customizing, setCustomizing] = useState(null);
   const [note, setNote] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -557,26 +531,53 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
   const [cartOpen, setCartOpen] = useState(false); // phones only: the cart is a full-screen sheet
   const narrow = useNarrow();
   useEffect(() => { // Escape closes the pop-up window
-    if (!narrow || !(customizing || checkoutOpen)) return undefined;
+    if (!(customizing || (narrow && checkoutOpen))) return undefined;
     const onKey = (e) => { if (e.key === "Escape") { if (checkoutOpen) setCheckoutOpen(false); else setCustomizing(null); } };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [narrow, customizing, checkoutOpen]);
 
-  const visible = products.filter((p) => (cat === "All" || p.category === cat) && p.variants.some((v) => v.available));
+  // The menu is one page of sections, a heading and a grid per category, with a bar that jumps to each; the bar follows the scroll
+  const available = products.filter((p) => p.variants.some((v) => v.available));
+  const names = [...categories, ...(available.some((p) => !categories.includes(p.category)) ? ["Other"] : [])];
+  const sections = names.map((name) => [name, available.filter((p) => (categories.includes(p.category) ? p.category : "Other") === name)]).filter(([, list]) => list.length);
+  const slug = (name) => "cat-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const sectionKey = sections.map(([name]) => name).join("|");
+  const current = active && sections.some(([name]) => name === active) ? active : sections[0]?.[0];
+  const jump = (name) => {
+    setActive(name); heldUntil.current = Date.now() + 900;
+    document.getElementById(slug(name))?.scrollIntoView?.({ block: "start", behavior: "smooth" }); // needs enough content below to travel; the sections are padded for that
+  };
+  const heldUntil = useRef(0); // after a tap on the bar, the tapped category stays current until the page has settled
+  useEffect(() => {
+    if (sections.length < 2) return undefined;
+    let frame = 0;
+    const onScroll = (e) => {
+      if (frame || Date.now() < heldUntil.current) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const t = e.target;
+        const atEnd = t?.scrollHeight && t.scrollTop + t.clientHeight >= t.scrollHeight - 2; // a last section too short to reach the top still counts
+        let found = atEnd ? sections[sections.length - 1][0] : sections[0][0];
+        if (!atEnd) for (const [name] of sections) { const el = document.getElementById(slug(name)); if (el && el.getBoundingClientRect().top <= 140) found = name; }
+        setActive(found);
+      });
+    };
+    document.addEventListener("scroll", onScroll, true); // scroll events don't bubble; the menu's own scroller is not known here
+    return () => { document.removeEventListener("scroll", onScroll, true); cancelAnimationFrame(frame); };
+  }, [sectionKey]);
+  useEffect(() => { document.querySelector(".cats [aria-current=true]")?.scrollIntoView?.({ inline: "nearest", block: "nearest" }); }, [current]);
   const cartTotal = cart.reduce((a, it) => a + it.unitCents * it.qty, 0);
 
   const addItem = (item) => { onAddItem(item); setCustomizing(null); };
 
-  const headerActions = html`<${HeaderActions} canOpenOrders=${mode === "signed-in" || hasOrders} onOpenOrders=${onOpenOrders} onExit=${onExit} />`;
 
-  const customizeEl = customizing && html`<${Customize} product=${customizing} cart=${cart} headerActions=${headerActions}
+  const customizeEl = customizing && html`<${Customize} product=${customizing} img=${customizing.hasPhoto ? `/api/customer/products/${customizing.id}/photo` : productImg(available.indexOf(customizing))}
       onAdd=${addItem} onCancel=${() => setCustomizing(null)} />`;
   const checkoutEl = checkoutOpen && html`<${Checkout} businessName=${businessName} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
       onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
-  if (!narrow && customizeEl) return customizeEl; // a wide screen shows them full-screen, a narrow one as a window over the menu below
   if (!narrow && checkoutEl) return checkoutEl;
 
   if (lastOrder) {
@@ -584,27 +585,24 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
   }
 
   return html`
-    <div className=${narrow && (customizing || checkoutOpen) ? "screen has-popup" : "screen"}>
+    <div className=${customizing || (narrow && checkoutOpen) ? "screen has-popup" : "screen"}>
       <div className="menu-body">
         <section className="menu-main">
-          <h2>Order</h2>
-          <div className="filters">
-            ${["All", ...categories].map((c) => html`
-              <button key=${c} className=${cat === c ? "on" : ""} onClick=${() => setCat(c)}>${c}</button>`)}
-          </div>
-          <div className="grid">
-            ${visible.map((p, i) => html`
-              <article key=${p.id} className="tile">
-                <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(i)}
-                  alt=${p.name} loading="lazy" />
-                <h3>${p.name}</h3>
-                <p className="desc">${p.description || ""}</p>
-                <div className="row">
-                  <span className="price">${money(Math.min(...p.variants.filter((v) => v.available).map((v) => v.priceCents)))}</span>
-                  <button className="add" onClick=${() => setCustomizing(p)}>Add</button>
-                </div>
-              </article>`)}
-          </div>
+          ${sections.length > 1 && html`<nav className="cats" aria-label="Menu categories">
+            ${sections.map(([name]) => html`<button key=${name} aria-current=${name === current ? "true" : undefined} onClick=${() => jump(name)}>${name}</button>`)}
+          </nav>`}
+          ${sections.map(([name, list]) => html`<section key=${name} id=${slug(name)} data-cat=${name} className="cat-section" aria-label=${sections.length > 1 ? name : "Menu"}>
+            ${sections.length > 1 && html`<h2 className="cat-title">${name}</h2>`}
+            <div className="grid">
+              ${list.map((p) => html`
+                <article key=${p.id} className="tile">
+                  <button className="pick" aria-label=${"Add " + p.name} onClick=${() => setCustomizing(p)}>
+                    <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(available.indexOf(p))} alt="" loading="lazy" />
+                    <h3>${p.name}</h3>
+                  </button>
+                </article>`)}
+            </div>
+          </section>`)}
         </section>
 
         ${cart.length > 0 && html`
@@ -612,7 +610,7 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
             <span>View order · ${cart.reduce((a, it) => a + it.qty, 0)} items</span><span>${money(cartTotal)}</span>
           </button>`}
 
-        <aside className=${"cart" + (cartOpen ? " open" : "")}>
+        <aside className=${"cart" + (cartOpen ? " open" : "") + (cart.length > 0 && !customizing ? " shown" : "")}>
           <div className="cart-head">
             <h2>Your order</h2>
             <button className="cart-close" onClick=${() => setCartOpen(false)}>Keep browsing</button>
@@ -633,16 +631,13 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
                   </div>
                 </div>`)}
           </div>
-          <div className="note">Note for the barista (optional)
-            <input maxLength="120" value=${note} onChange=${(e) => setNote(e.target.value)} />
-          </div>
           <div className="totals">
             <div className="row dollar"><span>Subtotal</span><span>${money(cartTotal)}</span></div>
             <button className="checkout" disabled=${cart.length === 0} onClick=${() => setCheckoutOpen(true)}>Checkout</button>
           </div>
         </aside>
       </div>
-      ${narrow && customizeEl}
+      ${customizeEl}
       ${narrow && checkoutEl}
     </div>`;
 }

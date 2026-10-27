@@ -33,7 +33,7 @@ test("configured business name follows kiosk navigation, checkout, and order his
     await wait(); header();
     await click("Rewards"); header();
     await click("Browse Menu"); header();
-    await click("Add"); await click("Add to my order");
+    w.document.querySelector(".tile button").click(); await wait(); w.document.querySelector(".customize .confirm").click(); await wait();
     await click("Checkout"); header();
     await click("Cash"); await click("Place order");
     assert.equal(w.document.querySelector(".confirm-overlay .where")?.textContent, businessName + " · Pickup at this counter");

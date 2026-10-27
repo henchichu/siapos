@@ -65,6 +65,40 @@ BEGIN
     END IF;
 END$$
 
+-- Purchase orders are created in the same transaction as sales, counts and threshold changes.
+-- Supplier, quoted cost and ordered quantity are saved at order time, not recomputed for display.
+CREATE TRIGGER TR_Inventory_QueueInsert AFTER INSERT ON Inventory FOR EACH ROW
+BEGIN
+    IF NEW.ReorderThreshold > 0 AND NEW.Quantity <= NEW.ReorderThreshold THEN
+        INSERT INTO PurchaseOrder (PurchaseOrderID, InventoryID, Quantity, SupplierID, UnitCost)
+        SELECT UUID(), NEW.InventoryID,
+               GREATEST(CEIL(2 * NEW.ReorderThreshold - NEW.Quantity), COALESCE(ss.MinOrderQty, 1)),
+               ss.SupplierID, ss.UnitCost
+          FROM StockItem s
+          LEFT JOIN StockItemSupplier ss ON ss.StockItemID = s.StockItemID AND ss.SupplierID = (
+              SELECT q.SupplierID FROM StockItemSupplier q JOIN Supplier sp ON sp.SupplierID = q.SupplierID AND sp.Active
+               WHERE q.StockItemID = s.StockItemID ORDER BY q.IsPreferred DESC, sp.Name, q.SupplierID LIMIT 1)
+         WHERE s.StockItemID = NEW.StockItemID AND s.Active
+        ON DUPLICATE KEY UPDATE PurchaseOrderID = PurchaseOrderID;
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Inventory_QueueUpdate AFTER UPDATE ON Inventory FOR EACH ROW
+BEGIN
+    IF NEW.ReorderThreshold > 0 AND NEW.Quantity <= NEW.ReorderThreshold THEN
+        INSERT INTO PurchaseOrder (PurchaseOrderID, InventoryID, Quantity, SupplierID, UnitCost)
+        SELECT UUID(), NEW.InventoryID,
+               GREATEST(CEIL(2 * NEW.ReorderThreshold - NEW.Quantity), COALESCE(ss.MinOrderQty, 1)),
+               ss.SupplierID, ss.UnitCost
+          FROM StockItem s
+          LEFT JOIN StockItemSupplier ss ON ss.StockItemID = s.StockItemID AND ss.SupplierID = (
+              SELECT q.SupplierID FROM StockItemSupplier q JOIN Supplier sp ON sp.SupplierID = q.SupplierID AND sp.Active
+               WHERE q.StockItemID = s.StockItemID ORDER BY q.IsPreferred DESC, sp.Name, q.SupplierID LIMIT 1)
+         WHERE s.StockItemID = NEW.StockItemID AND s.Active
+        ON DUPLICATE KEY UPDATE PurchaseOrderID = PurchaseOrderID;
+    END IF;
+END$$
+
 CREATE TRIGGER TR_InventoryTransaction_BeforeInsert BEFORE INSERT ON InventoryTransaction FOR EACH ROW
 BEGIN
     DECLARE vQuantity DECIMAL(12,3);

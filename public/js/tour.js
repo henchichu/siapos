@@ -7,7 +7,7 @@ const STEPS = [
   T("register", ".products > header", "Register: kiosk orders and refunds", "Cash orders placed on customers' phones wait here for you to take the money. Refund looks up an order and sends the request for approval.", "bottom"),
   T("kitchen", ".queues", "Kitchen: a live board", "New orders appear by themselves. The team moves each ticket from New to Preparing to Ready, and customers see the change on their phone.", "bottom"),
   T("kitchen", "button.kbtn", "Kitchen: report a loss", "Spilled or spoiled something? Record it here so the stock count and reports stay honest.", "left"),
-  T("attention", ".attention", "Needs attention: the manager's to-do list", "Stock losses, low stock, timecards waiting for approval and refunds waiting for an override, all for today in one place.", "top"),
+  T("attention", ".attention", "Needs attention: the manager's to-do list", "Stock losses, pending deliveries, timecards waiting for approval and refunds waiting for an override, all for today in one place.", "top"),
   T("orders", "form.osearch", "Orders: find any order", "Search by number, date, status, payment or channel to answer a customer's question in seconds.", "bottom"),
   T("orders", "section.results", "Orders: open one for the details", "Open an order to see its lines, payments and history, and to ask for a refund on a completed one.", "top"),
   T("rewards", "section.pview", "Rewards: your members", "Look members up, add new ones and see their orders and points. Members who sign in on their phone earn points too.", "bottom"),

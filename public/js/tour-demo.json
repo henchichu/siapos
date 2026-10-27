@@ -408,7 +408,7 @@
      }
     ]
    },
-   "low": {
+   "pendingDeliveries": {
     "count": 0,
     "rows": []
    },

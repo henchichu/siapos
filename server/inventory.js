@@ -94,9 +94,21 @@ router.get("/inventory", see, async (req, res) => {
       WHERE t.LocationID = ? ORDER BY t.TransactionDateTime DESC, t.InventoryTransactionID LIMIT 15`, [locationId]);
   const [deliveries] = await pool.query(
     `SELECT d.DeliveryID AS id, DATE_FORMAT(d.DeliveredOn, '%Y-%m-%d') AS date, sp.Name AS supplier, COUNT(t.InventoryTransactionID) AS lineCount,
-            COALESCE(SUM(t.QuantityChange * t.UnitCost), 0) AS total
+            COALESCE(SUM(t.QuantityChange * t.UnitCost), 0) AS total,
+            (SELECT CONCAT('PO-', LPAD(po.OrderNumber, GREATEST(6, LENGTH(po.OrderNumber)), '0'))
+               FROM PurchaseOrder po WHERE po.ReceivedDeliveryID = d.DeliveryID LIMIT 1) AS orderNumber
        FROM Delivery d JOIN Supplier sp ON sp.SupplierID = d.SupplierID LEFT JOIN InventoryTransaction t ON t.DeliveryID = d.DeliveryID
       WHERE d.LocationID = ? GROUP BY d.DeliveryID, d.DeliveredOn, d.CreatedAt, sp.Name ORDER BY d.DeliveredOn DESC, d.CreatedAt DESC LIMIT 8`, [locationId]);
+
+  const [pending] = await pool.query(
+    `SELECT p.PurchaseOrderID AS id, CONCAT('PO-', LPAD(p.OrderNumber, GREATEST(6, LENGTH(p.OrderNumber)), '0')) AS orderNumber,
+            p.Status AS status, p.CreatedAt AS createdAt, i.StockItemID AS stockItemId,
+            s.Name AS item, s.Active AS active, u.Symbol AS unit, i.Quantity AS onHand, i.ReorderThreshold AS reorderAt,
+            p.Quantity AS quantity, p.SupplierID AS supplierId, sp.Name AS supplier, sp.Active AS supplierActive, p.UnitCost AS unitCost
+       FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID = p.InventoryID
+       JOIN StockItem s ON s.StockItemID = i.StockItemID JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode
+       LEFT JOIN Supplier sp ON sp.SupplierID = p.SupplierID
+      WHERE i.LocationID = ? AND p.ReceivedDeliveryID IS NULL ORDER BY p.CreatedAt, p.OrderNumber`, [locationId]);
 
   const supplierIds = (id) => quotes.filter((q) => q.stockItemId === id).map((q) => q.supplierId);
   res.json({
@@ -106,7 +118,9 @@ router.get("/inventory", see, async (req, res) => {
     items: items.map((i) => ({ ...i, fraction: !!i.fraction })),
     rows: rows.map((r) => ({ ...r, active: !!r.active, onHand: Number(r.onHand), reorderAt: Number(r.reorderAt), avgCost: r.avgCost == null ? null : Number(r.avgCost), supplierIds: supplierIds(r.id) })),
     movements: moves.map((m) => ({ at: m.at, item: m.item, unit: m.unit, type: LABELS[m.type], delta: Number(m.delta), by: m.byName, orderNumber: m.orderNumber })),
-    deliveries: deliveries.map(({ lineCount, ...d }) => ({ ...d, lines: lineCount, total: Number(d.total) })),
+    pendingDeliveries: pending.map((p) => ({ ...p, active: !!p.active, supplierActive: !!p.supplierActive, onHand: Number(p.onHand), reorderAt: Number(p.reorderAt),
+      quantity: Number(p.quantity), unitCost: p.unitCost == null ? null : Number(p.unitCost) })),
+    deliveries: deliveries.map(({ lineCount, ...d }) => ({ ...d, status: "Received", lines: lineCount, total: Number(d.total) })),
   });
 });
 
@@ -172,8 +186,8 @@ router.post("/inventory/item", change, async (req, res) => {
     const id = await pool.tx(async (conn) => {
       const itemId = uuid();
       await conn.query("INSERT INTO StockItem (StockItemID, BusinessID, Name, StockUnitCode) VALUES (?, ?, ?, ?)", [itemId, businessId, name, unit.code]);
-      await conn.query("INSERT INTO Inventory (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold) VALUES (?, ?, ?, ?, ?)", [uuid(), locationId, itemId, businessId, threshold]);
       if (supplierId) await conn.query("INSERT INTO StockItemSupplier (StockItemID, SupplierID, BusinessID, IsPreferred) VALUES (?, ?, ?, TRUE)", [itemId, supplierId, businessId]);
+      await conn.query("INSERT INTO Inventory (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold) VALUES (?, ?, ?, ?, ?)", [uuid(), locationId, itemId, businessId, threshold]);
       return itemId;
     });
     res.json({ id });
@@ -205,6 +219,29 @@ router.post("/inventory/supplier", change, async (req, res) => {
     throw err;
   }
   res.json({ id });
+});
+
+// An item without a configured supplier stays a draft until the supplier is assigned.
+router.post("/inventory/purchase-order/:id/supplier", change, async (req, res) => {
+  const locationId = await placeOf(req, req.body.locationId);
+  const { businessId } = req.session;
+  const [[supplier]] = await pool.query("SELECT SupplierID AS id FROM Supplier WHERE SupplierID = ? AND BusinessID = ? AND Active", [String(req.body.supplierId), businessId]);
+  if (!supplier) throw new HttpError(400, "Choose an active supplier.");
+  await pool.tx(async (conn) => {
+    const [[order]] = await conn.query(
+      `SELECT p.PurchaseOrderID AS id, p.SupplierID AS supplierId, i.StockItemID AS stockItemId
+         FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID = p.InventoryID
+        WHERE p.PurchaseOrderID = ? AND i.BusinessID = ? AND i.LocationID = ? AND p.ReceivedDeliveryID IS NULL FOR UPDATE`,
+      [req.params.id, businessId, locationId]);
+    if (!order || order.supplierId) throw new HttpError(409, "This order is no longer waiting for a supplier. Refresh the list.");
+    const [[quote]] = await conn.query("SELECT MinOrderQty AS minimum, UnitCost AS cost FROM StockItemSupplier WHERE StockItemID = ? AND SupplierID = ?", [order.stockItemId, supplier.id]);
+    // Keep the chosen supplier available to future automatic orders for this item.
+    await conn.query("INSERT IGNORE INTO StockItemSupplier (StockItemID, SupplierID, BusinessID) VALUES (?, ?, ?)",
+      [order.stockItemId, supplier.id, businessId]);
+    await conn.query("UPDATE PurchaseOrder SET SupplierID = ?, UnitCost = ?, Quantity = GREATEST(Quantity, ?) WHERE PurchaseOrderID = ?",
+      [supplier.id, quote?.cost ?? null, quote?.minimum ?? 1, order.id]);
+  });
+  res.json({ status: "Ordered" });
 });
 
 // ---- Receive delivery -------------------------------------------------------------------------------------------
@@ -243,8 +280,22 @@ router.post("/inventory/delivery", change, async (req, res) => {
       await conn.query(
         "INSERT INTO Delivery (DeliveryID, BusinessID, LocationID, SupplierID, InvoiceNumber, DeliveredOn, ReceivedByEmployeeID) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [id, businessId, locationId, supplier.id, invoice, b.deliveredOn, employeeId]);
+      // Lock stock before its queue entry, matching the inventory trigger's lock order.
+      for (const l of clean) await ensureRow(conn, businessId, locationId, l.id);
+      if (!blank(b.purchaseOrderId)) {
+        const [[pending]] = await conn.query(
+          `SELECT p.PurchaseOrderID AS id, p.SupplierID AS supplierId, i.StockItemID AS stockItemId FROM PurchaseOrder p
+             JOIN Inventory i ON i.InventoryID = p.InventoryID
+            WHERE p.PurchaseOrderID = ? AND i.LocationID = ? AND i.BusinessID = ? AND p.ReceivedDeliveryID IS NULL FOR UPDATE`,
+          [String(b.purchaseOrderId), locationId, businessId]);
+        if (!pending) throw new HttpError(409, "This purchase order is no longer available. Refresh the list.");
+        if (!pending.supplierId) throw new HttpError(409, "Assign a supplier and place this order before receiving it.");
+        if (pending.supplierId !== supplier.id) throw new HttpError(409, "Receive this purchase order from its original supplier.");
+        if (!seen.has(pending.stockItemId)) throw new HttpError(400, "Include the pending stock item in this delivery.");
+        // Close before posting: a short delivery that is still low creates a new purchase order.
+        await conn.query("UPDATE PurchaseOrder SET ReceivedDeliveryID = ? WHERE PurchaseOrderID = ?", [id, pending.id]);
+      }
       for (const l of clean) {
-        await ensureRow(conn, businessId, locationId, l.id);
         await post(conn, { businessId, locationId, employeeId, stockItemId: l.id, qty: l.qty, cost: l.cost, type: RESTOCK, deliveryId: id });
       }
       return id;

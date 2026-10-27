@@ -19,7 +19,7 @@ router.get("/attention", async (req, res) => {
   const [inventory, team, signer] = await Promise.all([PERM_SEE_INVENTORY, PERM_SEE_TEAM, PERM_SIGN_REFUNDS].map((p) => hasPermission(pool, employeeId, p)));
   if (!inventory && !team && !signer) throw new HttpError(403, "Your role can't do this.");
   const [[place]] = await pool.query("SELECT Name AS name, TimeZone AS timeZone FROM Location WHERE LocationID = ?", [locationId]);
-  const out = { location: place.name, timeZone: place.timeZone, losses: null, low: null, timecards: null, refunds: null };
+  const out = { location: place.name, timeZone: place.timeZone, losses: null, pendingDeliveries: null, timecards: null, refunds: null };
 
   if (inventory) {
     // "today" is the café's local day, so the cut-off is local midnight converted back to UTC
@@ -34,13 +34,18 @@ router.get("/attention", async (req, res) => {
     );
     out.losses = { count: losses.length, rows: losses.slice(0, SHOWN).map((l) => ({ at: l.at, item: l.item, amount: Number(l.amount), unit: l.unit, reason: LOSS_REASONS[l.type], by: l.byName })) };
 
-    const [low] = await pool.query(
-      `SELECT s.Name AS item, u.Symbol AS unit, i.Quantity AS onHand, i.ReorderThreshold AS reorderAt
-         FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID AND s.Active JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode
-        WHERE i.LocationID = ? AND i.Quantity <= i.ReorderThreshold ORDER BY s.Name`,
-      [locationId]
+    const [pending] = await pool.query(
+      `SELECT p.PurchaseOrderID AS id,
+              CONCAT('PO-', LPAD(p.OrderNumber, GREATEST(6, LENGTH(p.OrderNumber)), '0')) AS orderNumber,
+              s.Name AS item, u.Symbol AS unit, p.Quantity AS quantity, sp.Name AS supplier, p.Status AS status
+         FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID = p.InventoryID
+         JOIN StockItem s ON s.StockItemID = i.StockItemID JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode
+         LEFT JOIN Supplier sp ON sp.SupplierID = p.SupplierID
+        WHERE i.LocationID = ? AND i.BusinessID = ? AND p.ReceivedDeliveryID IS NULL
+        ORDER BY p.CreatedAt, p.OrderNumber`,
+      [locationId, businessId]
     );
-    out.low = { count: low.length, rows: low.slice(0, SHOWN).map((l) => ({ item: l.item, unit: l.unit, onHand: Number(l.onHand), reorderAt: Number(l.reorderAt) })) };
+    out.pendingDeliveries = { count: pending.length, rows: pending.slice(0, SHOWN).map((p) => ({ ...p, quantity: Number(p.quantity) })) };
   }
 
   if (team) {

@@ -1314,6 +1314,28 @@ CREATE TABLE IF NOT EXISTS Delivery (
     INDEX IX_Delivery_Location_Date (LocationID, DeliveredOn)
 ) ENGINE=InnoDB;
 
+-- Simulated supplier purchase orders. Only one unreceived order per inventory row.
+CREATE TABLE IF NOT EXISTS PurchaseOrder (
+    PurchaseOrderID CHAR(36) NOT NULL PRIMARY KEY,
+    OrderNumber BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+    SupplierID CHAR(36) NULL,
+    UnitCost DECIMAL(18,6) NULL,
+    InventoryID CHAR(36) NOT NULL,
+    Quantity DECIMAL(12,3) NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ReceivedDeliveryID CHAR(36) NULL,
+    Status VARCHAR(20) GENERATED ALWAYS AS
+        (CASE WHEN ReceivedDeliveryID IS NOT NULL THEN 'Received'
+              WHEN SupplierID IS NULL THEN 'Needs supplier' ELSE 'Ordered' END) STORED,
+    OpenRequest TINYINT GENERATED ALWAYS AS (IF(ReceivedDeliveryID IS NULL, 1, NULL)) STORED,
+    UNIQUE KEY UQ_PurchaseOrder_Open (InventoryID, OpenRequest),
+    CONSTRAINT FK_PurchaseOrder_Inventory FOREIGN KEY (InventoryID) REFERENCES Inventory(InventoryID) ON DELETE CASCADE,
+    CONSTRAINT FK_PurchaseOrder_Received FOREIGN KEY (ReceivedDeliveryID) REFERENCES Delivery(DeliveryID) ON DELETE RESTRICT,
+    CONSTRAINT FK_PurchaseOrder_Supplier FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID) ON DELETE RESTRICT,
+    CONSTRAINT CK_PurchaseOrder_Cost CHECK (UnitCost IS NULL OR UnitCost >= 0),
+    CONSTRAINT CK_PurchaseOrder_Quantity CHECK (Quantity > 0)
+) ENGINE=InnoDB;
+
 -- One stocktake at a location; only items that differ get a COUNT_CORRECTION row pointing to it,
 -- so the number of items counted is stored here
 CREATE TABLE IF NOT EXISTS StockCount (

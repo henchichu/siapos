@@ -24,3 +24,26 @@
 .inline { display: flex; gap: 8px; align-items: stretch; }
 .inline .select { flex: 1; min-width: 0; }
 .newsupplier { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.split > .delivery-dashboard { min-width: 320px; }
+.pending-deliveries td { vertical-align: top; }
+.pending-deliveries td .sub { margin-top: 4px; }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .split > .delivery-dashboard { flex-basis: 100%; min-width: 0; }
+}
+
+/* Keep both delivery panels compact beside the receiving form. */
+.delivery-panel .phead { align-items: center; flex-wrap: wrap; gap: 8px; }
+.delivery-expand { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.delivery-expand svg { flex: none; transition: transform 150ms ease; }
+.delivery-list { overflow-x: auto; }
+.delivery-list.expanded { max-height: 300px; overflow-y: auto; }
+.delivery-list.expanded thead { position: sticky; top: 0; background: var(--surface, #fff); z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .delivery-expand svg { transition: none; } }
+
+.inventory-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.inventory-toolbar .tabs { align-self: auto; }
+.inventory-toolbar > .select { width: auto; max-width: 100%; }
+@media print { .inventory-toolbar { display: none !important; } }
+
+.delivery-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }

@@ -50,13 +50,13 @@ function App() {
       <${Message} msg=${msg} dashed />
       ${data && html`<section className="results" aria-label="Results">
         <header><h3>Results</h3><span className="sub" role="status">${data.count} ${data.count === 1 ? "order" : "orders"} found${data.count > data.shown ? ` · showing the newest ${data.shown}` : ""}</span></header>
-        ${data.orders.length === 0 ? html`<p className="sub">No orders match these filters.</p>` : html`<table className="table clickable">
+        ${data.orders.length === 0 ? html`<p className="sub">No orders match these filters.</p>` : html`<div className="tscroll"><table className="table clickable t-orders">
           <colgroup><col style=${{ width: 130 }} /><col style=${{ width: 70 }} /><col /><col style=${{ width: 110 }} /><col style=${{ width: 150 }} /><col style=${{ width: 110 }} /><col style=${{ width: 80 }} /></colgroup>
           <thead><tr><th scope="col">Date and time</th><th scope="col">Order</th><th scope="col">Source</th><th scope="col">Employee</th><th scope="col">Member</th><th scope="col">Status</th><th scope="col" className="r">Total</th></tr></thead>
           <tbody>${data.orders.map((o) => html`<tr key=${o.id} onClick=${() => go(o.id)}>
             <td>${when(o.placedAt, o.timeZone)}</td>
             <td><a href=${`/order.html?id=${encodeURIComponent(o.id)}`} aria-label=${`Order ${o.orderNumber}, details`} onClick=${(e) => e.stopPropagation()}>${o.orderNumber}</a></td>
-            <td>${o.source}</td><td>${o.employee || "—"}</td><td>${o.member}</td><td>${o.status}</td><td className="r">${fromDollars(o.total)}</td></tr>`)}</tbody></table>`}
+            <td>${o.source}</td><td>${o.employee || "—"}</td><td>${o.member}</td><td>${o.status}</td><td className="r">${fromDollars(o.total)}</td></tr>`)}</tbody></table></div>`}
       </section>`}
     </section>
   </div>`;

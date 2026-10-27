@@ -3,7 +3,7 @@
 .pview .pfilters .select { width: auto; min-width: 144px; }
 .table td.low { color: var(--error); }
 .table td.state { white-space: nowrap; }
-.table td.r { white-space: nowrap; } /* a six-decimal cost like $0.012208 never stacks; the column is wide enough for the longest ($0.099999) */
+.table td.r { white-space: nowrap; } /* an amount never stacks, e.g. the delivery form's six-decimal unit cost $0.012208 */
 .wide-form { width: 638px; max-width: 100%; flex: none; }
 .w210 { width: 210px; max-width: 100%; }
 .pactions.left { justify-content: flex-start; } .pactions.left .pbtn { flex: none; }
@@ -25,7 +25,7 @@
 .inline .select { flex: 1; min-width: 0; }
 .newsupplier { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 
-.split > .delivery-dashboard { min-width: 320px; }
+.split > .delivery-dashboard { min-width: 448px; } /* room for the pending table beside the form; below that it moves under the form */
 .pending-deliveries td { vertical-align: top; }
 .pending-deliveries td .sub { margin-top: 4px; }
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
@@ -47,3 +47,24 @@
 @media print { .inventory-toolbar { display: none !important; } }
 
 .delivery-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+/* Fitting any width. The tables keep their fixed columns, so each has a floor that leaves its name column readable;
+   below it the table scrolls sideways in its own box, never the page. Text wraps between words. */
+.tscroll { max-width: 100%; overflow-x: auto; }
+.tscroll .table td, .delivery-list .table td { overflow-wrap: break-word; }
+.table.t-stock { min-width: 700px; } .table.t-stock.noacts { min-width: 480px; }
+.table.t-moves { min-width: 600px; }
+.table.t-lines { min-width: 560px; }
+.table.t-recent { min-width: 340px; }
+.table.t-pending { min-width: 400px; }
+.table.t-count { min-width: 600px; }
+.t-pending .act { white-space: normal; text-align: center; } /* "Assign supplier" on two lines rather than cut off */
+/* A panel is never wider than the page, and the form column moves under the list when both no longer fit side by side
+   (the stock table's 700px plus its card's padding, the gap and the 278px form) */
+.inv-split { container-type: inline-size; }
+.inv-split > * { max-width: 100%; }
+@container (max-width: 1049px) { .inv-split > .pside { width: 100%; } }
+/* Current stock and Recent stock movements: columns share the width by percentage (Actions keeps room for its three buttons),
+   with 24px after every column so a right-aligned amount never touches the next column */
+.table.t-stock th, .table.t-stock td, .table.t-moves th, .table.t-moves td { padding-right: 24px; }
+.table.t-stock th:last-child, .table.t-stock td:last-child, .table.t-moves th:last-child, .table.t-moves td:last-child { padding-right: 14px; }

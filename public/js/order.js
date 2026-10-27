@@ -2,16 +2,15 @@ const orderId = new URLSearchParams(window.location.search).get("id") || "";
 
 const Metric = ({ label, value }) => html`<div className="metric"><span>${label}</span><b>${value}</b></div>`;
 
-function Items({ data }) {
+function Items({ data, sub }) {
   const { totals } = data;
-  return html`<section className="osec" aria-label="Items">
+  return html`<section className=${`osec ${panelOf("items", sub)}`} aria-label="Items">
     <h3>Items</h3>
-    <table className="table">
-      <colgroup><col /><col style=${{ width: 40 }} /><col style=${{ width: 84 }} /><col style=${{ width: 84 }} /></colgroup>
+    <div className="tscroll"><table className="table fit rowcards">
       <thead><tr><th scope="col">Item</th><th scope="col" className="r">Qty</th><th scope="col" className="r">Unit price</th><th scope="col" className="r">Line total</th></tr></thead>
       <tbody>${data.items.map((i, n) => html`<tr key=${n}>
         <td>${i.name}${i.options.length > 0 && html`<span className="opts">${i.options.join(", ")}</span>`}</td>
-        <td className="r">${i.qty}</td><td className="r">${fromDollars(i.unitPrice)}</td><td className="r">${fromDollars(i.lineTotal)}</td></tr>`)}</tbody></table>
+        <td className="r">${i.qty}</td><td className="r">${fromDollars(i.unitPrice)}</td><td className="r">${fromDollars(i.lineTotal)}</td></tr>`)}</tbody></table></div>
     <dl className="totals">
       <div><dt>Subtotal</dt><dd>${fromDollars(totals.subtotal)}</dd></div>
       ${totals.discount > 0 && html`<div><dt>Discount${totals.discountNames.length ? ` (${totals.discountNames.join(", ")})` : ""}</dt><dd>${fromDollars(-totals.discount)}</dd></div>`}
@@ -21,23 +20,22 @@ function Items({ data }) {
   </section>`;
 }
 
-function Payments({ data }) {
-  return html`<section className="osec" aria-label="Payments and refunds">
+function Payments({ data, sub }) {
+  return html`<section className=${`osec ${panelOf("payments", sub)}`} aria-label="Payments and refunds">
     <h3>Payments and refunds</h3>
-    ${data.payments.length === 0 ? html`<p className="sub">Nothing has been paid yet.</p>` : html`<table className="table">
-      <colgroup><col /><col style=${{ width: 96 }} /><col style=${{ width: 84 }} /><col style=${{ width: 104 }} /><col style=${{ width: 124 }} /></colgroup>
+    ${data.payments.length === 0 ? html`<p className="sub">Nothing has been paid yet.</p>` : html`<div className="tscroll"><table className="table fit rowcards">
       <thead><tr><th scope="col">Type</th><th scope="col">Method</th><th scope="col" className="r">Amount</th><th scope="col">Status</th><th scope="col">Date</th></tr></thead>
       <tbody>${data.payments.map((p, n) => html`<tr key=${n}>
         <td>${p.type}</td><td>${p.method || "—"}</td><td className="r">${fromDollars(p.amount)}</td>
         <td>${p.type === "Tip" ? html`<button className="act" disabled title="Adjusting a tip isn't available yet">Adjust tip</button>` : p.status}</td>
-        <td>${when(p.at, data.timeZone)}</td></tr>`)}</tbody></table>`}
+        <td>${when(p.at, data.timeZone)}</td></tr>`)}</tbody></table></div>`}
   </section>`;
 }
 
-function Info({ data }) {
+function Info({ data, sub }) {
   const w = data.where;
   return html`<aside className="oside">
-    <section className="osec" aria-label="Who and where">
+    <section className=${`osec ${panelOf("info", sub)}`} aria-label="Who and where">
       <h3>Who and where</h3>
       <ul className="facts">
         <li>Location: ${w.location}</li>
@@ -48,12 +46,11 @@ function Info({ data }) {
         <li>Note: ${w.note || "none"}</li>
       </ul>
     </section>
-    <section className="osec" aria-label="Status history">
+    <section className=${`osec ${panelOf("history", sub)}`} aria-label="Status history">
       <h3>Status history</h3>
-      ${data.history.length === 0 ? html`<p className="sub">No status changes recorded.</p>` : html`<table className="table">
-        <colgroup><col style=${{ width: 108 }} /><col /><col style=${{ width: 84 }} /></colgroup>
+      ${data.history.length === 0 ? html`<p className="sub">No status changes recorded.</p>` : html`<div className="tscroll"><table className="table fit rowcards">
         <thead><tr><th scope="col">Time</th><th scope="col">Status</th><th scope="col">By</th></tr></thead>
-        <tbody>${data.history.map((h, n) => html`<tr key=${n}><td>${when(h.at, data.timeZone)}</td><td>${h.status}</td><td>${h.by || "—"}</td></tr>`)}</tbody></table>`}
+        <tbody>${data.history.map((h, n) => html`<tr key=${n}><td>${when(h.at, data.timeZone)}</td><td>${h.status}</td><td>${h.by || "—"}</td></tr>`)}</tbody></table></div>`}
     </section>
   </aside>`;
 }
@@ -63,6 +60,7 @@ function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [refunding, setRefunding] = useState(false);
+  const [sub, setSub] = useState("items"); // the section a phone shows
   const load = useCallback(() => api(`/orders/${encodeURIComponent(orderId)}`).then((d) => { setData(d); setError(""); }).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
@@ -80,7 +78,8 @@ function App() {
           <${Metric} label="Status" value=${data.status} /><${Metric} label="Source" value=${data.source} />
           <${Metric} label="Placed" value=${when(data.placedAt, data.timeZone)} /><${Metric} label="Total" value=${fromDollars(data.total)} />
         </div>
-        <div className="odetail"><div className="oleft"><${Items} data=${data} /><${Payments} data=${data} /></div><${Info} data=${data} /></div>
+        <${SubTabs} tabs=${[["items", "Items"], ["payments", "Payments"], ["info", "Details"], ["history", "History"]]} value=${sub} onChange=${setSub} label="Order sections" />
+        <div className="odetail"><div className="oleft"><${Items} data=${data} sub=${sub} /><${Payments} data=${data} sub=${sub} /></div><${Info} data=${data} sub=${sub} /></div>
         ${refunding && html`<${Modal} title="Refund this order" wide onClose=${() => { setRefunding(false); load(); }}>
           <${RefundView} orderNumber=${data.orderNumber} onExit=${() => { setRefunding(false); load(); }} onDone=${load} />
         <//>`}

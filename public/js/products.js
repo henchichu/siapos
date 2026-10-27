@@ -8,7 +8,7 @@ function Tabs({ tab, onTab }) {
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;
 }
 
-function Filters({ categories, category, setCategory, query, setQuery, children }) {
+function ProductFilters({ categories, category, setCategory, query, setQuery, children }) {
   return html`<div className="pfilters">
     <select className="select" aria-label="Category" value=${category} onChange=${(e) => setCategory(e.target.value)}>
       <option value="">All categories</option>${categories.map((c) => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}</select>
@@ -24,14 +24,14 @@ function ReadOnly({ data }) {
   const [query, setQuery] = useState("");
   const rows = data.products.filter((p) => matches(p, category, query));
   return html`<section className="pview" aria-label="Products">
-    <header className="phead"><h2>Products</h2><${Filters} categories=${data.categories} category=${category} setCategory=${setCategory} query=${query} setQuery=${setQuery} /></header>
-    <table className="table ro">
-      <colgroup><col /><col style=${{ width: 124 }} /><col style=${{ width: 220 }} /><col style=${{ width: 108 }} /><col style=${{ width: 150 }} /></colgroup>
+    <header className="phead"><h2>Products</h2><div className="cardtools"><span className="filterslot"></span></div>
+      <${Filters} popup active=${(category ? 1 : 0) + (query.trim() ? 1 : 0)}><${ProductFilters} categories=${data.categories} category=${category} setCategory=${setCategory} query=${query} setQuery=${setQuery} /><//></header>
+    <div className="tscroll"><table className="table ro fit rowcards">
       <thead><tr><th>Product</th><th>Sizes</th><th>Category</th><th className="r">Price from</th><th className="r">Available</th></tr></thead>
       <tbody>${rows.map((p) => html`<tr key=${p.id}><td>${p.name}</td><td>${p.sizes} ${p.sizes === 1 ? "size" : "sizes"}</td><td>${p.category || "—"}</td>
         <td className="r">${usd(p.priceFrom)}</td><td className="r">${p.available ? "yes" : "no"}</td></tr>`)}
         ${!rows.length && html`<tr><td colSpan="5">No products match.</td></tr>`}</tbody>
-    </table>
+    </table></div>
   </section>`;
 }
 
@@ -75,11 +75,11 @@ function ProductsTab({ data, reload }) {
   return html`<div className="split">
     <section className="pview grow" aria-label="Products">
       <header className="phead"><h2>Products</h2>
-        <${Filters} categories=${data.categories} category=${category} setCategory=${setCategory} query=${query} setQuery=${setQuery}>
-          <button className="pbtn" onClick=${() => show(BLANK)}>Add product</button><//></header>
+        <${Filters} popup active=${(category ? 1 : 0) + (query.trim() ? 1 : 0)}>
+          <${ProductFilters} categories=${data.categories} category=${category} setCategory=${setCategory} query=${query} setQuery=${setQuery} /><//>
+        <div className="cardtools"><button className="pbtn" onClick=${() => show(BLANK)}>Add product</button><span className="filterslot"></span></div></header>
       ${note && html`<p className="status" role="status">${note}</p>`}
-      <table className="table mg">
-        <colgroup><col /><col style=${{ width: 84 }} /><col style=${{ width: 70 }} /><col style=${{ width: 58 }} /><col style=${{ width: 48 }} /><col style=${{ width: 164 }} /></colgroup>
+      <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Product</th><th>Category</th><th className="r">Price from</th><th className="r">Cost</th><th className="r">Margin</th><th>Actions</th></tr></thead>
         <tbody>${rows.map((p) => html`<tr key=${p.id} className=${p.active ? "" : "off"}>
           <td>${p.name}${!p.active && html`<span className="tag">inactive</span>`}</td><td>${p.category || "—"}</td><td className="r">${usd(p.priceFrom)}</td>
@@ -87,9 +87,9 @@ function ProductsTab({ data, reload }) {
           <td><div className="acts"><button className="act" onClick=${() => show({ ...p, categoryId: p.categoryId || "" })}>Edit</button>
             <button className=${p.active ? "act danger" : "act"} onClick=${() => toggle(p)}>${p.active ? "Deactivate" : "Activate"}</button></div></td></tr>`)}
           ${!rows.length && html`<tr><td colSpan="6">No products match.</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </section>
-    ${open && html`<aside className="pform pside" aria-label=${form.id ? "Edit product" : "Add product"}>
+    ${open && html`<${Sheet} popup title=${form.id ? "Edit product" : "Add product"} onClose=${clear}>
       <h2>${form.id ? "Edit product" : "Add product"}</h2>
       <label className="pf"><b>Name</b><input className="field" maxLength="150" value=${form.name} onChange=${(e) => set({ name: e.target.value })} /></label>
       <label className="pf"><b>Description</b><input className="field" value=${form.description || ""} onChange=${(e) => set({ description: e.target.value })} /></label>
@@ -104,7 +104,7 @@ function ProductsTab({ data, reload }) {
       <label className="check"><input type="checkbox" checked=${form.active} onChange=${(e) => set({ active: e.target.checked })} /> Active (shown on the register and online menu)</label>
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" disabled=${busy} onClick=${save}>Save</button><button className="pbtn outline" onClick=${clear}>Clear</button></div>
-    </aside>`}
+    <//>`}
   </div>`;
 }
 
@@ -165,17 +165,16 @@ function SizesTab({ products }) {
         <div className="pfilters"><select className="select" aria-label="Product" value=${productId} onChange=${(e) => setProductId(e.target.value)}>
           ${products.map((p) => html`<option key=${p.id} value=${p.id}>${p.name}</option>`)}</select>
           <button className="pbtn" onClick=${() => { closePanel(); setPanel(true); }}>Add size</button></div></header>
-      <table className="table mg">
-        <colgroup><col /><col style=${{ width: 70 }} /><col style=${{ width: 56 }} /><col style=${{ width: 92 }} /><col style=${{ width: 62 }} /><col style=${{ width: 66 }} /></colgroup>
+      <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Size</th><th>SKU</th><th className="r">Price</th><th>Tax category</th><th>Recipe</th><th></th></tr></thead>
         <tbody>${(data?.sizes || []).map((s) => html`<tr key=${s.id} className=${size?.id === s.id ? "sel" : ""}>
           <td>${s.name}</td><td>${s.sku}</td><td className="r">${usd(s.price)}</td><td>${s.taxCategory}</td>
           <td className=${s.recipeItems ? "" : "strong"}>${s.recipeItems ? `${s.recipeItems} items` : "Missing"}</td>
           <td><button className="act" onClick=${() => pickSize(s)}>Edit</button></td></tr>`)}
           ${data && !data.sizes.length && html`<tr><td colSpan="6">No sizes yet.</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </section>
-    ${panel && html`<div className="pside wide stack">
+    ${panel && html`<${Sheet} popup wide title=${form.id ? "Edit size" : "Add size"} onClose=${closePanel}>
       <section className="pform" aria-label=${form.id ? "Edit size" : "Add size"}>
         <h3>${form.id ? "Edit size" : "Add size"}</h3>
         <div className="row2"><label className="pf grow"><b>Size name</b><input className="field" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -189,13 +188,12 @@ function SizesTab({ products }) {
       </section>
       ${size && html`<section className="pform recipe" aria-label="Recipe">
         <h2>Recipe for ${size.name}</h2>
-        <table className="table mg">
-          <colgroup><col /><col style=${{ width: 60 }} /><col style=${{ width: 44 }} /><col style=${{ width: 92 }} /></colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards">
           <thead><tr><th>Stock item</th><th className="r">Quantity</th><th>Unit</th><th></th></tr></thead>
           <tbody>${lines.map((l) => html`<tr key=${l.stockItemId}><td>${stockOf(l.stockItemId)?.name}</td><td className="r">${l.quantity}</td><td>${stockOf(l.stockItemId)?.unit}</td>
             <td><button className="act" onClick=${() => setLines(lines.filter((x) => x !== l))}>Remove</button></td></tr>`)}
             ${!lines.length && html`<tr><td colSpan="4">No stock items yet.</td></tr>`}</tbody>
-        </table>
+        </table></div>
         <div className="addrow">
           <select className="select grow" aria-label="Stock item" value=${add.stockItemId} onChange=${(e) => setAdd({ ...add, stockItemId: e.target.value })}>
             <option value="">Stock item</option>${stock.map((s) => html`<option key=${s.id} value=${s.id}>${s.name}</option>`)}</select>
@@ -206,7 +204,7 @@ function SizesTab({ products }) {
         <${Message} msg=${recipeMsg} dashed />
         <button className="pbtn block" onClick=${saveRecipe}>Save recipe</button>
       </section>`}
-    </div>`}
+    <//>`}
   </div>`;
 }
 
@@ -249,29 +247,27 @@ function OptionsTab({ data, reload }) {
 
   return html`<div className="split">
     <section className="pview grow" aria-label="Option groups">
-      <header className="phead"><h2>Option groups</h2><button className="pbtn" onClick=${() => show(BLANK_GROUP)}>Add group</button></header>
+      <header className="phead"><h2>Option groups</h2><div className="cardtools"><button className="pbtn" onClick=${() => show(BLANK_GROUP)}>Add group</button></div></header>
       ${note && html`<p className="status" role="status">${note}</p>`}
-      <table className="table mg">
-        <colgroup><col /><col style=${{ width: 78 }} /><col style=${{ width: 70 }} /><col style=${{ width: 66 }} /></colgroup>
+      <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Group</th><th>Customer picks</th><th>Offered on</th><th></th></tr></thead>
         <tbody>${data.groups.map((g) => html`<tr key=${g.id} className=${form.id === g.id ? "sel" : ""}><td>${g.name}</td><td>${picks(g.min, g.max)}</td>
           <td>${g.productIds.length} ${g.productIds.length === 1 ? "product" : "products"}</td>
           <td><button className="act" onClick=${() => show({ id: g.id, name: g.name, min: String(g.min), max: g.max == null ? "" : String(g.max), options: g.options, productIds: g.productIds })}>Edit</button></td></tr>`)}</tbody>
-      </table>
+      </table></div>
     </section>
-    ${open && html`<section className="pform pside wide" aria-label="Edit group">
+    ${open && html`<${Sheet} popup wide title=${form.id ? "Edit group" : "Add group"} onClose=${close}>
       <h2>${form.id ? "Edit group" : "Add group"}</h2>
       <div className="row2"><label className="pf grow"><b>Group name</b><input className="field" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
         <label className="pf w200"><b>Fewest choices</b><input className="field" inputMode="numeric" value=${form.min} onChange=${(e) => setForm({ ...form, min: e.target.value.replace(/\D/g, "") })} /></label></div>
       <label className="pf"><b>Most choices (blank = no limit)</b><input className="field" inputMode="numeric" value=${form.max} onChange=${(e) => setForm({ ...form, max: e.target.value.replace(/\D/g, "") })} /></label>
       <h3>Options</h3>
-      <table className="table mg">
-        <colgroup><col style=${{ width: 136 }} /><col style=${{ width: 70 }} /><col /><col style=${{ width: 92 }} /></colgroup>
+      <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Option</th><th className="r">Price change</th><th>Effect on stock</th><th></th></tr></thead>
         <tbody>${form.options.map((o, i) => html`<tr key=${o.id || `new-${i}`}><td>${o.name}</td><td className="r">${plus(o.priceDelta)}</td><td>${effectText(o.effect)}</td>
           <td><button className="act" onClick=${() => setForm({ ...form, options: form.options.filter((x) => x !== o) })}>Remove</button></td></tr>`)}
           ${!form.options.length && html`<tr><td colSpan="4">No options yet.</td></tr>`}</tbody>
-      </table>
+      </table></div>
       <div className="addrow wrap">
         <input className="field w126" aria-label="New option" placeholder="New option" value=${opt.name} onChange=${(e) => setOpt({ ...opt, name: e.target.value })} />
         <input className="field w74" aria-label="Price change" placeholder="+0.00" inputMode="decimal" value=${opt.priceDelta} onChange=${(e) => setOpt({ ...opt, priceDelta: e.target.value.replace(/[^\d.-]/g, "") })} />
@@ -286,7 +282,7 @@ function OptionsTab({ data, reload }) {
       <div className="pf"><b>Offered on products</b><${Multi} options=${data.products} value=${form.productIds} onChange=${(v) => setForm({ ...form, productIds: v })} empty="[one or more products]" /></div>
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" onClick=${save}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
-    </section>`}
+    <//>`}
   </div>`;
 }
 
@@ -314,11 +310,10 @@ function PromotionsTab({ data, reload }) {
   return html`<div className="split">
     <section className="pview grow" aria-label="Promotions">
       <header className="phead"><h2>Promotions</h2>
-        <div className="pfilters"><label className="check"><input type="checkbox" checked=${showEnded} onChange=${(e) => setShowEnded(e.target.checked)} /> Show ended</label>
-          <button className="pbtn" onClick=${() => show(BLANK_PROMO)}>Add promotion</button></div></header>
+        <${Filters} popup active=${showEnded ? 1 : 0}><div className="pfilters"><label className="check"><input type="checkbox" checked=${showEnded} onChange=${(e) => setShowEnded(e.target.checked)} /> Show ended</label></div><//>
+        <div className="cardtools"><button className="pbtn" onClick=${() => show(BLANK_PROMO)}>Add promotion</button><span className="filterslot"></span></div></header>
       ${note && html`<p className="status" role="status">${note}</p>`}
-      <table className="table mg">
-        <colgroup><col /><col style=${{ width: 100 }} /><col style=${{ width: 80 }} /><col style=${{ width: 90 }} /><col style=${{ width: 90 }} /><col style=${{ width: 76 }} /><col style=${{ width: 116 }} /></colgroup>
+      <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Promotion</th><th>Discount</th><th>Applies to</th><th>Starts</th><th>Ends</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((p) => html`<tr key=${p.id} className=${p.status === "Ended" ? "off" : ""}><td>${p.name}</td><td>${off(p)}</td>
           <td>${p.productIds.length} ${p.productIds.length === 1 ? "product" : "products"}</td><td>${dayOf(p.starts)}</td><td>${dayOf(p.ends)}</td><td>${p.status}</td>
@@ -326,9 +321,9 @@ function PromotionsTab({ data, reload }) {
             ${p.status !== "Ended" && html`<button className="act" onClick=${() => switchTo(p, "end")}>End</button>`}
             ${!p.active && html`<button className="act" onClick=${() => switchTo(p, "activate")}>Activate</button>`}</div></td></tr>`)}
           ${!rows.length && html`<tr><td colSpan="7">No promotions to show.</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </section>
-    ${open && html`<aside className="pform pside" aria-label=${form.id ? "Edit promotion" : "Add promotion"}>
+    ${open && html`<${Sheet} popup title=${form.id ? "Edit promotion" : "Add promotion"} onClose=${close}>
       <h2>${form.id ? "Edit promotion" : "Add promotion"}</h2>
       <label className="pf"><b>Name</b><input className="field" maxLength="100" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
       <div className="pf"><b>Discount type</b><div className="segs" role="radiogroup" aria-label="Discount type">
@@ -339,7 +334,7 @@ function PromotionsTab({ data, reload }) {
       <div className="pf"><b>Applies to products</b><${Multi} options=${data.products} value=${form.productIds} onChange=${(v) => setForm({ ...form, productIds: v })} empty="[one or more products]" /></div>
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" onClick=${save}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
-    </aside>`}
+    <//>`}
   </div>`;
 }
 

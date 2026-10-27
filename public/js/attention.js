@@ -1,18 +1,18 @@
 const qty = (n) => String(Math.round(n * 1000) / 1000);
 
 // One panel: title and how many, its table, and the button that goes where the work is done
-function Panel({ title, count, children, empty, action }) {
-  return html`<section className="panel" aria-label=${title}>
+function Panel({ title, count, children, empty, action, className = "" }) {
+  return html`<section className=${`panel ${className}`} aria-label=${title}>
     <header><h3>${title}</h3><span className="count" aria-label=${`${count} ${title}`}>${count}</span></header>
     ${count ? children : html`<p className="sub">${empty}</p>`}
     ${action}
   </section>`;
 }
 
-const Table = ({ cols, heads, children }) => html`<table className="table mg">
-  <colgroup>${cols.map((w, i) => html`<col key=${i} style=${w ? { width: w } : undefined} />`)}</colgroup>
+// Columns are sized by the browser from their content (shift.css, "fit"); class nw keeps a short value on one line
+const Table = ({ heads, children }) => html`<div className="tscroll"><table className="table mg fit rowcards">
   <thead><tr>${heads.map(([h, right], i) => html`<th key=${i} className=${right ? "r" : ""}>${h}</th>`)}</tr></thead>
-  <tbody>${children}</tbody></table>`;
+  <tbody>${children}</tbody></table></div>`;
 
 // A manager answers the refunds that are waiting: Approve needs their number and PIN, Reject doesn't
 function ReviewRefunds({ onClose, onChanged }) {
@@ -56,35 +56,40 @@ function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [review, setReview] = useState(false);
+  const [tab, setTab] = useState(""); // the panel a phone shows
   const load = useCallback(() => api("/attention").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
   const { losses, pendingDeliveries, timecards, refunds } = data || {};
+  const tabs = [losses && ["losses", "Losses", losses.count], pendingDeliveries && ["deliveries", "Deliveries", pendingDeliveries.count],
+    timecards && ["timecards", "Timecards", timecards.count], refunds && ["refunds", "Refunds", refunds.count]].filter(Boolean);
+  const shown = tabs.some(([k]) => k === tab) ? tab : tabs[0]?.[0];
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Needs attention" />
     <section className="main scrolls" aria-label="Needs attention">
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <header className="phead heading"><${PageTitle}>Needs attention<//><span className="sub">${data.location} · today</span></header>
+        <${SubTabs} tabs=${tabs} value=${shown} onChange=${setTab} label="Needs attention sections" />
         <div className="attention">
-          ${losses && html`<${Panel} title="Stock losses reported today" count=${losses.count} empty="No losses reported today."
+          ${losses && html`<${Panel} title="Stock losses reported today" className=${panelOf("losses", shown)} count=${losses.count} empty="No losses reported today."
             action=${html`<a className="pbtn outline" href="/inventory.html">Open inventory</a>`}>
-            <${Table} cols=${[64, 120, 84, 0, 72]} heads=${[["Time"], ["Stock item"], ["Amount"], ["Reason"], ["By"]]}>
-              ${losses.rows.map((l, i) => html`<tr key=${i}><td>${clock(l.at, data.timeZone)}</td><td>${l.item}</td><td>${qty(l.amount)} ${l.unit}</td><td>${l.reason}</td><td>${l.by || "—"}</td></tr>`)}<//>
+            <${Table} heads=${[["Time"], ["Stock item"], ["Amount"], ["Reason"], ["By"]]}>
+              ${losses.rows.map((l, i) => html`<tr key=${i}><td className="nw">${clock(l.at, data.timeZone)}</td><td>${l.item}</td><td className="nw">${qty(l.amount)} ${l.unit}</td><td>${l.reason}</td><td className="nw">${l.by || "—"}</td></tr>`)}<//>
           <//>`}
-          ${pendingDeliveries && html`<${Panel} title="Pending deliveries" count=${pendingDeliveries.count} empty="No deliveries are pending."
+          ${pendingDeliveries && html`<${Panel} title="Pending deliveries" className=${panelOf("deliveries", shown)} count=${pendingDeliveries.count} empty="No deliveries are pending."
             action=${html`<a className="pbtn outline" href="/inventory.html#delivery">Receive delivery</a>`}>
-            <${Table} cols=${[100, 0, 90, 110]} heads=${[["Purchase order"], ["Stock item / supplier"], ["Quantity", true], ["Status"]]}>
-              ${pendingDeliveries.rows.map((p) => html`<tr key=${p.id}><td>${p.orderNumber}</td><td>${p.item}<div className="sub">${p.supplier || "No supplier assigned"}</div></td><td className="r">${qty(p.quantity)} ${p.unit}</td><td>${p.status}</td></tr>`)}<//>
+            <${Table} heads=${[["Purchase order"], ["Stock item / supplier"], ["Quantity", true], ["Status"]]}>
+              ${pendingDeliveries.rows.map((p) => html`<tr key=${p.id}><td className="nw">${p.orderNumber}</td><td>${p.item}<div className="sub">${p.supplier || "No supplier assigned"}</div></td><td className="r">${qty(p.quantity)} ${p.unit}</td><td className="nw">${p.status}</td></tr>`)}<//>
           <//>`}
-          ${timecards && html`<${Panel} title="Timecards waiting for approval" count=${timecards.count} empty="No timecards are waiting."
+          ${timecards && html`<${Panel} title="Timecards waiting for approval" className=${panelOf("timecards", shown)} count=${timecards.count} empty="No timecards are waiting."
             action=${html`<a className="pbtn outline" href=${`/shift.html${timecards.periodId ? `?payPeriodId=${timecards.periodId}` : ""}#team`}>Review timecards</a>`}>
-            <${Table} cols=${[0, 110, 64]} heads=${[["Employee"], ["Date"], ["Hours", true]]}>
-              ${timecards.rows.map((c, i) => html`<tr key=${i}><td>${c.employee}</td><td>${dayOf(c.date)}</td><td className="r">${c.hours.toFixed(2)}</td></tr>`)}<//>
+            <${Table} heads=${[["Employee"], ["Date"], ["Hours", true]]}>
+              ${timecards.rows.map((c, i) => html`<tr key=${i}><td>${c.employee}</td><td className="nw">${dayOf(c.date)}</td><td className="r">${c.hours.toFixed(2)}</td></tr>`)}<//>
           <//>`}
-          ${refunds && html`<${Panel} title="Refunds waiting for an override" count=${refunds.count} empty="No refunds are waiting."
+          ${refunds && html`<${Panel} title="Refunds waiting for an override" className=${panelOf("refunds", shown)} count=${refunds.count} empty="No refunds are waiting."
             action=${refunds.count > 0 && html`<button className="pbtn outline" onClick=${() => setReview(true)}>Review refund</button>`}>
-            <${Table} cols=${[64, 84, 90, 0]} heads=${[["Order"], ["Amount", true], ["Asked by"], ["Why"]]}>
-              ${refunds.rows.map((r, i) => html`<tr key=${i}><td>${r.orderNumber}</td><td className="r">${fromDollars(r.amount)}</td><td>${r.askedBy}</td><td>${r.why}</td></tr>`)}<//>
+            <${Table} heads=${[["Order"], ["Amount", true], ["Asked by"], ["Why"]]}>
+              ${refunds.rows.map((r, i) => html`<tr key=${i}><td className="nw">${r.orderNumber}</td><td className="r">${fromDollars(r.amount)}</td><td className="nw">${r.askedBy}</td><td>${r.why}</td></tr>`)}<//>
           <//>`}
         </div>
         ${review && html`<${ReviewRefunds} onClose=${() => { setReview(false); load(); }} onChanged=${load} />`}

@@ -33,6 +33,7 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
   const [lowOnly, setLowOnly] = useState(window.location.hash === "#low"); // Keep existing direct low-stock links working.
   const [form, setForm] = useState(null); // null = the form column is away; a row action brings it in
   const [adding, setAdding] = useState(null); // the "Add stock item" form, in the same column
+  const [sub, setSub] = useState("items"); // the panel a phone shows
   const [msg, setMsg] = useState(null);
   const [note, setNote] = useState("");
   const q = query.trim().toLowerCase();
@@ -78,18 +79,20 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
 
   return html`<div className="split inv-split">
     <div className="stack grow">
-      <section className="pview" aria-label="Inventory">
-        <header className="phead"><h2>Inventory</h2>${data.canChange && html`<button className="pbtn" onClick=${showAdd}>Add stock item</button>`}</header>
-        <div className="pfilters wrap">
-          <${SupplierSelect} data=${data} value=${supplier} onChange=${setSupplier} showInactive=${showInactive} />
-          <input className="field" aria-label="Stock item name" placeholder="Stock item name" value=${query} onChange=${(e) => setQuery(e.target.value)} />
-          <label className="check"><input type="checkbox" checked=${lowOnly} onChange=${(e) => setLowOnly(e.target.checked)} /> Low stock only</label>
-          <${ShowInactive} checked=${showInactive} onChange=${setShowInactive} />
-        </div>
+      <${SubTabs} tabs=${[["items", "Items"], ["moves", "Movements"]]} value=${sub} onChange=${setSub} label="Stock sections" />
+      <section className=${`pview ${panelOf("items", sub)}`} aria-label="Inventory">
+        <header className="phead"><h2>Inventory</h2><div className="cardtools">${data.canChange && html`<button className="pbtn" onClick=${showAdd}>Add stock item</button>`}<span className="filterslot"></span></div></header>
+        <${Filters} popup active=${(supplier ? 1 : 0) + (query.trim() ? 1 : 0) + (lowOnly ? 1 : 0) + (showInactive ? 1 : 0)}>
+          <div className="pfilters wrap">
+            <${SupplierSelect} data=${data} value=${supplier} onChange=${setSupplier} showInactive=${showInactive} />
+            <input className="field" aria-label="Stock item name" placeholder="Stock item name" value=${query} onChange=${(e) => setQuery(e.target.value)} />
+            <label className="check"><input type="checkbox" checked=${lowOnly} onChange=${(e) => setLowOnly(e.target.checked)} /> Low stock only</label>
+            <${ShowInactive} checked=${showInactive} onChange=${setShowInactive} />
+          </div>
+        <//>
         ${note && html`<p className="status" role="status">${note}</p>`}
-        <div className="tscroll"><table className=${data.canChange ? "table mg t-stock" : "table mg t-stock noacts"}>
-          <colgroup><col style=${{ width: "24%" }} /><col style=${{ width: "13%" }} /><col style=${{ width: "12%" }} /><col style=${{ width: "12%" }} /><col style=${{ width: "11%" }} />${data.canChange && html`<col style=${{ width: 260 }} />`}</colgroup>
-          <thead><tr><th>Stock item</th><th className="r">On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
+        <div className="tscroll"><table className="table mg fit rowcards t-stock">
+<thead><tr><th>Stock item</th><th className="r">On hand</th><th className="r">Reorder at</th><th className="r">Avg cost</th><th>Status</th>${data.canChange && html`<th>Actions</th>`}</tr></thead>
           <tbody>${rows.map((r) => html`<tr key=${r.id} className=${`${form?.stockItemId === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
             <td>${r.name}${!r.active && html`<span className="tag">deactivated</span>`}</td><td className="r">${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)}</td><td className="r">${avgMoney(r.avgCost)}</td>
             <td className=${r.active && isLow(r) ? "state low" : "state"}>${!r.active ? "—" : html`<${Status} tone=${isLow(r) ? "warn" : "on"}>${isLow(r) ? "LOW" : "OK"}<//>`}</td>
@@ -100,18 +103,17 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
             ${!rows.length && html`<tr><td colSpan="6">No stock items match.</td></tr>`}</tbody>
         </table></div>
       </section>
-      <section className="pview" aria-label="Recent stock movements">
+      <section className=${`pview ${panelOf("moves", sub)}`} aria-label="Recent stock movements">
         <h2>Recent stock movements</h2>
-        <div className="tscroll"><table className="table mg t-moves">
-          <colgroup><col style=${{ width: "19%" }} /><col style=${{ width: "21%" }} /><col style=${{ width: "14%" }} /><col style=${{ width: "15%" }} /><col style=${{ width: "18%" }} /><col style=${{ width: "13%" }} /></colgroup>
-          <thead><tr><th>Date and time</th><th>Stock item</th><th>Type</th><th className="r">Change</th><th>Employee</th><th className="r">Order</th></tr></thead>
-          <tbody>${data.movements.map((m, i) => html`<tr key=${i}><td>${when(m.at, data.location.timeZone)}</td><td>${m.item}</td><td>${m.type}</td>
+        <div className="tscroll"><table className="table mg fit rowcards t-moves">
+<thead><tr><th>Date and time</th><th>Stock item</th><th>Type</th><th className="r">Change</th><th>Employee</th><th className="r">Order</th></tr></thead>
+          <tbody>${data.movements.map((m, i) => html`<tr key=${i}><td className="nw">${when(m.at, data.location.timeZone)}</td><td>${m.item}</td><td>${m.type}</td>
             <td className="r">${delta(m.delta)} ${m.unit}</td><td>${m.by || "—"}</td><td className="r">${m.orderNumber ?? "—"}</td></tr>`)}
             ${!data.movements.length && html`<tr><td colSpan="6">No movements yet.</td></tr>`}</tbody>
         </table></div>
       </section>
     </div>
-    ${adding && html`<aside className="pform pside" ref=${side} aria-label="Add stock item">
+    ${adding && html`<${Sheet} popup title="Add stock item" innerRef=${side} onClose=${close}>
       <h2>Add stock item</h2>
       <label className="pf"><b>Name</b><input className="field" maxLength="150" value=${adding.name} onChange=${(e) => setNew({ name: e.target.value })} /></label>
       <label className="pf"><b>Unit</b><select className="select" value=${adding.unitCode} onChange=${(e) => setNew({ unitCode: e.target.value })}>
@@ -120,8 +122,8 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
       <label className="pf"><b>Supplier (optional)</b><${SupplierSelect} data=${data} value=${adding.supplierId} onChange=${(v) => setNew({ supplierId: v })} empty="No supplier" label="Supplier for the new item" /></label>
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" onClick=${saveItem}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
-    </aside>`}
-    ${form && html`<aside className="pform pside" ref=${side} aria-label="Record stock change">
+    <//>`}
+    ${form && html`<${Sheet} popup title="Record stock change" innerRef=${side} onClose=${close}>
       <h2>Record stock change</h2>
       <label className="pf"><b>Stock item</b><select className="select" value=${form.stockItemId} onChange=${(e) => pickItem(e.target.value)}>
         ${data.items.map((i) => html`<option key=${i.id} value=${i.id}>${i.name}</option>`)}</select></label>
@@ -138,12 +140,13 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
       <label className="pf"><b>Note (optional)</b><input className="field" maxLength="255" value=${form.note} onChange=${(e) => set({ note: e.target.value })} /></label>
       <${Message} msg=${msg} dashed />
       <div className="pactions"><button className="pbtn" onClick=${save}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
-    </aside>`}
+    <//>`}
   </div>`;
 }
 
 function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
   const [pendingId, setPendingId] = useState("");
+  const [sub, setSub] = useState("receive"); // the panel a phone shows
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [pendingExpanded, setPendingExpanded] = useState(false);
   const [supplierId, setSupplierId] = useState("");
@@ -178,6 +181,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
     setBusy(false);
   };
   const prepare = (p) => {
+    setSub("receive");
     setPendingId(p.id); setSupplierId(p.supplierId || ""); setDate(data.location.today); setInvoice("");
     setLines([{ stockItemId: p.stockItemId, quantity: qty(p.quantity), total: p.unitCost == null ? "" : (p.quantity * p.unitCost).toFixed(2) }]);
     setMsg({ kind: "ok", text: p.status === "Needs supplier" ? `Choose a supplier to place ${p.orderNumber}.` : `Receive ${p.orderNumber}: ${p.item}. Check the quantity and actual cost.` });
@@ -210,8 +214,10 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
     setBusy(false);
   };
 
-  return html`<div className="split inv-split">
-    <section className="pview wide-form" aria-label="Receive delivery">
+  return html`<${React.Fragment}>
+  <${SubTabs} tabs=${[["receive", "Receive"], ["recent", "Recent"], ["pending", "Pending", pending.length]]} value=${sub} onChange=${setSub} label="Delivery sections" />
+  <div className="split inv-split">
+    <section className=${`pview wide-form ${panelOf("receive", sub)}`} aria-label="Receive delivery">
       <h2>Receive delivery</h2>
       <p className="sub">Receiving at ${data.location.name}</p>
       ${pendingId && html`<p className="status" role="status">${selectedOrder ? `${selectedOrder.orderNumber}: ${selectedOrder.status}. Stock updates when the delivery is received.` : "This order is no longer pending. Clear this form and select another delivery."}</p>`}
@@ -229,9 +235,8 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         <div className="pactions left"><button className="pbtn" onClick=${saveSupplier}>Save supplier</button><button className="pbtn outline" onClick=${() => setNewSupplier(null)}>Cancel</button></div>
       </div>`}
       <label className="pf"><b>Invoice number</b><input className="field" maxLength="50" value=${invoice} onChange=${(e) => setInvoice(e.target.value)} /></label>
-      <div className="tscroll"><table className="table mg dlines t-lines">
-        <colgroup><col /><col style=${{ width: 44 }} /><col style=${{ width: 106 }} /><col style=${{ width: 96 }} /><col style=${{ width: 104 }} /><col style=${{ width: 84 }} /></colgroup>
-        <thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th className="r">Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
+      <div className="tscroll"><table className="table mg fit rowcards dlines t-lines">
+<thead><tr><th>Stock item</th><th>Unit</th><th>Quantity received</th><th className="r">Total paid</th><th className="r">Unit cost</th><th></th></tr></thead>
         <tbody>${lines.map((l) => html`<tr key=${l.stockItemId}><td>${item(l.stockItemId)?.name}</td><td>${item(l.stockItemId)?.unit}</td>
           <td><input className="field cell" aria-label=${`Quantity of ${item(l.stockItemId)?.name}`} inputMode="decimal" value=${l.quantity} onChange=${(e) => setLine(l.stockItemId, { quantity: e.target.value.replace(/[^\d.]/g, "") })} /></td>
           <td className="r"><input className="field cell" aria-label=${`Total paid for ${item(l.stockItemId)?.name}`} inputMode="decimal" placeholder=${quoteHint(l)} value=${l.total} onChange=${(e) => setLine(l.stockItemId, { total: e.target.value.replace(/[^\d.]/g, "") })} /></td>
@@ -251,7 +256,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         : html`<button className="pbtn" disabled=${busy || (pendingId && !selectedOrder) || (chosen && !chosen.active)} onClick=${receive}>Receive into stock</button>`}<button className="pbtn outline" onClick=${() => { clear(); setMsg(null); }}>Clear</button></div>
     </section>
     <div className="stack grow delivery-dashboard">
-    <section className="pview delivery-panel" aria-label="Recent deliveries">
+    <section className=${`pview delivery-panel ${panelOf("recent", sub)}`} aria-label="Recent deliveries">
       <header className="phead"><h3>Recent deliveries</h3>
         ${data.deliveries.length > 3 && html`<button className="act delivery-expand" aria-label=${recentExpanded ? "Collapse recent deliveries" : "Expand recent deliveries"} aria-expanded=${recentExpanded} aria-controls="recent-deliveries-list" onClick=${() => setRecentExpanded((v) => !v)}>
           <span>${recentExpanded ? "Show less" : `Show all (${data.deliveries.length})`}</span>
@@ -259,15 +264,14 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         </button>`}
       </header>
       <div id="recent-deliveries-list" className=${recentExpanded ? "delivery-list expanded" : "delivery-list"}>
-      <table className="table mg t-recent">
-        <colgroup><col style=${{ width: 90 }} /><col /><col style=${{ width: 40 }} /><col style=${{ width: 70 }} /></colgroup>
-        <thead><tr><th>Date</th><th>Supplier / purchase order</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
-        <tbody>${(recentExpanded ? data.deliveries : data.deliveries.slice(0, 3)).map((d) => html`<tr key=${d.id}><td>${dayOf(d.date)}</td><td>${d.supplier}${d.orderNumber && html`<div className="sub">${d.orderNumber} · ${d.status}</div>`}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
+      <table className="table mg fit rowcards t-recent">
+<thead><tr><th>Date</th><th>Supplier / purchase order</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
+        <tbody>${(recentExpanded ? data.deliveries : data.deliveries.slice(0, 3)).map((d) => html`<tr key=${d.id}><td className="nw">${dayOf(d.date)}</td><td>${d.supplier}${d.orderNumber && html`<div className="sub">${d.orderNumber} · ${d.status}</div>`}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
           ${!data.deliveries.length && html`<tr><td colSpan="4">No deliveries yet.</td></tr>`}</tbody>
       </table>
       </div>
     </section>
-    <section className="pview delivery-panel" aria-label="Pending deliveries">
+    <section className=${`pview delivery-panel ${panelOf("pending", sub)}`} aria-label="Pending deliveries">
       <header className="phead"><h3>Pending deliveries</h3>
         <div className="delivery-heading-actions"><span className="tag">${pending.length} pending</span>
           ${pending.length > 3 && html`<button className="act delivery-expand" aria-label=${pendingExpanded ? "Collapse pending deliveries" : "Expand pending deliveries"} aria-expanded=${pendingExpanded} aria-controls="pending-deliveries-list" onClick=${() => setPendingExpanded((v) => !v)}>
@@ -277,9 +281,8 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
         </div>
       </header>
       <div id="pending-deliveries-list" className=${pendingExpanded ? "delivery-list expanded" : "delivery-list"}>
-      <table className="table mg pending-deliveries t-pending">
-        <colgroup><col /><col style=${{ width: 92 }} /><col style=${{ width: 80 }} /><col style=${{ width: 96 }} /></colgroup>
-        <thead><tr><th>Order / stock item / supplier</th><th>On hand / threshold</th><th>To receive</th><th>Action</th></tr></thead>
+      <table className="table mg fit rowcards pending-deliveries t-pending">
+<thead><tr><th>Order / stock item / supplier</th><th>On hand / threshold</th><th>To receive</th><th>Action</th></tr></thead>
         <tbody>${(pendingExpanded ? pending : pending.slice(0, 3)).map((p) => html`<tr key=${p.id} className=${pendingId === p.id ? "sel" : ""}>
           <td><b>${p.orderNumber}</b><div>${p.item}</div><div className="sub">${p.supplier || "Choose a supplier to place this order"}</div><span className="tag">${p.status}</span>${!p.active && html`<span className="tag">deactivated</span>`}</td>
           <td>${qty(p.onHand)} / ${qty(p.reorderAt)} ${p.unit}</td><td>${qty(p.quantity)} ${p.unit}</td>
@@ -289,7 +292,8 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       </div>
     </section>
     </div>
-  </div>`;
+  </div>
+  <//>`;
 }
 
 function CountTab({ data, reload }) {
@@ -321,12 +325,11 @@ function CountTab({ data, reload }) {
 
   return html`<section className="pview count" aria-label="Stock count">
     <header className="phead"><h2>Stock count</h2>
-      <div className="pfilters wrap">
-        <label className="pf"><b>Supplier</b><${SupplierSelect} data=${data} value=${supplier} onChange=${setSupplier} showInactive=${false} /></label>
-        <button className="pbtn outline noprint" onClick=${() => window.print()}>Print count sheet</button></div></header>
-    <div className="tscroll"><table className="table mg t-count">
-      <colgroup><col /><col style=${{ width: 70 }} /><col style=${{ width: 86 }} /><col style=${{ width: 130 }} /><col style=${{ width: 84 }} /><col style=${{ width: 84 }} /></colgroup>
-      <thead><tr><th>Stock item</th><th>Unit</th><th className="r">In system</th><th>Counted</th><th className="r">Difference</th><th className="r">Value</th></tr></thead>
+      <div className="cardtools"><button className="pbtn outline noprint" aria-label="Print count sheet" onClick=${() => window.print()}>Print<span className="hide-phone"> count sheet</span></button><span className="filterslot"></span></div></header>
+    <${Filters} popup active=${supplier ? 1 : 0}><div className="pfilters wrap">
+      <label className="pf"><b>Supplier</b><${SupplierSelect} data=${data} value=${supplier} onChange=${setSupplier} showInactive=${false} /></label></div><//>
+    <div className="tscroll"><table className="table mg fit rowcards t-count">
+<thead><tr><th>Stock item</th><th>Unit</th><th className="r">In system</th><th>Counted</th><th className="r">Difference</th><th className="r">Value</th></tr></thead>
       <tbody>${figures.map(({ r, diff, value }) => html`<tr key=${r.id}><td>${r.name}</td><td>${r.unit}</td><td className="r">${qty(r.onHand)}</td>
         <td><input className="field cell" aria-label=${`Counted ${r.name}`} inputMode="decimal" value=${counted[r.id] ?? ""} onChange=${(e) => setCounted({ ...counted, [r.id]: e.target.value.replace(/[^\d.]/g, "") })} /></td>
         <td className="r">${diff == null ? "[±0]" : delta(diff)}</td><td className="r">${value == null ? "[$0.00]" : moneyDelta(value)}</td></tr>`)}
@@ -375,11 +378,11 @@ function App() {
   return html`<div className="app kitchen">
     <${Sidebar} me=${me} current="Inventory" />
     <section className="main scrolls" aria-label="Inventory">
-      <${PageTitle}>Inventory<//>
+      <${PageTitle} place=${data?.location.name}>Inventory<//>
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <div className="inventory-toolbar">
           <${Tabs} tab=${tab} onTab=${go} />
-          <${LocationSelect} data=${data} onLocation=${load} />
+          <${ChangeLocation} show=${data.locations.length > 1} popup=${{ options: data.locations.map((l) => [l.id, l.name]), value: data.location.id, onChange: load }}><${LocationSelect} data=${data} onLocation=${load} /><//>
         </div>
         ${tab === "stock" && html`<${StockTab} key=${data.location.id} data=${data} reload=${() => load()} showInactive=${showInactive} setShowInactive=${setShowInactive} />`}
         ${tab === "delivery" && html`<${DeliveryTab} key=${data.location.id} data=${data} reload=${() => load()} showInactive=${showInactive} setShowInactive=${setShowInactive} />`}

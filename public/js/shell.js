@@ -1,6 +1,6 @@
 // Shared by every page: React helpers, the left navigation, dialogs and sign-out. Load before the page's own script.
 const html = htm.bind(React.createElement);
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 // Menu items and Home tiles with a page of their own; every other one opens the generic section page
 const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html", Rewards: "/rewards.html" };
@@ -52,9 +52,10 @@ const CardIcon = ({ label }) => html`<span className="cicon"><${Icon} name=${(CA
 const Status = ({ tone = "on", children }) => html`<span className=${`dot ${tone}`}>${children}</span>`;
 
 // The page header: this location in small caps above the page's title
-function PageTitle({ children }) {
+// place: the location the page is showing, when that is not the one signed in to (Inventory's Change location)
+function PageTitle({ place, children }) {
   const me = useMe();
-  return html`<div className="ptitle"><p className="place"><${Icon} name="pin" />${me?.locationName || " "}</p><h2>${children}</h2></div>`;
+  return html`<div className="ptitle"><p className="place"><${Icon} name="pin" />${place || me?.locationName || " "}</p><h2>${children}</h2><div className="titleaction"></div></div>`;
 }
 
 const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join("").toUpperCase();
@@ -207,10 +208,10 @@ function SuccessPanel({ name }) {
   return html`<section className="success" role="status">Success: ${name} view initialized successfully.</section>`;
 }
 
-function Modal({ title, onClose, wide, children }) {
+function Modal({ title, onClose, wide, className = "", children }) {
   const ref = useRef();
   useEffect(() => ref.current.showModal(), []); // native <dialog>: focus trap and Esc come with it
-  return html`<dialog ref=${ref} className=${wide ? "modal wide" : "modal"} aria-label=${title}
+  return html`<dialog ref=${ref} className=${`modal${wide ? " wide" : ""}${className ? " " + className : ""}`} aria-label=${title}
       onCancel=${(e) => { e.preventDefault(); onClose(); }}>
     <h2>${title}</h2>${children}
   </dialog>`;
@@ -262,3 +263,102 @@ function IdleWarning() {
 document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/css/idle.css" }));
 const idleRoot = document.body.appendChild(document.createElement("div"));
 if (!DEMO) { ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity
+
+// Card layout (shift.css, ".rowcards"): below 760px each row becomes a card and every cell shows its column header from data-label.
+// Set here from the header row, so no table has to repeat its headings, and again whenever a table's rows change.
+let labelling = 0;
+const labelCells = () => { labelling = 0; document.querySelectorAll("table.rowcards").forEach((t) => {
+  const heads = [...(t.tHead?.rows[0]?.cells || [])].map((c) => c.textContent.trim());
+  for (const row of [...(t.tBodies[0]?.rows || []), ...(t.tFoot?.rows || [])]) [...row.cells].forEach((c, i) => { if (c.colSpan === 1 && c.dataset.label !== (heads[i] || "")) c.dataset.label = heads[i] || ""; });
+}); };
+new MutationObserver(() => { if (!labelling) labelling = requestAnimationFrame(labelCells); }).observe(document.body, { childList: true, subtree: true });
+
+// ---- Phone navigation: layers instead of one long scroll (styles in shift.css, all at 760px and below) ----
+// Sub-tabs show one panel of a page at a time, a Sheet is a form that covers the whole screen, and the Filters button
+// opens the page's filter controls in a sheet. Wider screens keep everything on the page as before.
+const PHONE = "(max-width: 760px)";
+function usePhone() {
+  const q = window.matchMedia ? window.matchMedia(PHONE) : { matches: false, addEventListener() {}, removeEventListener() {} }; // jsdom has no media queries: never a phone
+  const [phone, setPhone] = useState(q.matches);
+  useEffect(() => { const f = () => setPhone(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []);
+  return phone;
+}
+
+// tabs: [[key, title, count?]]. The page gives each panel className "subpanel on" when its key is the shown one.
+function SubTabs({ tabs, value, onChange, label = "Sections" }) {
+  return html`<div className="subtabs" role="group" aria-label=${label}>${tabs.map(([key, title, n]) =>
+    html`<button key=${key} aria-pressed=${value === key} onClick=${() => onChange(key)}>${title}${n != null && html`<span className="badge">${n}</span>`}</button>`)}</div>`;
+}
+const panelOf = (key, shown) => (key === shown ? "subpanel on" : "subpanel");
+
+// A side form: in its column on a wide screen, a full-screen sheet with a Back button on a phone (Escape closes it too).
+// popup: on a phone this is a pop-up window (Modal) instead of a full-screen sheet; the page chooses per list.
+function Sheet({ title, onClose, innerRef, popup, wide, className = "", children, ...rest }) {
+  const phone = usePhone();
+  const el = useRef(null);
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    if (!phone || popup) return undefined;
+    el.current?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden"; // the page behind stays where it was
+    const onKey = (e) => { if (e.key === "Escape") close.current(); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", onKey); };
+  }, [phone, popup]);
+  if (popup && phone) return html`<${Modal} title=${title} onClose=${onClose} wide=${wide} className="popup">${children}<//>`;
+  return html`<aside ref=${(n) => { el.current = n; if (innerRef) innerRef.current = n; }} tabIndex="-1" className=${`pform pside sheet ${className}`}
+      role=${phone ? "dialog" : undefined} aria-modal=${phone ? "true" : undefined} aria-label=${title} ...${rest}>
+    <div className="sheethead"><button type="button" className="sheetback" onClick=${onClose}>‹ Back</button><span>${title}</span></div>
+    ${children}
+  </aside>`;
+}
+
+// The page's filter controls. Wide: the controls as they are. Phone: one Filters button (top right of the list, with how many are on)
+// that opens them in a sheet; the controls keep their state in the page, and a submit inside the sheet (Search) closes it.
+function Filters({ active = 0, popup, children }) {
+  const phone = usePhone();
+  const [open, setOpen] = useState(false);
+  const mark = useRef(null);
+  const [slot, setSlot] = useState(null);
+  // the button goes in the list's title row, beside its other buttons (the .filterslot in its header); a list with no such slot gets a row of its own
+  useLayoutEffect(() => { setSlot(mark.current?.closest(".pview, .results, .cards")?.querySelector(".filterslot") || mark.current?.parentElement?.querySelector(".filterslot") || null); }, [phone]);
+  if (!phone) return children;
+  const button = html`<button type="button" className="filterbtn" aria-haspopup="dialog" onClick=${() => setOpen(true)}>Filters${active > 0 && html`<span className="badge">${active}</span>`}</button>`;
+  return html`<${React.Fragment}>
+    <span ref=${mark} hidden></span>
+    ${slot ? ReactDOM.createPortal(button, slot) : html`<div className="filterbar">${button}</div>`}
+    ${open && html`<${Sheet} title="Filters" popup=${popup} onClose=${() => setOpen(false)}>
+      <div onSubmit=${() => setOpen(false)} onClick=${(e) => { if (e.target.closest("[data-apply]")) setOpen(false); }}>${children}</div>
+      ${popup ? html`<div className="btns"><button type="button" className="btn primary" onClick=${() => setOpen(false)}>Done</button></div>`
+        : html`<div className="pactions"><button type="button" className="pbtn" onClick=${() => setOpen(false)}>Done</button></div>`}
+    <//>`}
+  <//>`;
+}
+
+// The page's location choice. Wide: the dropdown where the page put it. Phone: a "Change location" button up in the page title, beside the
+// current location (the .titleaction slot PageTitle leaves), that opens the dropdown in a sheet; nothing when there is only one place to
+// choose. The button is drawn into the title (a portal), so the dropdown's state stays with the page's filters. Choosing applies as the page
+// already does; Done closes the sheet.
+// popup: { options: [[value, name]], value, onChange } shows the choices as buttons in a pop-up window like the sidebar's Switch location.
+function ChangeLocation({ show = true, popup, phoneOnly, children }) {
+  const phone = usePhone();
+  const [open, setOpen] = useState(false);
+  if (!phone) return phoneOnly ? null : children;
+  if (!show) return null;
+  const button = html`<button type="button" className="filterbtn" aria-haspopup="dialog" onClick=${() => setOpen(true)}>Change location</button>`;
+  const slot = document.querySelector(".titleaction");
+  return html`<${React.Fragment}>
+    ${slot ? ReactDOM.createPortal(button, slot) : html`<div className="filterbar">${button}</div>`}
+    ${open && popup && html`<${Modal} title="Change location" onClose=${() => setOpen(false)} className="popup">
+      <ul className="places">${popup.options.map(([value, name]) => html`<li key=${value}>
+        <button className=${`btn block ${value === popup.value ? "primary" : ""}`} aria-current=${value === popup.value ? "true" : undefined}
+          onClick=${() => { setOpen(false); if (value !== popup.value) popup.onChange(value); }}>${name}</button></li>`)}</ul>
+      <div className="btns"><button type="button" className="btn" onClick=${() => setOpen(false)}>Cancel</button></div>
+    <//>`}
+    ${open && !popup && html`<${Sheet} title="Change location" onClose=${() => setOpen(false)}>
+      <div className="pfilters">${children}</div>
+      <div className="pactions"><button type="button" className="pbtn" onClick=${() => setOpen(false)}>Done</button></div>
+    <//>`}
+  <//>`;
+}

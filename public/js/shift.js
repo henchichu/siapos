@@ -21,6 +21,7 @@ function Notices({ items, onDismiss }) {
 // ---- My shift --------------------------------------------------------------------------------------------------
 
 function MyShift({ data, reload }) {
+  const [sub, setSub] = useState("clock"); // the section a phone shows
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -35,8 +36,9 @@ function MyShift({ data, reload }) {
   };
 
   return html`<${React.Fragment}>
+    <${SubTabs} tabs=${[["clock", "Clock"], ["sales", "Sales"], ["hours", "Hours"]]} value=${sub} onChange=${setSub} label="My shift sections" />
     <div className="top">
-      <section className="clock" aria-label="Time clock">
+      <section className=${`clock ${panelOf("clock", sub)}`} aria-label="Time clock">
         <h3>Time clock</h3>
         <p className="since">${clockedIn ? `Clocked in since ${clock(open.clockInAt, tz)}` : "Not clocked in"}</p>
         <p className="where">${data.location}</p>
@@ -53,7 +55,7 @@ function MyShift({ data, reload }) {
         </div>
         <${Message} msg=${msg} dashed />
       </section>
-      <section className="sales" aria-label="Today's sales">
+      <section className=${`sales ${panelOf("sales", sub)}`} aria-label="Today's sales">
         <h3>Today's sales at ${data.location}</h3>
         <div className="stats">
           <div className="stat" style=${{ width: 130 }}><span>Orders</span><b>${data.sales.orders}</b><${CardIcon} label="Orders" /></div>
@@ -62,10 +64,9 @@ function MyShift({ data, reload }) {
         </div>
       </section>
     </div>
-    <section className="hours" aria-label="My hours">
+    <section className=${`hours ${panelOf("hours", sub)}`} aria-label="My hours">
       <header><h3>My hours</h3>${data.period && html`<p><span>Pay period</span><span>${dayOf(data.period.start)} to ${dayOf(data.period.end)}</span></p>`}</header>
-      <table className="table">
-        <colgroup><col style=${{ width: 90 }} /><col style=${{ width: 80 }} /><col style=${{ width: 80 }} /><col style=${{ width: 70 }} /><col style=${{ width: 60 }} /><col /></colgroup>
+      <div className="tscroll"><table className="table fit rowcards">
         <thead><tr><th>Date</th><th>Clock in</th><th>Clock out</th><th>Break</th><th>Hours</th><th>Status</th></tr></thead>
         <tbody>
           ${data.entries.map((r) => html`<tr key=${r.id}>
@@ -73,7 +74,7 @@ function MyShift({ data, reload }) {
             <td>${r.breakMinutes} min</td><td>${hrs(r.hours)}</td><td className="state">${r.status}</td></tr>`)}
           <tr><td>Total</td><td></td><td></td><td></td><td>${hrs(data.totalHours)}</td><td></td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p className="pay-line"><span>Hourly rate: ${data.rate == null ? "—" : `$${data.rate.toFixed(2)}`}</span><span>Estimated pay this period: ${money(data.estimatedCents)}</span></p>
     </section>
     ${confirm && html`<${Confirm} title="Clock out" text="Clock out and submit this shift for approval? You can't undo this."
@@ -106,6 +107,8 @@ function EditCard({ row, onClose, onSaved }) {
 }
 
 function Team({ onNotice }) {
+  const phone = usePhone();
+  const [sub, setSub] = useState("cards"); // the section a phone shows
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState({ payPeriodId: "", locationId: "all", status: "SUBMITTED" });
   const [editing, setEditing] = useState(null);
@@ -128,26 +131,29 @@ function Team({ onNotice }) {
   const { filters, rows, period, canApprove } = data;
 
   return html`<${React.Fragment}>
+    <${ChangeLocation} phoneOnly show=${filters.locations.length > 1} popup=${{ options: [["all", "All locations"], ...filters.locations.map((l) => [l.id, l.name])], value: draft.locationId, onChange: (v) => { const d = { ...draft, locationId: v }; setDraft(d); load(d); } }} />
+    <${SubTabs} tabs=${[["cards", "Timecards"], ["close", "Pay period"]]} value=${sub} onChange=${setSub} label="Team sections" />
+    <${Filters} popup active=${(draft.status !== "SUBMITTED" ? 1 : 0)}>
     <section className="filters" aria-label="Filters">
       <label className="wide">Pay period
         <select className="select" value=${draft.payPeriodId} onChange=${(e) => setDraft({ ...draft, payPeriodId: e.target.value })}>
           ${filters.periods.map((p) => html`<option key=${p.id} value=${p.id}>${dayOf(p.start)} to ${dayOf(p.end)}${p.closed ? " (closed)" : ""}</option>`)}</select></label>
-      <label className="loc">Location
-        <select className="select" value=${draft.locationId} onChange=${(e) => setDraft({ ...draft, locationId: e.target.value })}>
-          <option value="all">All locations</option>${filters.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select></label>
+      ${!phone && html`<label className="loc">Location
+          <select className="select" value=${draft.locationId} onChange=${(e) => setDraft({ ...draft, locationId: e.target.value })}>
+            <option value="all">All locations</option>${filters.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select></label>`}
       <label className="stat-sel">Status
         <select className="select" value=${draft.status} onChange=${(e) => setDraft({ ...draft, status: e.target.value })}>
           ${STATUSES.map(([v, label]) => html`<option key=${v} value=${v}>${label}</option>`)}</select></label>
-      <button className="btn primary" onClick=${() => load(draft)}>Show</button>
+      <button className="btn primary" data-apply onClick=${() => load(draft)}>Show</button>
     </section>
-    <section className="cards" aria-label="Timecards">
-      <header><h3>Timecards</h3>
+    <//>
+    <section className=${`cards ${panelOf("cards", sub)}`} aria-label="Timecards">
+      <header><h3>Timecards</h3><div className="cardtools"><span className="filterslot"></span></div>
         <div className="batch"><span>${data.waiting} waiting for approval</span>
           <button className="btn" disabled=${!canApprove || !data.waiting || period?.closed}
             onClick=${() => run("/team/timecards/approve-all", { payPeriodId: data.selected.payPeriodId, locationId: data.selected.locationId },
               (r) => `Approved ${r.approved} timecard${r.approved === 1 ? "" : "s"}.`)}>Approve all submitted</button></div></header>
-      <table className="table">
-        <colgroup><col style=${{ width: 96 }} /><col style=${{ width: 60 }} /><col style=${{ width: 70 }} /><col style=${{ width: 76 }} /><col style=${{ width: 56 }} /><col style=${{ width: 50 }} /><col style=${{ width: 92 }} /><col /></colgroup>
+      <div className="tscroll"><table className="table fit rowcards">
         <thead><tr><th>Employee</th><th>Date</th><th>Clock in</th><th>Clock out</th><th>Break</th><th>Hours</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${rows.map((r) => html`<tr key=${r.id}>
           <td>${r.employee}</td><td>${day(r.clockInAt, r.timeZone)}</td><td>${clock(r.clockInAt, r.timeZone)}</td><td>${clock(r.clockOutAt, r.timeZone) || "—"}</td>
@@ -160,9 +166,9 @@ function Team({ onNotice }) {
             ${r.status === "OPEN" && "Still clocked in"}
             ${r.status === "APPROVED" && `Approved by ${r.approvedBy}`}</div></td></tr>`)}
           ${!rows.length && html`<tr><td colSpan="8">No timecards match.</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </section>
-    <section className="closing" aria-label="Close pay period">
+    <section className=${`closing ${panelOf("close", sub)}`} aria-label="Close pay period">
       <b>Close this pay period</b>
       <button className="btn primary" disabled=${!canApprove || period?.closed} onClick=${() => setConfirmClose(true)}>Close pay period</button>
     </section>

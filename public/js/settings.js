@@ -25,7 +25,7 @@ const Tag = ({ off }) => (off ? html`<span className="tag">inactive</span>` : nu
 
 function CategoryForm({ form, set, msg, busy, onSave, onClose }) {
   const title = form.id ? "Rename category" : "Add category";
-  return html`<aside className="pform pside" aria-label=${title}>
+  return html`<${Sheet} popup title=${title} onClose=${onClose}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <${Field} label="Category name" required maxLength="100" value=${form.name} onChange=${(v) => set({ name: v })} />
@@ -33,13 +33,13 @@ function CategoryForm({ form, set, msg, busy, onSave, onClose }) {
       <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save</button>
         <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
     </form>
-  </aside>`;
+  <//>`;
 }
 
 function LocationForm({ data, form, set, msg, busy, onSave, onClose }) {
   const title = form.id ? "Edit location" : "Add location";
   const setRegisters = (registers) => set({ registers });
-  return html`<aside className="pform pside wide" aria-label=${title}>
+  return html`<${Sheet} popup wide title=${title} onClose=${onClose}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <${Field} label="Location name" required maxLength="100" value=${form.name} onChange=${(v) => set({ name: v })} />
@@ -65,7 +65,7 @@ function LocationForm({ data, form, set, msg, busy, onSave, onClose }) {
       <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save location</button>
         <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
     </form>
-  </aside>`;
+  <//>`;
 }
 
 function General({ data, run, fail, busy, ask, markDirty, markClean }) {
@@ -73,6 +73,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
   const [refund, setRefund] = useState({ amount: data.business.amount ?? "", days: data.business.days ?? "" });
   const [panel, setPanel] = useState(null); // null: the form column is closed; else { kind: "category" | "location", form }
   const [msg, setMsg] = useState(null); // the open form's errors
+  const [sub, setSub] = useState("business"); // the section a phone shows
 
   const change = (setter, old) => (patch) => { markDirty(); setter({ ...old, ...patch }); };
   const saveInline = (path, body) => async (e) => { e.preventDefault(); const err = await run(path, body); if (err) fail(err); else markClean(); };
@@ -87,8 +88,9 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
   const editing = panel?.form.id;
 
   return html`<div className="staff">
+    <${SubTabs} tabs=${[["business", "Business"], ["refunds", "Refunds"], ["categories", "Categories"], ["locations", "Locations"]]} value=${sub} onChange=${setSub} label="Settings sections" />
     <section className="pview">
-      <div className="stack">
+      <div className=${`stack ${panelOf("business", sub)}`}>
         <h3>Business</h3>
         <form className="sform" onSubmit=${saveInline("/settings/business", business)}>
           <div className="sgrid">
@@ -101,7 +103,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
         </form>
       </div>
 
-      <div className="stack">
+      <div className=${`stack ${panelOf("refunds", sub)}`}>
         <h3>Refund rules</h3>
         <form className="sform" onSubmit=${saveInline("/settings/refunds", refund)}>
           <span className="sub">A refund override signer is required when a refund exceeds either limit. Leave a limit blank to disable it.</span>
@@ -113,10 +115,9 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
         </form>
       </div>
 
-      <div className="stack">
-        <header className="phead"><h3>Categories</h3><button className="pbtn" onClick=${() => open("category", NEW_CATEGORY)}>Add category</button></header>
-        <table className="table mg cats" aria-label="Categories">
-          <colgroup><col /><col style=${{ width: 240 }} /></colgroup>
+      <div className=${`stack ${panelOf("categories", sub)}`}>
+        <header className="phead"><h3>Categories</h3><div className="cardtools"><button className="pbtn" onClick=${() => open("category", NEW_CATEGORY)}>Add category</button></div></header>
+        <div className="tscroll"><table className="table mg cats fit rowcards" aria-label="Categories">
           <thead><tr><th>Category</th><th>Actions</th></tr></thead>
           <tbody>${data.categories.map((c) => html`<tr key=${c.id} className=${`${panel?.kind === "category" && editing === c.id ? "sel" : ""} ${c.active ? "" : "off"}`}>
             <td>${c.name}<${Tag} off=${!c.active} /></td>
@@ -124,13 +125,12 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
               <button className="act" disabled=${busy} onClick=${() => open("category", { ...c, active: !!c.active })}>Rename</button>
               <button className=${c.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle("Products in it keep their category.", "/settings/categories", c)}>${c.active ? "Deactivate" : "Reactivate"}</button>
             </div></td></tr>`)}</tbody>
-        </table>
+        </table></div>
       </div>
 
-      <div className="stack">
-        <header className="phead"><h3>Locations</h3><button className="pbtn" onClick=${() => open("location", NEW_LOCATION)}>Add location</button></header>
-        <table className="table mg locs" aria-label="Locations">
-          <colgroup><col /><col style=${{ width: 130 }} /><col style=${{ width: 140 }} /><col style=${{ width: 76 }} /><col style=${{ width: 64 }} /><col style=${{ width: 150 }} /></colgroup>
+      <div className=${`stack ${panelOf("locations", sub)}`}>
+        <header className="phead"><h3>Locations</h3><div className="cardtools"><button className="pbtn" onClick=${() => open("location", NEW_LOCATION)}>Add location</button></div></header>
+        <div className="tscroll"><table className="table mg locs fit rowcards" aria-label="Locations">
           <thead><tr><th>Location</th><th>Time zone</th><th>Tax rates</th><th>Registers</th><th>Online orders</th><th>Actions</th></tr></thead>
           <tbody>${data.locations.map((l) => html`<tr key=${l.id} className=${`${panel?.kind === "location" && editing === l.id ? "sel" : ""} ${l.active ? "" : "off"}`}>
             <td>${l.name}<${Tag} off=${!l.active} /><span className="sub">${l.address}</span></td>
@@ -141,7 +141,7 @@ function General({ data, run, fail, busy, ask, markDirty, markClean }) {
               <button className="act" disabled=${busy} onClick=${() => open("location", { ...l, active: !!l.active, online: !!l.online, registers: l.registers.map((r) => ({ ...r })), rates: { ...l.rates } })}>Edit</button>
               <button className=${l.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle("Staff must be reassigned first.", "/settings/locations", l)}>${l.active ? "Deactivate" : "Reactivate"}</button>
             </div></td></tr>`)}</tbody>
-        </table>
+        </table></div>
       </div>
     </section>
     ${panel?.kind === "category" && html`<${CategoryForm} form=${panel.form} set=${setForm} msg=${msg} busy=${busy} onSave=${() => savePanel("/settings/categories")} onClose=${close} />`}
@@ -155,7 +155,7 @@ function RoleForm({ data, form, setForm, msg, busy, onSave, onClose }) {
   const title = form.id ? "Edit role" : "Add role";
   const groups = [...new Set(data.permissions.map((p) => p.groupName))];
   const toggle = (code, on) => setForm({ permissions: on ? [...form.permissions, code] : form.permissions.filter((c) => c !== code) });
-  return html`<aside className="pform pside wide" aria-label=${title}>
+  return html`<${Sheet} popup wide title=${title} onClose=${onClose}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <${Field} label="Role name" required maxLength="50" value=${form.name} onChange=${(v) => setForm({ name: v })} />
@@ -168,7 +168,7 @@ function RoleForm({ data, form, setForm, msg, busy, onSave, onClose }) {
       <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save role</button>
         <button className="pbtn outline" type="button" onClick=${onClose}>Cancel</button></div>
     </form>
-  </aside>`;
+  <//>`;
 }
 
 function Roles({ data, run, fail, busy, ask, markDirty, markClean }) {
@@ -186,16 +186,15 @@ function Roles({ data, run, fail, busy, ask, markDirty, markClean }) {
 
   return html`<div className="staff">
     <section className="pview">
-      <header className="phead"><h2>Roles</h2><button className="pbtn" onClick=${() => open(NEW_ROLE)}>Add role</button></header>
-      <table className="table mg" aria-label="Roles">
-        <colgroup><col /><col style=${{ width: 90 }} /><col style=${{ width: 240 }} /></colgroup>
+      <header className="phead"><h2>Roles</h2><div className="cardtools"><button className="pbtn" onClick=${() => open(NEW_ROLE)}>Add role</button></div></header>
+      <div className="tscroll"><table className="table mg fit rowcards" aria-label="Roles">
         <thead><tr><th>Role</th><th>Staff</th><th>Actions</th></tr></thead>
         <tbody>${data.roles.map((r) => html`<tr key=${r.id} className=${`${form?.id === r.id ? "sel" : ""} ${r.active ? "" : "off"}`}>
           <td>${r.name}<${Tag} off=${!r.active} /></td><td>${r.staff}</td>
           <td>${r.owner ? "Every permission, locked" : html`<div className="acts">
             <button className="act" disabled=${busy} onClick=${() => open({ ...r, active: !!r.active, permissions: [...r.permissions] })}>Edit</button>
             <button className=${r.active ? "act danger" : "act"} disabled=${busy} onClick=${() => toggle(r)}>${r.active ? "Deactivate" : "Reactivate"}</button></div>`}</td></tr>`)}</tbody>
-      </table>
+      </table></div>
       <span className="sub">Only owners change pay rates, use owner-only location views, and manage senior roles. Non-owners remain limited to their assigned locations.</span>
     </section>
     ${form && html`<${RoleForm} data=${data} form=${form} setForm=${set} msg=${msg} busy=${busy} onSave=${save} onClose=${close} />`}

@@ -21,17 +21,17 @@ const DateField = ({ label, value, onChange }) => html`<label className="pf"><b>
   <input className="field date" type="date" value=${value} onChange=${(e) => onChange(e.target.value)} /></label>`;
 
 // [label, value, dark]: a dark card is the one figure to read first
-function Cards({ cards }) {
-  return html`<div className="rcards">${cards.map(([label, value, dark]) => html`<div key=${label} className=${dark ? "rcard dark" : "rcard"}><span>${label}</span><b>${value}</b><${CardIcon} label=${label} /></div>`)}</div>`;
+function Cards({ cards, className = "" }) {
+  return html`<div className=${`rcards ${className}`}>${cards.map(([label, value, dark]) => html`<div key=${label} className=${dark ? "rcard dark" : "rcard"}><span>${label}</span><b>${value}</b><${CardIcon} label=${label} /></div>`)}</div>`;
 }
 
 // Bars on one zero baseline. Hover or focus a bar for its label and amount; the table below has every figure.
 // bars: [{ key, label, tip, value }]; label is what sits under the bar (blank to skip it). best: the highest bar is cyan, with a legend saying so.
-function BarChart({ title, bars, best }) {
+function BarChart({ title, bars, best, className = "" }) {
   const [tip, setTip] = useState(null);
   const top = Math.max(...bars.map((b) => b.value), 0);
   const bestAt = best && top > 0 ? bars.findIndex((b) => b.value === top) : -1;
-  return html`<figure className="chart" aria-label=${title}>
+  return html`<figure className=${`chart ${className}`} aria-label=${title}>
     <figcaption><h3>${title}</h3>${bestAt >= 0 && html`<span className="legend">${best}</span>`}</figcaption>
     <div className="plot" onMouseLeave=${() => setTip(null)}>
       <div className="axis"><span>${money(top)}</span><span>$0</span></div>
@@ -77,7 +77,9 @@ function Filters({ r, options, dates = true, first, children }) {
       ${first}
       ${dates && html`<${React.Fragment}><${DateField} label="From" value=${r.filters.from} onChange=${(v) => r.set({ from: v })} />
       <${DateField} label="To" value=${r.filters.to} onChange=${(v) => r.set({ to: v })} /><//>`}
-      <label className="pf"><b>Location</b><${LocationSelect} options=${options} value=${r.filters.location} onChange=${(v) => r.set({ location: v })} /></label>
+      <${ChangeLocation} show=${options.canPickAll || options.locations.length > 1} popup=${{ options: [...(options.canPickAll ? [["all", "All locations"]] : []), ...options.locations.map((l) => [l.id, l.name])], value: r.filters.location, onChange: (v) => r.set({ location: v }) }}>
+        <label className="pf"><b>Location</b><${LocationSelect} options=${options} value=${r.filters.location} onChange=${(v) => r.set({ location: v })} /></label>
+      <//>
       ${children}
       <button className="pbtn" type="submit" disabled=${r.busy}>Run report</button>
     </form>
@@ -92,6 +94,7 @@ const REFRESH_MS = 60 * 1000;
 const hourOf = (h) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
 function LiveSales({ options }) {
   const r = useReport("live", { day: options.today, location: options.location, by: "hour" });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   const live = report?.isToday;
   useEffect(() => {
@@ -113,16 +116,15 @@ function LiveSales({ options }) {
       ${report && html`<span className="sub" role="status">${live ? "Updated" : "As of"} ${clock(report.updatedAt, report.timeZone)}${live ? " · refreshes every minute" : ""}</span>`}
     </div>
     ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
       <p className="sub">${report.location} · ${byHour ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
-      <${Cards} cards=${[["Gross sales", money(report.cards.gross)], ["Discounts", money(report.cards.discounts)], ["Refunds", money(report.cards.refunds)],
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Gross sales", money(report.cards.gross)], ["Discounts", money(report.cards.discounts)], ["Refunds", money(report.cards.refunds)],
         [live ? "Net sales so far" : "Net sales", money(report.cards.net), true],
         ...(costs ? [["Cost of goods", money(report.cards.cost)], ["Profit", money(report.cards.profit)]] : []), ["Tips", money(report.cards.tips)]]} />
-      <${BarChart} title=${byHour ? "Net sales by hour" : "Net sales by day"} bars=${report.rows.map((x) => ({ key: x.key, value: x.net, tip: label(x.key), label: label(x.key) }))} />
-      <div className="tablewrap">
+      <${BarChart} className=${panelOf("chart", sub)} title=${byHour ? "Net sales by hour" : "Net sales by day"} bars=${report.rows.map((x) => ({ key: x.key, value: x.net, tip: label(x.key), label: label(x.key) }))} />
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
         <h3>${byHour ? "Hour by hour" : "Day by day"}</h3>
-        <table className="table mg" aria-label=${byHour ? "Hour by hour" : "Day by day"}>
-          <colgroup><col style=${{ width: byHour ? 80 : 112 }} /><col style=${{ width: 64 }} /><col /><col /><col />
-            <col />${costs && html`<${React.Fragment}><col /><col /><//>`}<col /></colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards" aria-label=${byHour ? "Hour by hour" : "Day by day"}>
           <thead><tr><th>${byHour ? "Hour" : "Day"}</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th>
             <th className="r">Net sales</th>${costs && html`<${React.Fragment}><th className="r">Cost</th><th className="r">Profit</th><//>`}<th className="r">Running net</th></tr></thead>
           <tbody>${report.rows.map((x) => html`<tr key=${x.key}>
@@ -131,7 +133,7 @@ function LiveSales({ options }) {
             ${!report.rows.length && html`<tr><td colSpan=${costs ? 9 : 7}>No sales yet.</td></tr>`}</tbody>
           <tfoot><tr><td>Total</td><td className="r">${report.total.orders}</td>${cell(report.total, "gross")}${cell(report.total, "discounts")}${cell(report.total, "refunds")}
             ${cell(report.total, "net")}${costs && html`<${React.Fragment}>${cell(report.total, "cost")}${cell(report.total, "profit")}<//>`}<td></td></tr></tfoot>
-        </table>
+        </table></div>
         <p className="sub">Net sales are before tax and tips. A refund comes off the hour it was paid back. ${byHour ? "Hours run from the first sale to the last." : "The week runs from Monday."}</p>
       </div><//>`}
   </section>`;
@@ -140,17 +142,18 @@ function LiveSales({ options }) {
 // 1. Sales by day
 function SalesByDay({ options }) {
   const r = useReport("sales-by-day", lastWeek(options));
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   return html`<section className="pview report" aria-label="Sales by day">
     <${Filters} r=${r} options=${options} />
     ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
       <p className="sub">${report.location} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
-      <${Cards} cards=${[["Net sales", money(report.cards.net)], ["Orders", String(report.cards.orders)], ["Average order", money(report.cards.average)], ["Tax collected", money(report.cards.tax)]]} />
-      <${BarChart} title="Net sales per day" bars=${dayBars(report.days)} best="Best day" />
-      <div className="tablewrap">
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Net sales", money(report.cards.net)], ["Orders", String(report.cards.orders)], ["Average order", money(report.cards.average)], ["Tax collected", money(report.cards.tax)]]} />
+      <${BarChart} className=${panelOf("chart", sub)} title="Net sales per day" bars=${dayBars(report.days)} best="Best day" />
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
         <h3>Sales by day and location</h3>
-        <table className="table mg" aria-label="Sales by day and location">
-          <colgroup><col style=${{ width: 128 }} /><col /><col style=${{ width: 72 }} /><col style=${{ width: 96 }} /><col style=${{ width: 96 }} /><col style=${{ width: 96 }} /><col style=${{ width: 104 }} /></colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards" aria-label="Sales by day and location">
           <thead><tr><th>Date</th><th>Location</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th><th className="r">Net sales</th></tr></thead>
           <tbody>${report.rows.map((x) => html`<tr key=${`${x.day} ${x.location}`}>
             <td>${weekday(x.day)} ${shortDay(x.day)}</td><td>${x.location}</td><td className="r">${x.orders}</td><td className="r">${money(x.gross)}</td>
@@ -158,7 +161,7 @@ function SalesByDay({ options }) {
             ${!report.rows.length && html`<tr><td colSpan="7">No sales in these dates.</td></tr>`}</tbody>
           <tfoot><tr><td>Total</td><td></td><td className="r">${report.total.orders}</td><td className="r">${money(report.total.gross)}</td>
             <td className="r">${money(report.total.discounts)}</td><td className="r">${money(report.total.refunds)}</td><td className="r">${money(report.total.net)}</td></tr></tfoot>
-        </table>
+        </table></div>
         <p className="sub">Net sales are before tax and tips. A refund comes off the day it was paid back. Gift cards count when they're spent, not when they're sold.</p>
       </div><//>`}
   </section>`;
@@ -167,6 +170,7 @@ function SalesByDay({ options }) {
 // 2. Top sellers: one ranking, with Category as a column and a filter
 function TopSellers({ options }) {
   const r = useReport("top-sellers", { ...lastWeek(options), category: "" });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   const costs = report?.seesCosts;
   return html`<section className="pview report" aria-label="Top sellers">
@@ -178,14 +182,13 @@ function TopSellers({ options }) {
           <option value="none">No category</option></select></label>
     <//>
     ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
       <p className="sub">${report.location} · ${report.category} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
-      <${Cards} cards=${[["Units sold", units(report.cards.units)], ["Revenue", money(report.cards.revenue)],
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Units sold", units(report.cards.units)], ["Revenue", money(report.cards.revenue)],
         ...(costs ? [["Cost of goods", money(report.cards.cost)], ["Margin %", percent(report.cards.marginPct)]] : [])]} />
-      <div className="tablewrap">
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
         <h3>Top sellers</h3>
-        <table className="table mg" aria-label="Top sellers">
-          <colgroup><col style=${{ width: 56 }} /><col /><col style=${{ width: 150 }} /><col style=${{ width: 88 }} /><col style=${{ width: 100 }} />
-            ${costs && html`<${React.Fragment}><col style=${{ width: 96 }} /><col style=${{ width: 96 }} /><col style=${{ width: 88 }} /><//>`}</colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards" aria-label="Top sellers">
           <thead><tr><th>Rank</th><th>Product</th><th>Category</th><th className="r">Units sold</th><th className="r">Revenue</th>
             ${costs && html`<${React.Fragment}><th className="r">Cost</th><th className="r">Margin $</th><th className="r">Margin %</th><//>`}</tr></thead>
           <tbody>${report.rows.map((x) => html`<tr key=${x.rank}>
@@ -194,7 +197,7 @@ function TopSellers({ options }) {
             ${!report.rows.length && html`<tr><td colSpan=${costs ? 8 : 5}>Nothing sold in these dates.</td></tr>`}</tbody>
           <tfoot><tr><td>Total</td><td></td><td></td><td className="r">${units(report.total.units)}</td><td className="r">${money(report.total.revenue)}</td>
             ${costs && html`<${React.Fragment}><td className="r">${money(report.total.cost)}</td><td className="r">${money(report.total.margin)}</td><td className="r">${percent(report.total.marginPct)}</td><//>`}</tr></tfoot>
-        </table>
+        </table></div>
         <p className="sub">Ranked by units sold. Revenue is after discounts and before tax, and doesn't take refunds off. Gift cards aren't listed.</p>
       </div><//>`}
   </section>`;
@@ -207,18 +210,19 @@ const LaborCost = ({ options }) => (options.seesLabor ? html`<${LaborReport} opt
   : html`<p className="success" role="status">Labor cost needs permission to see team timecards.</p>`);
 function LaborReport({ options }) {
   const r = useReport("labor", { period: options.payPeriod || "", location: options.location });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   return html`<section className="pview report" aria-label="Labor cost">
     <${Filters} r=${r} options=${options} dates=${false} first=${html`<label className="pf"><b>Pay period</b>
       <select className="select" aria-label="Pay period" value=${r.filters.period} onChange=${(e) => r.set({ period: e.target.value })}>
         ${options.payPeriods.map((p) => html`<option key=${p.id} value=${p.id}>${dayOf(p.start)} to ${dayOf(p.end)}${p.closed ? " (closed)" : ""}</option>`)}</select></label>`} />
     ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
       <p className="sub">${report.location} · Pay period ${dayOf(report.period.start)} to ${dayOf(report.period.end)}</p>
-      <${Cards} cards=${[["Hours worked", hrs(report.cards.hours)], ["Labor cost", money(report.cards.cost)], ["Net sales", money(report.cards.net)], ["Labor as % of sales", percent(report.cards.laborPct)]]} />
-      <div className="tablewrap">
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Hours worked", hrs(report.cards.hours)], ["Labor cost", money(report.cards.cost)], ["Net sales", money(report.cards.net)], ["Labor as % of sales", percent(report.cards.laborPct)]]} />
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
         <h3>Labor cost by employee</h3>
-        <table className="table mg" aria-label="Labor cost by employee">
-          <colgroup><col /><col style=${{ width: 140 }} /><col style=${{ width: 72 }} /><col style=${{ width: 104 }} /><col style=${{ width: 112 }} /><col style=${{ width: 120 }} /><col style=${{ width: 104 }} /></colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards" aria-label="Labor cost by employee">
           <thead><tr><th>Employee</th><th>Role</th><th className="r">Shifts</th><th className="r">Regular hours</th><th className="r">Overtime hours</th><th className="r">Hourly rate</th><th className="r">Pay</th></tr></thead>
           <tbody>${report.rows.map((x) => html`<tr key=${x.employee}>
             <td>${x.employee}</td><td>${x.role}</td><td className="r">${x.shifts}</td><td className="r">${hrs(x.regularHours)}</td><td className="r">${hrs(x.overtimeHours)}</td>
@@ -226,7 +230,7 @@ function LaborReport({ options }) {
             ${!report.rows.length && html`<tr><td colSpan="7">No submitted or approved shifts in this pay period.</td></tr>`}</tbody>
           <tfoot><tr><td>Total</td><td></td><td className="r">${report.total.shifts}</td><td className="r">${hrs(report.total.regularHours)}</td>
             <td className="r">${hrs(report.total.overtimeHours)}</td><td></td><td className="r">${money(report.total.pay)}</td></tr></tfoot>
-        </table>
+        </table></div>
         <p className="sub">Submitted and approved shifts, less unpaid breaks, at the rate in force when each shift started. Hours past 40 in a Monday to Sunday week are overtime at 1.5×, counting shifts at every location. Role is the employee's current role.</p>
       </div><//>`}
   </section>`;
@@ -235,6 +239,7 @@ function LaborReport({ options }) {
 // 4. Stock losses: by item and reason. Amounts are in each item's own unit, so only Reports and Cost have a total.
 function StockLosses({ options }) {
   const r = useReport("losses", { ...lastWeek(options), reason: "" });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   const costs = report?.seesCosts;
   return html`<section className="pview report" aria-label="Stock losses">
@@ -245,19 +250,19 @@ function StockLosses({ options }) {
           ${options.reasons.map((x) => html`<option key=${x.id} value=${x.id}>${x.name}</option>`)}</select></label>
     <//>
     ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
       <p className="sub">${report.location} · ${report.reason} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
-      <${Cards} cards=${[...(costs ? [["Stock lost at cost", money(report.cards.lost)]] : []), ["Loss reports", String(report.cards.reports)],
+      <${Cards} className=${panelOf("summary", sub)} cards=${[...(costs ? [["Stock lost at cost", money(report.cards.lost)]] : []), ["Loss reports", String(report.cards.reports)],
         ...(costs ? [["Loss as % of stock used", percent(report.cards.lostPct)]] : []), ["Most common reason", report.cards.commonReason || "—"]]} />
-      <div className="tablewrap">
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
         <h3>Stock losses by item and reason</h3>
-        <table className="table mg" aria-label="Stock losses by item and reason">
-          <colgroup><col /><col style=${{ width: 170 }} /><col style=${{ width: 88 }} /><col style=${{ width: 120 }} /><col style=${{ width: 72 }} />${costs && html`<col style=${{ width: 104 }} />`}</colgroup>
+        <div className="tscroll"><table className="table mg fit rowcards" aria-label="Stock losses by item and reason">
           <thead><tr><th>Stock item</th><th>Reason</th><th className="r">Reports</th><th className="r">Amount lost</th><th>Unit</th>${costs && html`<th className="r">Cost</th>`}</tr></thead>
           <tbody>${report.rows.map((x) => html`<tr key=${`${x.item} ${x.reason}`}>
             <td>${x.item}</td><td>${x.reason}</td><td className="r">${x.reports}</td><td className="r">${units(x.amount)}</td><td>${x.unit}</td>${costs && html`<td className="r">${money(x.cost)}</td>`}</tr>`)}
             ${!report.rows.length && html`<tr><td colSpan=${costs ? 6 : 5}>No losses reported in these dates.</td></tr>`}</tbody>
           <tfoot><tr><td>Total</td><td></td><td className="r">${report.total.reports}</td><td></td><td></td>${costs && html`<td className="r">${money(report.total.cost)}</td>`}</tr></tfoot>
-        </table>
+        </table></div>
         <p className="sub">Losses are valued at the average cost on the day they were reported. Stock used is what sales used plus what was lost. Count corrections aren't counted as losses.</p>
       </div><//>`}
   </section>`;

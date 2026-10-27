@@ -36,7 +36,7 @@
 .customer .header .who .meta .pts { font-weight: 600; color: var(--ink); }
 .customer .header .who .login-link { font-size: 13px; text-decoration: underline; background: none; border: 0; color: var(--ink); padding: 0; }
 .customer .header .pickup { display: flex; align-items: center; gap: 12px; font-size: 14px; flex-shrink: 0; }
-.customer .header .pickup button { display: flex; align-items: center; gap: 16px; border: 1px solid var(--line); padding: 10px 12px; background: #fff; }
+.customer .header .pickup b { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; } /* where this order is collected: set by the café's link, so it is shown, not chosen */
 
 /* Entry page */
 .customer .entry { display: flex; min-height: 100dvh; flex-direction: column; background: var(--bg); }
@@ -256,6 +256,15 @@
   .customer .menu-body { flex-direction: column; overflow-y: auto; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .customer .menu-main { flex: none; overflow: visible; }
   .customer .grid { overflow: visible; padding-right: 0; }
+  /* customizing an item and checking out: a window over the menu, dimmed behind, closed by Back to menu or Escape */
+  .customer .customize, .customer .checkout-overlay.screen { position: fixed; top: 3dvh; left: 12px; right: 12px; bottom: auto; z-index: 60; height: auto; max-height: 94dvh;
+    border-radius: 14px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.5); overflow: hidden; }
+  .customer .customize .body, .customer .checkout-overlay .body { min-height: 0; padding: 16px; }
+  .customer .customize .header .actions, .customer .customize .order-side { display: none; } /* the menu behind has them */
+  .customer .customize .form, .customer .checkout-overlay .form { border: 0; padding: 0; } /* the window is the card */
+  .customer .customize .form h2 { display: none; } /* the window's bar already names the item */
+  .customer .has-popup .menu-body { overflow: hidden; }
+  .customer .filters { flex-wrap: wrap; overflow: visible; } /* every category shows, with no sideways scroll */
   .customer .cart { display: none; position: fixed; inset: 0; z-index: 40; width: 100%; border: 0; background: #fff; }
   .customer .cart.open { display: flex; }
   .customer .cart .items { max-height: none; flex: 1; min-height: 0; }
@@ -269,12 +278,13 @@
   .customer .checkout-overlay .body { flex-direction: column; }
   .customer .checkout-overlay .form, .customer .checkout-overlay .summary { width: 100%; }
   .customer .checkout-overlay .methods { grid-template-columns: repeat(2, 1fr); }
-  .customer .grid { grid-template-columns: repeat(2, minmax(0, 280px)); }
+  .customer .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); } /* as many columns as fit, filling the width: one on a narrow phone */
+  .customer .header .who { flex: 1 1 9rem; min-width: 9rem; } /* wraps to its own line before it can be covered by the buttons beside it */
   .customer .customize .two-col { grid-template-columns: 1fr; }
   .customer .header { flex-wrap: wrap; }
 }
 @media (max-width: 600px) {
-  .customer .grid { grid-template-columns: minmax(0, 280px); }
+  .customer .history .body, .customer .details .body { padding: 16px; }
   .customer .entry .body { padding: 20px; }
   .customer .menu-body { padding: 16px 16px calc(88px + env(safe-area-inset-bottom)); }
   .customer .header { padding: 12px 16px; gap: 8px 12px; }
@@ -285,7 +295,6 @@
   .customer .header .who { order: 3; flex: 1 1 100%; }
   .customer .header .pickup { order: 4; flex: 1 1 100%; }
   .customer .header .who .name { font-size: 18px; }
-  .customer .header .pickup button { flex: 1; min-width: 0; overflow-wrap: anywhere; justify-content: space-between; }
   .customer .header .actions { flex-shrink: 1; max-width: 100%; }
   .customer .details .steps, .customer .confirm-overlay .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .customer .history .order-card, .customer .history .order-card .main .top { flex-wrap: wrap; }
@@ -297,7 +306,7 @@
 .customer .header .who .meta { color: #d6d6d6; }
 .customer .header .who .meta .pts, .customer .header .who .login-link,
 .customer .header .back-menu { color: #fff; }
-.customer .header .pickup button, .customer .header .actions button { color: var(--ink); }
+.customer .header .actions button { color: var(--ink); }
 .customer .screen, .customer .customize, .customer .checkout-overlay,
 .customer .history, .customer .details { background: var(--bg); }
 .customer .entry .card, .customer .tile, .customer .cart,
@@ -321,7 +330,7 @@
 }
 .customer :is(.filters button, .customize .choice, .checkout-overlay .method,
   .cart .line .qty button, .customize .footer .qty-ctrl button,
-  .customize .footer .cancel, .entry .card .guest, .header .pickup button,
+  .customize .footer .cancel, .entry .card .guest,
   .actions button, .cart-head .cart-close):hover:not(:disabled):not(.on) {
   background: var(--hover); color: var(--ink); border-color: #8a8a8a;
 }
@@ -348,3 +357,72 @@
 }
 .customer .confirm-overlay .card .badge, .customer .history .order-card .main .top .badge,
 .customer .details .card .badge { background: var(--hover); border-radius: 4px; }
+
+/*  Navigation (CustomerNav)  */
+/* The staff menu's three layouts in the café's brown: the open menu on a laptop (a button folds it to icons), icons only on a tablet, and on a
+   phone or a window taller than it is wide a slim bar with a menu button that opens the menu as a drawer. <body> carries nav-collapsed / nav-open. */
+.customer { --sidebar-width: 248px; }
+.customer.nav-collapsed { --sidebar-width: 76px; }
+.customer .shell { display: flex; min-height: 100dvh; }
+.customer .page { flex: 1; min-width: 0; }
+.customer .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.customer .nav { position: sticky; top: 0; flex: none; width: var(--sidebar-width); height: 100dvh; display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
+  padding: 24px 14px 20px; background: var(--accent); color: #fff; overflow: hidden auto; transition: width 0.2s ease; }
+.customer .nav h1.brand { display: flex; align-items: center; gap: 10px; margin: 0 0 24px 4px; font-size: 19px; font-weight: 600; line-height: 1.2; overflow: hidden; }
+.customer .brand-mark { flex: none; width: 36px; height: 36px; border-radius: 10px; background: #fff; color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
+.customer .nav .label { white-space: nowrap; transition: opacity 0.12s ease; }
+.customer .nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.customer .nav .link { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: none; color: #fff;
+  font-size: 15px; text-align: left; white-space: nowrap; overflow: hidden; transition: padding 0.2s ease; }
+.customer .nav .link:hover { background: rgba(255, 255, 255, 0.14); }
+.customer .nav .link[aria-current="page"] { background: #fff; color: var(--accent); font-weight: 600; }
+.customer .nav :focus-visible, .customer .navbar :focus-visible { outline-color: #fff; }
+
+.customer .nav .foot { display: flex; flex-direction: column; gap: 16px; }
+.customer .navtoggle { width: 44px; height: 44px; margin-left: 2px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0;
+  background: transparent; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.45); border-radius: 8px; }
+.customer .navtoggle .icon { width: 20px; height: 20px; transition: transform 0.2s ease; }
+.customer .navtoggle:hover, .customer .navtoggle:focus-visible { background: #fff; color: var(--accent); }
+.customer .who { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; row-gap: 2px; align-items: center; padding: 0 4px; font-size: 13px; color: rgba(255, 255, 255, 0.85); }
+.customer .who > * { grid-column: 2; justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
+.customer .who .avatar { grid-column: 1; grid-row: 1 / span 3; align-self: center; width: 36px; height: 36px; border-radius: 50%; background: #fff; color: var(--accent);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+.customer .who .name { color: #fff; font-size: 15px; font-weight: 600; }
+.customer .who .signout { width: auto; padding: 6px 0; margin-top: 4px; font-size: 13px; text-decoration: underline; gap: 8px; }
+.customer .who .signout .icon { display: none; }
+.customer .who .signout:hover { background: none; color: #fff; }
+.customer .who > .name, .customer .who > span:not(.avatar) { max-height: 4.5em; overflow: hidden; transition: opacity 0.12s ease, max-height 0.2s ease; }
+
+/* Folded: icons only; the names fade and stay the buttons' accessible names */
+.customer.nav-collapsed .nav h1.brand { margin-left: 0; justify-content: center; }
+.customer.nav-collapsed .nav h1.brand .label { display: none; }
+.customer.nav-collapsed .nav .link { padding: 13px 15px; }
+.customer.nav-collapsed .nav .label { opacity: 0; }
+.customer.nav-collapsed .navtoggle .icon { transform: rotate(180deg); }
+.customer.nav-collapsed .who { grid-template-columns: 36px 0; column-gap: 0; padding: 0 6px; }
+.customer.nav-collapsed .who > .name, .customer.nav-collapsed .who > span:not(.avatar) { opacity: 0; max-height: 0; }
+.customer.nav-collapsed .who .signout { grid-column: 1; grid-row: 4; justify-self: center; width: 44px; height: 44px; margin-top: 8px; padding: 0; justify-content: center; border-radius: 8px; text-decoration: none; }
+.customer.nav-collapsed .who .signout .icon { display: block; width: 20px; height: 20px; }
+.customer.nav-collapsed .who .signout:hover { background: #fff; color: var(--accent); }
+.customer.nav-collapsed .who .signout .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.customer .navtip { position: fixed; z-index: 90; transform: translateY(-50%); background: #fff; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 1.2;
+  padding: 6px 10px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); white-space: nowrap; pointer-events: none; }
+
+.customer .navbar .burger, .customer .navclose { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; background: transparent; color: #fff; border: 0; border-radius: 8px; }
+.customer .navbar .burger .icon, .customer .navclose .icon { width: 22px; height: 22px; }
+.customer .navbar .burger:hover, .customer .navclose:hover { background: #fff; color: var(--accent); }
+.customer .navbar, .customer .navclose, .customer .navshade { display: none; } /* until the drawer's breakpoint */
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .customer .shell { flex-direction: column; }
+  .customer .navbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 30; min-height: 56px; padding: 6px 16px 6px 8px; background: var(--accent); color: #fff; }
+  .customer .navtitle { min-width: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .customer .navsection { margin-left: auto; font-size: 14px; opacity: 0.85; white-space: nowrap; }
+  .customer .nav { position: fixed; top: 0; bottom: 0; left: 0; z-index: 80; width: min(300px, 86vw); height: auto; transform: translateX(-100%); visibility: hidden;
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.35); transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+  .customer.nav-open .nav { transform: none; visibility: visible; transition: transform 0.2s ease; }
+  .customer .navclose { display: flex; position: absolute; top: 18px; right: 10px; }
+  .customer .navshade { display: block; position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.5); }
+  .customer.nav-open { overflow: hidden; }
+  .customer .page .screen { height: calc(100dvh - 56px); }
+}
+@media (prefers-reduced-motion: reduce) { .customer .nav, .customer.nav-open .nav, .customer .nav .link, .customer .nav .label, .customer .who > *, .customer .navtoggle .icon { transition: none; } }

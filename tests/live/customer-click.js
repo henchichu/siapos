@@ -58,11 +58,11 @@ function kiosk(base) {
     check("a number that can't exist is refused before asking the server", /valid 10-digit US phone/.test(k.text()));
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");
-    check("Chloe signs in by phone", /Hi, Chloe!/.test(k.text()));
-    check("her phone is masked and her points shown", /\(\*\*\*\) \*\*\*-0177/.test(k.text()) && /106 points/.test(k.text()), k.text().slice(0, 200));
+    check("Chloe signs in by phone", /Chloe/.test(k.text()));
+    check("her points are shown in the navigation", /106 points/.test(k.text()), k.text().slice(0, 200));
 
-    await k.click("Redeem");
-    check("Redeem opens the rewards page", /Redeem for store points/.test(k.text()));
+    await k.click("Rewards");
+    check("Rewards opens the rewards page", /Redeem for store points/.test(k.text()));
     await k.click("Browse Menu");
     check("Browse Menu goes back to the menu", /Your order/.test(k.text()) && !!k.button("Checkout"));
     check("Checkout is off while the cart is empty", k.button("Checkout").disabled);
@@ -124,13 +124,13 @@ function kiosk(base) {
     await k.click("Back to order history");
     check("back to history", /Signed-in order history/.test(k.text()));
 
-    await k.click("Back to Customer Login"); await sleep(300);
+    await k.click("Sign out"); await sleep(300);
     check("sign-out returns to the entry page", /How would you like to order\?/.test(k.text()));
     const session = await (await k.w.fetch("/api/customer/session", CAFE)).json();
     check("the customer session is gone", session.signedIn === false);
 
     await k.click("Order as Guest");
-    check("guest sees the menu, not Chloe", /Welcome, Guest!/.test(k.text()) && !/Chloe/.test(k.text()));
+    check("guest sees the menu, not Chloe", /Guest/.test(k.text()) && !/Chloe/.test(k.text()));
     check("guest has no Your Orders", !k.button("Your Orders"));
     const muffin = [...k.w.document.querySelectorAll(".tile")].find((t) => /muffin/i.test(t.textContent));
     muffin.querySelector("button").click(); await sleep(400);
@@ -171,9 +171,9 @@ function kiosk(base) {
     k.w.Date.now = real;
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");
-    check("Chloe signs in again", /Hi, Chloe!/.test(k.text()));
+    check("Chloe signs in again", /Chloe/.test(k.text()));
     ahead(60 * 1000); await sleep(1500);
-    check("a minute of no touches is still signed in", /Hi, Chloe!/.test(k.text()));
+    check("a minute of no touches is still signed in", /Chloe/.test(k.text()));
     ahead(3 * 60 * 1000); await sleep(1500);
     check("after 2 minutes idle, signed out", /How would you like to order\?/.test(k.text()) && !/Chloe/.test(k.text()));
     check("and the server session is gone", (await (await k.w.fetch("/api/customer/session", CAFE)).json()).signedIn === false);
@@ -186,7 +186,7 @@ function kiosk(base) {
       await sleep(900);
       check("the public kiosk offers guest ordering only", /Continue as a guest to place an order/.test(g.text()) && !/Customer login/.test(g.text()) && !g.button("Log In") && !!g.button("Order as Guest"), g.text().slice(0, 160));
       await g.click("Order as Guest");
-      check("and its menu opens for a guest", /Welcome, Guest!/.test(g.text()) && !g.button("Your Orders"));
+      check("and its menu opens for a guest", /Guest/.test(g.text()) && !g.button("Your Orders"));
       check("the public kiosk page reported no errors", g.w.errors.length === 0, g.w.errors.slice(0, 2).join(" | "));
     } finally { pub.close(); }
 

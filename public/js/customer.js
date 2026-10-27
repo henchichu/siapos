@@ -1,6 +1,6 @@
 // Customer kiosk
 const html = htm.bind(React.createElement);
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 const IMG_ROTATION = [1,2,3,4,5,6];
 const productImg = (idx) => `/img/customer/product-${IMG_ROTATION[idx % 6]}.jpg`;
@@ -228,6 +228,103 @@ function HeaderActions({ canOpenOrders, onOpenOrders, onExit }) {
   </div>`;
 }
 
+
+//  Navigation 
+// The staff pages' menu, in this page's colours: a slim top bar with a menu button on a phone (or a window taller than it is wide), icons beside the page
+// on a tablet, the open menu on a laptop with a button that folds it. The fold is kept in this browser. Classes go on <body>; customer.css does the rest.
+const NAV_KEY = "customer.nav.collapsed";
+const DRAWER = "(max-width: 760px), (max-aspect-ratio: 1/1)";
+const RAIL = "(max-width: 1024px)";
+const navMode = () => (!window.matchMedia ? "full" : window.matchMedia(DRAWER).matches ? "drawer" : window.matchMedia(RAIL).matches ? "rail" : "full");
+const savedFold = () => { try { return localStorage.getItem(NAV_KEY) === "1"; } catch (err) { return false; } };
+const NAV_ICONS = {
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>', close: '<path d="M18 6 6 18M6 6l12 12"/>', chevron: '<path d="m15 18-6-6 6-6"/>',
+  signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+  signin: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17-5-5 5-5M5 12h12"/>',
+  cup: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
+  receipt: '<path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h6"/>',
+  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/>',
+};
+const NavIcon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: NAV_ICONS[name] }}></svg>`;
+
+function CustomerNav({ businessName, locationName, mode, memberInfo, current, canOrders, onMenu, onOrders, onRewards, onExit }) {
+  const [navKind, setNavKind] = useState(navMode);
+  const [collapsed, setCollapsed] = useState(savedFold);
+  const [open, setOpen] = useState(false); // the phone drawer
+  const [tip, setTip] = useState(null);
+  const navRef = useRef(null), burger = useRef(null), closer = useRef(null);
+  const folded = navKind === "rail" || (navKind === "full" && collapsed);
+  const guest = !memberInfo;
+  const items = [["menu", "Menu", "cup", onMenu], ...(canOrders ? [["orders", "Your Orders", "receipt", onOrders]] : []), ...(memberInfo?.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
+  const label = items.find(([k]) => k === current)?.[1] || "Menu";
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const queries = [DRAWER, RAIL].map((q) => window.matchMedia(q));
+    const change = () => { setNavKind(navMode()); setTip(null); };
+    queries.forEach((q) => q.addEventListener("change", change));
+    return () => queries.forEach((q) => q.removeEventListener("change", change));
+  }, []);
+  useEffect(() => { if (navKind !== "drawer") setOpen(false); }, [navKind]);
+  useLayoutEffect(() => {
+    document.body.classList.toggle("nav-collapsed", folded);
+    document.body.classList.toggle("nav-open", open);
+  }, [folded, open]);
+  // While the drawer is open the rest of the page is inert, Tab stays inside it and Escape closes it
+  useEffect(() => {
+    if (!open) return undefined;
+    const nav = navRef.current;
+    const others = [...nav.parentElement.children].filter((el) => el !== nav && !el.classList.contains("navshade"));
+    others.forEach((el) => { el.inert = true; });
+    closer.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+      if (e.key !== "Tab") return;
+      const stops = [...nav.querySelectorAll("button:not(:disabled)")].filter((el) => el.offsetParent);
+      const first = stops[0], last = stops[stops.length - 1];
+      if (!nav.contains(document.activeElement)) { e.preventDefault(); first?.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); others.forEach((el) => { el.inert = false; }); burger.current?.focus(); };
+  }, [open]);
+
+  const toggle = () => { const next = !collapsed; setCollapsed(next); setTip(null); try { localStorage.setItem(NAV_KEY, next ? "1" : "0"); } catch (err) { /* storage can be blocked */ } };
+  const show = (text, el) => { if (!document.body.classList.contains("nav-collapsed")) return; const r = el.getBoundingClientRect(); setTip({ text, x: r.right + 12, y: r.top + r.height / 2 }); };
+  const tipFor = (text) => ({ onMouseEnter: (e) => show(text, e.currentTarget), onFocus: (e) => show(text, e.currentTarget), onMouseLeave: () => setTip(null), onBlur: () => setTip(null) });
+  const go = (fn) => () => { setOpen(false); fn(); };
+  const initial = guest ? "G" : (memberInfo.firstName || "?").trim().charAt(0).toUpperCase();
+
+  return html`<${React.Fragment}>
+    <header className="navbar">
+      <button className="burger" ref=${burger} aria-expanded=${open} aria-controls="customer-nav" aria-label="Open navigation" onClick=${() => setOpen(true)}><${NavIcon} name="menu" /></button>
+      <span className="navtitle">${businessName}</span>
+      <span className="navsection">${label}</span>
+    </header>
+    ${open && html`<div className="navshade" onClick=${() => setOpen(false)}></div>`}
+    <nav className="nav" id="customer-nav" aria-label="Main" ref=${navRef}>
+      <div>
+        <button className="navclose" ref=${closer} aria-expanded=${open} aria-controls="customer-nav" aria-label="Close navigation" onClick=${() => setOpen(false)}><${NavIcon} name="close" /></button>
+        <h1 className="brand"><span className="brand-mark" aria-hidden="true">${(businessName || "").trim().charAt(0).toUpperCase()}</span><span className="label">${businessName}</span></h1>
+        <ul>${items.map(([key, text, icon, fn]) => html`<li key=${key}>
+          <button className="link" aria-current=${key === current ? "page" : undefined} onClick=${go(fn)} ...${tipFor(text)}><${NavIcon} name=${icon} /><span className="label">${text}</span></button></li>`)}</ul>
+      </div>
+      <div className="foot">
+        ${navKind === "full" && html`<button className="navtoggle" aria-expanded=${!collapsed} aria-controls="customer-nav" aria-label=${collapsed ? "Expand navigation" : "Collapse navigation"}
+          onClick=${toggle} ...${tipFor(collapsed ? "Expand navigation" : "Collapse navigation")}><${NavIcon} name="chevron" /></button>`}
+        <div className="who">
+          <span className="avatar" aria-hidden="true">${initial}</span>
+          <span className="name">${guest ? "Guest" : memberInfo.firstName}</span>
+          <span>${memberInfo?.member ? `${memberInfo.points} points` : "Pickup at " + locationName}</span>
+          <button className="link signout" onClick=${go(onExit)} ...${tipFor(guest ? "Sign in" : "Sign out")}><${NavIcon} name=${guest ? "signin" : "signout"} /><span className="label">${guest ? "Sign in" : "Sign out"}</span></button>
+        </div>
+      </div>
+      ${tip && html`<div className="navtip" aria-hidden="true" style=${{ left: tip.x, top: tip.y }}>${tip.text}</div>`}
+    </nav>
+  <//>`;
+}
+
 //  Checkout overlay 
 function Checkout({ businessName, cart, mode, memberInfo, locationName, payHere, note, onNoteChange, onBack, onOrderPlaced }) {
   const [guestName, setGuestName] = useState("");
@@ -423,19 +520,9 @@ function Confirmation({ businessName, receipt, onBack }) {
 }
 
 // ---- Rewards catalog (points redemption not yet supported by backend) ------
-function RewardsPage({ businessName, memberInfo, onBrowseMenu, headerActions }) {
+function RewardsPage({ businessName, memberInfo, onBrowseMenu }) {
   return html`
     <div className="screen">
-      <div className="header">
-        <h1>${businessName}</h1>
-        <div className="who">
-          <p className="name">Hi, ${memberInfo.firstName}!</p>
-          ${memberInfo.member
-            ? html`<div className="meta"><span>${memberInfo.maskedPhone}</span><span>·</span><span className="pts">${memberInfo.points} points</span></div>`
-            : html`<div className="meta"><span>No rewards account</span></div>`}
-        </div>
-        ${headerActions}
-      </div>
       <div style=${{ flex: "1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px", padding: "40px", textAlign: "center" }}>
         <h2 style=${{ fontSize: "24px", fontWeight: "600" }}>Redeem for store points</h2>
         <p style=${{ maxWidth: "480px", fontSize: "15px", color: "var(--muted)" }}>
@@ -452,14 +539,29 @@ function RewardsPage({ businessName, memberInfo, onBrowseMenu, headerActions }) 
 }
 
 
+// Phones and small tablets (the same 900px the stylesheet switches at): customizing an item and checking out are pop-up windows over the menu
+const NARROW = "(max-width: 900px)";
+function useNarrow() {
+  const q = window.matchMedia ? window.matchMedia(NARROW) : { matches: false, addEventListener() {}, removeEventListener() {} }; // jsdom has no media queries
+  const [narrow, setNarrow] = useState(q.matches);
+  useEffect(() => { const f = () => setNarrow(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []);
+  return narrow;
+}
+
 function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere, products, categories, cart, onAddItem, onChangeQty, onOrderPlaced, onOpenOrders, onExit }) {
-  const [showRewards, setShowRewards] = useState(false);
   const [cat, setCat] = useState("All");
   const [customizing, setCustomizing] = useState(null);
   const [note, setNote] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState(null);
   const [cartOpen, setCartOpen] = useState(false); // phones only: the cart is a full-screen sheet
+  const narrow = useNarrow();
+  useEffect(() => { // Escape closes the pop-up window
+    if (!narrow || !(customizing || checkoutOpen)) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { if (checkoutOpen) setCheckoutOpen(false); else setCustomizing(null); } };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [narrow, customizing, checkoutOpen]);
 
   const visible = products.filter((p) => (cat === "All" || p.category === cat) && p.variants.some((v) => v.available));
   const cartTotal = cart.reduce((a, it) => a + it.unitCents * it.qty, 0);
@@ -468,47 +570,21 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
 
   const headerActions = html`<${HeaderActions} canOpenOrders=${mode === "signed-in" || hasOrders} onOpenOrders=${onOpenOrders} onExit=${onExit} />`;
 
-  if (showRewards) {
-    return html`<${RewardsPage} businessName=${businessName} memberInfo=${memberInfo} headerActions=${headerActions} onBrowseMenu=${() => setShowRewards(false)} />`;
-  }
-
-  if (customizing) {
-    return html`<${Customize} product=${customizing} cart=${cart} headerActions=${headerActions}
+  const customizeEl = customizing && html`<${Customize} product=${customizing} cart=${cart} headerActions=${headerActions}
       onAdd=${addItem} onCancel=${() => setCustomizing(null)} />`;
-  }
-
-  if (checkoutOpen) {
-    return html`<${Checkout} businessName=${businessName} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
+  const checkoutEl = checkoutOpen && html`<${Checkout} businessName=${businessName} cart=${cart} mode=${mode} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
       onBack=${() => setCheckoutOpen(false)}
       onOrderPlaced=${(r) => { setLastOrder(r); setCheckoutOpen(false); onOrderPlaced(r); setNote(""); }} />`;
-  }
+  if (!narrow && customizeEl) return customizeEl; // a wide screen shows them full-screen, a narrow one as a window over the menu below
+  if (!narrow && checkoutEl) return checkoutEl;
 
   if (lastOrder) {
     return html`<${Confirmation} businessName=${businessName} receipt=${lastOrder} onBack=${() => setLastOrder(null)} />`;
   }
 
   return html`
-    <div className="screen">
-      <div className="header">
-        <h1>${businessName}</h1>
-        <div className="who">
-          ${mode === "signed-in" ? html`<${React.Fragment}>
-            <p className="name">Hi, ${memberInfo.firstName}!</p>
-            <div className="meta">
-              <span>${memberInfo.maskedPhone}</span>
-              ${memberInfo.member ? html`<${React.Fragment}><span>·</span><span className="pts">${memberInfo.points} points</span>
-                <button className="login-link" onClick=${() => setShowRewards(true)}>Redeem</button><//>` : null}
-            </div><//>` : html`
-            <p className="name">Welcome, Guest!</p>`}
-        </div>
-        ${headerActions}
-        <div className="pickup">
-          <span>Pickup at</span>
-          <button>${locationName}<img src="/img/customer/dropdown.svg" alt="" /></button>
-        </div>
-      </div>
-
+    <div className=${narrow && (customizing || checkoutOpen) ? "screen has-popup" : "screen"}>
       <div className="menu-body">
         <section className="menu-main">
           <h2>Order</h2>
@@ -566,6 +642,8 @@ function Menu({ businessName, mode, memberInfo, hasOrders, locationName, payHere
           </div>
         </aside>
       </div>
+      ${narrow && customizeEl}
+      ${narrow && checkoutEl}
     </div>`;
 }
 
@@ -588,11 +666,6 @@ function OrderHistory({ businessName, memberInfo, guestIds, onBackToMenu, onExit
 
   return html`
     <div className="history screen">
-      <div className="header">
-        <h1>${businessName}</h1>
-        ${html`<${HeaderActions} canOpenOrders=${false} onExit=${onExit} />`}
-        <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
-      </div>
       <div className="body">
         <div className="intro">
           <p>${memberInfo ? `${memberInfo.firstName} · Signed-in order history` : "Orders you placed on this phone this visit"}</p>
@@ -645,11 +718,6 @@ function OrderDetails({ businessName, orderId, memberInfo, onBackToHistory, onBa
 
   return html`
     <div className="details screen">
-      <div className="header">
-        <h1>${businessName}</h1>
-        ${html`<${HeaderActions} canOpenOrders=${!!onBackToHistory} onOpenOrders=${onBackToHistory} onExit=${onExit} />`}
-        <button className="back-menu" onClick=${onBackToMenu}>Back to menu</button>
-      </div>
       <div className="body">
         <div className="card">
           <p className="thanks">Thanks, ${memberInfo ? memberInfo.firstName : "there"}. Your order is in.</p>
@@ -706,7 +774,7 @@ function App() {
   const [guestOrders, setGuestOrders] = useState(savedGuestOrders);
   const [ctx, setCtx] = useState(null);  // { businessName, locationName }
   const [catalog, setCatalog] = useState(null);
-  const [view, setView] = useState("entry"); // entry | menu | history | order
+  const [view, setView] = useState("entry"); // entry | menu | history | order | rewards
   const [mode, setMode] = useState(null);  // "guest" | "signed-in"
   const [memberInfo, setMemberInfo] = useState(null);
   const [cart, setCart] = useState([]);
@@ -776,19 +844,30 @@ function App() {
     <${Entry} businessName=${ctx.businessName} locationName=${ctx.locationName}
       phoneSignIn=${ctx.phoneSignIn} onGuest=${onGuest} onSignedIn=${onSignedIn} />`;
 
-  if (view === "history") return html`
+  // Everything after the entry screen sits in the navigation's shell: the menu beside (or above, on a phone) the page
+  const current = view === "history" || view === "order" ? "orders" : view === "rewards" ? "rewards" : "menu";
+  const shell = (content) => html`<div className="shell">
+    <${CustomerNav} businessName=${ctx.businessName} locationName=${ctx.locationName} mode=${mode} memberInfo=${memberInfo} current=${current}
+      canOrders=${mode === "signed-in" || guestOrders.length > 0}
+      onMenu=${() => setView("menu")} onOrders=${() => setView("history")} onRewards=${() => setView("rewards")} onExit=${signOut} />
+    <main className="page">${content}</main></div>`;
+
+  if (view === "history") return shell(html`
     <${OrderHistory} businessName=${ctx.businessName} memberInfo=${memberInfo} guestIds=${guestOrders}
       onBackToMenu=${() => setView("menu")}
       onExit=${signOut}
-      onOpenOrder=${(id) => { setOpenOrderId(id); setView("order"); }} />`;
+      onOpenOrder=${(id) => { setOpenOrderId(id); setView("order"); }} />`);
 
-  if (view === "order") return html`
+  if (view === "order") return shell(html`
     <${OrderDetails} businessName=${ctx.businessName} orderId=${openOrderId} memberInfo=${memberInfo}
       onBackToHistory=${() => setView("history")}
       onBackToMenu=${() => setView("menu")}
-      onExit=${signOut} />`;
+      onExit=${signOut} />`);
 
-  return html`
+  if (view === "rewards") return shell(html`
+    <${RewardsPage} businessName=${ctx.businessName} memberInfo=${memberInfo} onBrowseMenu=${() => setView("menu")} />`);
+
+  return shell(html`
     <${Menu} businessName=${ctx.businessName}
       mode=${mode} memberInfo=${memberInfo} hasOrders=${guestOrders.length > 0}
       locationName=${ctx.locationName} payHere=${ctx.payHere}
@@ -798,7 +877,7 @@ function App() {
       onChangeQty=${changeQty}
       onOrderPlaced=${orderPlaced}
       onOpenOrders=${() => setView("history")}
-      onExit=${signOut} />`;
+      onExit=${signOut} />`);
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

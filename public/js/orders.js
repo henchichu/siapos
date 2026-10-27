@@ -29,12 +29,9 @@ function App() {
   const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
   const go = (id) => { window.location.href = `/order.html?id=${encodeURIComponent(id)}`; };
   const filters = data?.filters;
-
-  return html`<div className="app kitchen">
-    <${Sidebar} me=${me} current="Orders" />
-    <section className="main scrolls" aria-label="Orders">
-      <header className="ohead"><${PageTitle}>Orders<//></header>
-      <form className="osearch" aria-label="Search orders" onSubmit=${(e) => { e.preventDefault(); search(draft); }}>
+  const phone = usePhone();
+  // a phone shows the Filters button inside the Results card, like every other list; wider screens keep the form above it
+  const searchBox = html`<${Filters} popup active=${(draft.locationId !== "all" ? 1 : 0) + (draft.employeeId !== "all" ? 1 : 0) + (draft.status !== "any" ? 1 : 0)}><form className="osearch" aria-label="Search orders" onSubmit=${(e) => { e.preventDefault(); search(draft); }}>
         <div className="ofilters">
           <${Field} label="From date"><input className="field date" type="date" value=${draft.from} onChange=${set("from")} /><//>
           <${Field} label="To date"><input className="field date" type="date" value=${draft.to} onChange=${set("to")} /><//>
@@ -46,17 +43,23 @@ function App() {
             <option value="any">Any status</option>${(filters?.statuses || []).map((s) => html`<option key=${s.code} value=${s.code}>${s.name}</option>`)}</select><//>
         </div>
         <button className="pbtn" type="submit" disabled=${busy}>Search</button>
-      </form>
+      </form><//>`;
+
+  return html`<div className="app kitchen">
+    <${Sidebar} me=${me} current="Orders" />
+    <section className="main scrolls" aria-label="Orders">
+      <header className="ohead"><${PageTitle}>Orders<//></header>
+      ${!phone && searchBox}
       <${Message} msg=${msg} dashed />
       ${data && html`<section className="results" aria-label="Results">
-        <header><h3>Results</h3><span className="sub" role="status">${data.count} ${data.count === 1 ? "order" : "orders"} found${data.count > data.shown ? ` · showing the newest ${data.shown}` : ""}</span></header>
-        ${data.orders.length === 0 ? html`<p className="sub">No orders match these filters.</p>` : html`<div className="tscroll"><table className="table clickable t-orders">
-          <colgroup><col style=${{ width: 130 }} /><col style=${{ width: 70 }} /><col /><col style=${{ width: 110 }} /><col style=${{ width: 150 }} /><col style=${{ width: 110 }} /><col style=${{ width: 80 }} /></colgroup>
-          <thead><tr><th scope="col">Date and time</th><th scope="col">Order</th><th scope="col">Source</th><th scope="col">Employee</th><th scope="col">Member</th><th scope="col">Status</th><th scope="col" className="r">Total</th></tr></thead>
+        <header><h3>Results</h3><span className="sub" role="status">${data.count} ${data.count === 1 ? "order" : "orders"} found${data.count > data.shown ? ` · showing the newest ${data.shown}` : ""}</span><div className="cardtools"><span className="filterslot"></span></div></header>
+        ${phone && searchBox}
+        ${data.orders.length === 0 ? html`<p className="sub">No orders match these filters.</p>` : html`<div className="tscroll"><table className="table clickable fit rowcards t-orders">
+<thead><tr><th scope="col">Date and time</th><th scope="col">Order</th><th scope="col">Source</th><th scope="col">Employee</th><th scope="col">Member</th><th scope="col">Status</th><th scope="col" className="r">Total</th></tr></thead>
           <tbody>${data.orders.map((o) => html`<tr key=${o.id} onClick=${() => go(o.id)}>
-            <td>${when(o.placedAt, o.timeZone)}</td>
+            <td className="nw">${when(o.placedAt, o.timeZone)}</td>
             <td><a href=${`/order.html?id=${encodeURIComponent(o.id)}`} aria-label=${`Order ${o.orderNumber}, details`} onClick=${(e) => e.stopPropagation()}>${o.orderNumber}</a></td>
-            <td>${o.source}</td><td>${o.employee || "—"}</td><td>${o.member}</td><td>${o.status}</td><td className="r">${fromDollars(o.total)}</td></tr>`)}</tbody></table></div>`}
+            <td>${o.source}</td><td>${o.employee || "—"}</td><td>${o.member}</td><td className="nw">${o.status}</td><td className="r">${fromDollars(o.total)}</td></tr>`)}</tbody></table></div>`}
       </section>`}
     </section>
   </div>`;

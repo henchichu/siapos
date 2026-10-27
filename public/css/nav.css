@@ -1,5 +1,11 @@
 /* Left navigation shared by every page: the navy menu from docs/design/ClockIt-navy-menu.pdf. Tokens in theme.css */
-.nav { position: fixed; top: 0; bottom: 0; left: 0; z-index: 3; width: var(--nav-w); display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
+/* Folding (shell.js Sidebar puts nav-collapsed on <body>): --sidebar-width is the open width (theme.css --nav-w) or 76px,
+   and inside the page --nav-w follows it, so the menu and every page's left padding move together */
+body { --sidebar-width: var(--nav-w); }
+body.nav-collapsed { --sidebar-width: 76px; }
+body > * { --nav-w: var(--sidebar-width); }
+.app { transition: padding-left 0.2s ease; }
+.nav { position: fixed; top: 0; bottom: 0; left: 0; z-index: 3; width: var(--sidebar-width); transition: width 0.2s ease; display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
   padding: 24px 14px 20px; background: var(--navy); color: #fff; overflow: hidden auto; isolation: isolate; }
 /* the faint ring behind the lower menu */
 .nav::after { content: ""; position: absolute; z-index: -1; left: -60px; bottom: 70px; width: 280px; height: 280px; border-radius: 50%; border: 12px solid rgba(255, 255, 255, 0.06); pointer-events: none; }
@@ -7,7 +13,9 @@
 .nav h1 a { display: inline-block; border-radius: 6px; }
 .nav h1 img { display: block; width: 176px; max-width: 100%; height: auto; color: #fff; font: 600 22px/1.2 "IBM Plex Sans", sans-serif; } /* the alt text, if the image is missing */
 .nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.nav a.link { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--radius); color: #fff; font-size: 15px; text-decoration: none; }
+.nav a.link { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--radius); color: #fff; font-size: 15px; text-decoration: none;
+  overflow: hidden; white-space: nowrap; transition: padding 0.2s ease; }
+.nav .label { transition: opacity 0.12s ease; }
 .nav a.link:hover { background: rgba(255, 255, 255, 0.12); text-decoration: none; }
 .nav a.link[aria-current="page"] { background: var(--cyan); color: var(--navy-dark); font-weight: 600; }
 .link { background: none; border: 0; padding: 0; text-align: left; }
@@ -21,16 +29,66 @@ a.link { color: inherit; text-decoration: none; }
 .who .name { color: #fff; font-weight: 600; font-size: 14px; }
 .nav .where { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
 .who .link { color: #fff; font-size: 13px; text-decoration: underline; }
+.who > .name, .who > span:not(.avatar), .who > .where { max-height: 4.5em; overflow: hidden; transition: opacity 0.12s ease, max-height 0.2s ease; }
+.who .signout .icon { display: none; }
 .who .link:hover, .nav .where:hover { color: var(--cyan); }
+
+/* The fold button, above who is signed in: a white chevron on navy that turns cyan with a dark chevron, like the menu's current page */
+.foot { display: flex; flex-direction: column; gap: 16px; }
+.navtoggle { width: 44px; height: 44px; margin-left: 2px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0;
+  background: transparent; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: var(--radius); cursor: pointer; }
+.navtoggle .icon { width: 20px; height: 20px; transition: transform 0.2s ease; }
+.navtoggle:hover, .navtoggle:focus-visible { background: var(--cyan); border-color: var(--cyan); color: var(--navy-dark); }
+.nav h1 .mark { display: none; }
+
+/* Folded: icons only, centered; the names fade and stay the links' accessible names */
+.nav-collapsed .nav h1 { margin-left: 0; text-align: center; }
+.nav-collapsed .nav h1 a { display: block; }
+.nav-collapsed .nav h1 .full { display: none; }
+.nav-collapsed .nav h1 .mark { display: block; width: 40px; height: 40px; margin: 2px auto; object-fit: contain; }
+.nav-collapsed .nav h1 .mark.crop { width: 48px; height: 35px; overflow: hidden; margin: 4px auto 5px; }
+.nav h1 .mark.crop img { width: 140px; max-width: none; height: 35px; }
+.nav-collapsed .nav a.link { padding: 13px 15px; }
+.nav-collapsed .nav .label { opacity: 0; }
+.nav-collapsed .navtoggle .icon { transform: rotate(180deg); }
+.nav-collapsed .who { grid-template-columns: 36px 0; column-gap: 0; padding: 0 6px; }
+.nav-collapsed .who > .name, .nav-collapsed .who > span:not(.avatar), .nav-collapsed .who > .where { opacity: 0; max-height: 0; }
+.nav-collapsed .who > .where { visibility: hidden; } /* not reachable by Tab while folded */
+.nav-collapsed .who .signout { grid-column: 1; grid-row: 4; justify-self: center; width: 44px; max-width: none; height: 44px; margin-top: 8px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius); text-decoration: none; }
+.nav-collapsed .who .signout:hover, .nav-collapsed .who .signout:focus-visible { background: var(--cyan); color: var(--navy-dark); }
+.nav-collapsed .who .signout .icon { display: block; width: 20px; height: 20px; }
+.nav-collapsed .who .signout .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* A folded item's name beside it on hover and keyboard focus, fixed to the window so the menu's scroll area can't clip it */
+.navtip { position: fixed; z-index: 60; transform: translateY(-50%); background: #fff; color: var(--navy); font-size: 13px; font-weight: 600; line-height: 1.2;
+  padding: 6px 10px; border-radius: 8px; box-shadow: 0 4px 14px rgba(13, 22, 112, 0.18); white-space: nowrap; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .app, .nav, .nav a.link, .nav .label, .who > *, .navtoggle .icon { transition: none; } }
+
 .places { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 
-/* Narrow or portrait windows: the menu is a navy bar across the top of the page */
+/* Phones and windows taller than they are wide (the pages' own breakpoint): the menu leaves the layout and becomes a drawer,
+   opened from a slim navy bar at the top of the page */
+.navbar .burger, .navclose { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0;
+  background: transparent; color: #fff; border: 0; border-radius: var(--radius); cursor: pointer; }
+.navbar .burger .icon, .navclose .icon { width: 22px; height: 22px; }
+.navbar .burger:hover, .navbar .burger:focus-visible, .navclose:hover, .navclose:focus-visible { background: var(--cyan); color: var(--navy-dark); }
+.navbar :focus-visible { outline-color: var(--cyan); }
+.navbar, .navclose, .navshade { display: none; } /* until the drawer's breakpoint */
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
-  .nav { position: static; width: auto; margin: -16px -16px 0; padding: 14px 16px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px 24px; overflow: visible; }
-  .nav::after { display: none; }
-  .nav > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-  .nav h1 { margin: 0; } .nav h1 img { width: 132px; }
-  .nav ul { flex-direction: row; flex-wrap: wrap; gap: 4px; }
-  .nav a.link { padding: 7px 10px; font-size: 14px; }
-  .who { margin-left: auto; }
+  .navbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 4; margin: -16px -16px 0; padding: 6px 16px 6px 8px; min-height: 56px;
+    background: var(--navy); color: #fff; }
+  .navhome { display: block; border-radius: 6px; line-height: 0; }
+  .navbar .mark { display: block; width: 36px; height: 36px; object-fit: contain; }
+  .navbar .mark.crop { width: 44px; height: 32px; overflow: hidden; }
+  .navbar .mark.crop img { width: 128px; max-width: none; height: 32px; }
+  .navtitle { min-width: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .nav { width: min(300px, 86vw); z-index: 50; transform: translateX(-100%); visibility: hidden; box-shadow: 0 0 32px rgba(13, 22, 112, 0.35);
+    transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+  .nav-open .nav { transform: none; visibility: visible; transition: transform 0.2s ease; }
+  .navclose { display: flex; position: absolute; top: 18px; right: 10px; }
+  .navshade { display: block; position: fixed; inset: 0; z-index: 49; background: rgba(13, 22, 112, 0.45); }
+  body.nav-open { overflow: hidden; }
 }
+@media (prefers-reduced-motion: reduce) { .nav, .nav-open .nav { transition: none; } }

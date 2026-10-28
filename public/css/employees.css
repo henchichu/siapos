@@ -2,7 +2,6 @@
 .staff { display: flex; gap: 24px; align-items: flex-start; padding-bottom: 24px; }
 .staff > .pview { flex: 1 1 0; min-width: 0; padding: 20px; overflow-x: auto; }
 .staff > .pform { width: 340px; flex: none; padding: 20px; }
-.staff > .pview .table { min-width: 720px; } /* room for the name beside its initials circle */
 .staff .phead .pfilters { gap: 24px; }
 .staff .table td { vertical-align: middle; }
 .staff .table .person b, .staff .table .person .sub { font-weight: 400; display: block; }
@@ -22,5 +21,11 @@
   .staff > .pform { width: 100%; max-width: 560px; }
 }
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .staff { align-items: stretch; } /* in a column, flex-start would shrink the sub-tabs and the list to their content */
   .staff > .pview { overflow-x: auto; padding: 16px; }
+}
+@media (max-width: 760px) {
+  /* in a card the initials circle is just a label's place: the cell reads "Employee: name, number" like every other card */
+  .staff .table.rowcards .person::before { position: static; transform: none; width: auto; height: auto; border-radius: 0; background: none; color: var(--muted); font-size: inherit; font-weight: 600; display: block; }
+  .staff .table.rowcards tbody tr:nth-child(even) .person::before { background: none; color: var(--muted); }
 }

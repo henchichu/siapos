@@ -12,9 +12,7 @@ const minus = (n) => (n > 0 ? `−${n}` : "0");
 // ---- members list ---------------------------------------------------------------------------------------------------
 
 function MemberTable({ data, busy, editingId, onEdit, onHistory, onAct }) {
-  return html`<table className="table mg" aria-label="Members">
-    <colgroup><col /><col style=${{ width: 190 }} /><col style=${{ width: 72 }} /><col style=${{ width: 64 }} /><col style=${{ width: 68 }} />
-      <col style=${{ width: data.canEdit ? 240 : 84 }} /></colgroup>
+  return html`<div className="tscroll"><table className="table mg fit rowcards" aria-label="Members">
     <thead><tr><th>Name</th><th>Contact</th><th>Tier</th><th className="r">Points</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>${data.members.map((m) => html`<tr key=${m.id} className=${`${editingId === m.id ? "sel" : ""} ${m.active ? "" : "off"}`}>
       <td>${m.firstName} ${m.lastName}</td>
@@ -30,7 +28,7 @@ function MemberTable({ data, busy, editingId, onEdit, onHistory, onAct }) {
           : html`<button className="act" disabled=${busy} onClick=${() => onAct(m, true)}>Reactivate</button>`)}
       </div></td></tr>`)}
       ${!data.members.length && html`<tr><td colSpan="6">No members match.</td></tr>`}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function MemberForm({ form, setForm, msg, busy, onSave, onClear }) {
@@ -38,7 +36,7 @@ function MemberForm({ form, setForm, msg, busy, onSave, onClear }) {
   const title = form.id ? "Edit member" : "Enroll member";
   const field = (label, key, type = "text", extra = {}) => html`<label className="pf"><b>${label}</b>
     <input className="field" type=${type} value=${form[key]} onChange=${(e) => set({ [key]: e.target.value })} ...${extra} /></label>`;
-  return html`<aside className="pform pside" aria-label=${title}>
+  return html`<${Sheet} popup title=${title} onClose=${onClear}>
     <h2>${title}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       ${field("First name", "firstName", "text", { maxLength: 50 })}
@@ -50,7 +48,7 @@ function MemberForm({ form, setForm, msg, busy, onSave, onClear }) {
       <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save</button>
         <button className="pbtn outline" type="button" onClick=${onClear}>Clear</button></div>
     </form>
-  </aside>`;
+  <//>`;
 }
 
 function Members({ q, inactive, onFilters, onHistory }) {
@@ -96,13 +94,16 @@ function Members({ q, inactive, onFilters, onHistory }) {
 
   return html`<${React.Fragment}><${PageTitle}>Rewards members<//><div className="staff">
     <section className="pview">
-      <header className="phead end">
-        <div className="pfilters">
-          <label className="check search">Search
-            <input className="field" type="search" placeholder="Name, email or phone" value=${q} onChange=${(e) => onFilters({ q: e.target.value })} /></label>
-          <label className="check"><input type="checkbox" checked=${inactive} onChange=${(e) => onFilters({ inactive: e.target.checked })} /> Show inactive</label>
-          <button className="pbtn" onClick=${() => show(EMPTY)}>Add new member</button>
-        </div></header>
+      <header className="phead end bar">
+        <${Filters} popup active=${(q.trim() ? 1 : 0) + (inactive ? 1 : 0)}>
+          <div className="pfilters">
+            <label className="check search">Search
+              <input className="field" type="search" placeholder="Name, email or phone" value=${q} onChange=${(e) => onFilters({ q: e.target.value })} /></label>
+            <label className="check"><input type="checkbox" checked=${inactive} onChange=${(e) => onFilters({ inactive: e.target.checked })} /> Show inactive</label>
+          </div>
+        <//>
+        <div className="cardtools"><button className="pbtn" onClick=${() => show(EMPTY)}>Add new member</button><span className="filterslot"></span></div>
+      </header>
       ${note && html`<${Message} msg=${note} />`}
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <${MemberTable} data=${data} busy=${busy} editingId=${form?.id} onEdit=${edit} onHistory=${onHistory}
@@ -149,9 +150,7 @@ function OrderDialog({ id, onClose }) {
 }
 
 function HistoryRows({ rows, onView }) {
-  return html`<table className="table mg" aria-label="Orders and points">
-    <colgroup><col style=${{ width: 170 }} /><col style=${{ width: 120 }} /><col /><col style=${{ width: 80 }} /><col style=${{ width: 110 }} />
-      <col style=${{ width: 110 }} /><col style=${{ width: 130 }} /><col style=${{ width: 72 }} /></colgroup>
+  return html`<div className="tscroll"><table className="table mg fit rowcards" aria-label="Orders and points">
     <thead><tr><th>Date</th><th>Order</th><th>Source</th><th>Items</th><th className="r">Total</th><th className="r">Points earned</th><th className="r">Points redeemed</th><th></th></tr></thead>
     <tbody>${rows.map((r) => r.kind === "adjust"
       ? html`<tr key=${r.id}><td>${whenAt(r.at, r.tz)}</td><td>${r.number ?? "—"}</td><td>Points adjustment</td><td></td><td></td>
@@ -167,7 +166,7 @@ function HistoryRows({ rows, onView }) {
           <td className="r">${minus(r.redeemed)}</td>
           <td><button className="act" onClick=${() => onView(r.id)}>View</button></td></tr>`)}
       ${!rows.length && html`<tr><td colSpan="8">No orders yet.</td></tr>`}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function History({ id, onBack }) {

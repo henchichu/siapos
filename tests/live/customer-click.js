@@ -47,7 +47,7 @@ function kiosk(base) {
   try {
     const k = kiosk(base);
     await sleep(800);
-    check("entry asks how you'd like to order", /How would you like to order\?/.test(k.text()));
+    check("entry asks how you'd like to order", /Members earn points/.test(k.text()) && !!k.button("Order as Guest"));
     check("no staff sign-in on the page", !/employee/i.test(k.text()));
 
     await k.type(k.$("input"), "123");
@@ -58,31 +58,30 @@ function kiosk(base) {
     check("a number that can't exist is refused before asking the server", /valid 10-digit US phone/.test(k.text()));
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");
-    check("Chloe signs in by phone", /Hi, Chloe!/.test(k.text()));
-    check("her phone is masked and her points shown", /\(\*\*\*\) \*\*\*-0177/.test(k.text()) && /106 points/.test(k.text()), k.text().slice(0, 200));
+    check("Chloe signs in by phone", /Chloe/.test(k.text()));
+    check("her points are shown in the navigation", /106 points/.test(k.text()), k.text().slice(0, 200));
 
-    await k.click("Redeem");
-    check("Redeem opens the rewards page", /Redeem for store points/.test(k.text()));
+    await k.click("Rewards");
+    check("Rewards opens the rewards page", /Redeem for store points/.test(k.text()));
     await k.click("Browse Menu");
     check("Browse Menu goes back to the menu", /Your order/.test(k.text()) && !!k.button("Checkout"));
     check("Checkout is off while the cart is empty", k.button("Checkout").disabled);
 
     const americano = [...k.w.document.querySelectorAll(".tile")].find((t) => /Americano/.test(t.textContent));
     americano.querySelector("button").click(); await sleep(400);
-    check("Add opens the item options", !!k.button("Add to my order"));
+    check("Add opens the item options", !![...k.w.document.querySelectorAll(".customize .confirm")][0]);
     await k.click("Large 16 oz · $3.75");
     const caramel = [...k.w.document.querySelectorAll(".opt label")].find((l) => /Caramel/.test(l.textContent)).querySelector("input");
     caramel.click(); await sleep(200);
-    check("the item total adds the option", /Item total \$4\.35/.test(k.text()), k.text().match(/Item total \$[\d.]+/)?.[0]);
-    await k.click("Add to my order");
+    check("the item total adds the option", /Add to order · \$4\.35/.test(k.text()), k.text().match(/Add to order · \$[\d.]+/)?.[0]);
+    k.$(".customize .confirm").click(); await sleep(300);
     check("the item lands in the cart", /Americano, Large 16 oz/.test(k.text()) && /Caramel/.test(k.text()));
     k.$('[aria-label="Add one Americano"]').click(); await sleep(200);
     check("+ raises the quantity", /Subtotal\$8\.70/.test(k.text().replace(/\s/g, "")), k.text().match(/Subtotal\s*\$[\d.]+/)?.[0]);
 
-    await k.type(k.$(".cart .note input"), "Extra hot");
     await k.click("Checkout");
     check("checkout shows the account", /Chloe · \(\*\*\*\) \*\*\*-0177/.test(k.text()));
-    check("the barista note carries into checkout", [...k.w.document.querySelectorAll(".checkout-overlay input")].some((i) => i.value === "Extra hot"));
+    await k.type([...k.w.document.querySelectorAll(".checkout-overlay input")].find((i) => i.maxLength === 120), "Extra hot");
     await sleep(400);
     await k.click("Place order");
     check("a payment method is required", /Choose how you'll pay/.test(k.text()));
@@ -112,7 +111,7 @@ function kiosk(base) {
     await k.click("Your Orders"); await sleep(400);
     check("Your Orders lists the new order", new RegExp(`Order #${number}`).test(k.text()));
     [...k.w.document.querySelectorAll(".order-card")].find((c) => c.textContent.includes(`#${number}`)).click(); await sleep(500);
-    check("an order opens with its status", new RegExp(`Order #${number}`).test(k.text()) && /What you ordered/.test(k.text()));
+    check("an order opens with its status", new RegExp(`#${number}`).test(k.text()) && /Order total/.test(k.text()) && !!k.$(".status-card .steps"));
     check("no Advance status control", !k.button("Advance status"));
     const stage = () => [...k.w.document.querySelectorAll(".step")].map((x) => x.className.replace("step", "").trim() || "-").join(",");
     check("Confirmed is the current step", stage() === "current,-,-,-", stage());
@@ -124,17 +123,17 @@ function kiosk(base) {
     await k.click("Back to order history");
     check("back to history", /Signed-in order history/.test(k.text()));
 
-    await k.click("Back to Customer Login"); await sleep(300);
+    await k.click("Sign out"); await sleep(300);
     check("sign-out returns to the entry page", /How would you like to order\?/.test(k.text()));
     const session = await (await k.w.fetch("/api/customer/session", CAFE)).json();
     check("the customer session is gone", session.signedIn === false);
 
     await k.click("Order as Guest");
-    check("guest sees the menu, not Chloe", /Welcome, Guest!/.test(k.text()) && !/Chloe/.test(k.text()));
+    check("guest sees the menu, not Chloe", /Guest/.test(k.text()) && !/Chloe/.test(k.text()));
     check("guest has no Your Orders", !k.button("Your Orders"));
     const muffin = [...k.w.document.querySelectorAll(".tile")].find((t) => /muffin/i.test(t.textContent));
     muffin.querySelector("button").click(); await sleep(400);
-    await k.click("Add to my order");
+    k.$(".customize .confirm").click(); await sleep(300);
     await k.click("Checkout"); await sleep(400);
     await k.click("Cash");
     await k.click("Place order");
@@ -161,7 +160,7 @@ function kiosk(base) {
     await k.click("Your Orders"); await sleep(800);
     check("it lists the order from this visit", new RegExp(`Order #${guestNumber}`).test(k.text()) && /Orders you placed on this phone/.test(k.text()), k.text().slice(0, 200));
     k.$(".order-card").click(); await sleep(800);
-    check("and reopens its tracking screen", /This order was cancelled/.test(k.text()) && /What you ordered/.test(k.text()));
+    check("and reopens its tracking screen", /Order cancelled/.test(k.text()) && /Order total/.test(k.text()));
 
     ahead(31 * 1000); await sleep(1500);
     check("30 seconds after an order, the kiosk is back at the entry page", /How would you like to order\?/.test(k.text()), k.text().slice(0, 120));
@@ -171,9 +170,9 @@ function kiosk(base) {
     k.w.Date.now = real;
     await k.type(k.$("input"), "(312) 555-0177");
     await k.click("Log In");
-    check("Chloe signs in again", /Hi, Chloe!/.test(k.text()));
+    check("Chloe signs in again", /Chloe/.test(k.text()));
     ahead(60 * 1000); await sleep(1500);
-    check("a minute of no touches is still signed in", /Hi, Chloe!/.test(k.text()));
+    check("a minute of no touches is still signed in", /Chloe/.test(k.text()));
     ahead(3 * 60 * 1000); await sleep(1500);
     check("after 2 minutes idle, signed out", /How would you like to order\?/.test(k.text()) && !/Chloe/.test(k.text()));
     check("and the server session is gone", (await (await k.w.fetch("/api/customer/session", CAFE)).json()).signedIn === false);
@@ -186,7 +185,7 @@ function kiosk(base) {
       await sleep(900);
       check("the public kiosk offers guest ordering only", /Continue as a guest to place an order/.test(g.text()) && !/Customer login/.test(g.text()) && !g.button("Log In") && !!g.button("Order as Guest"), g.text().slice(0, 160));
       await g.click("Order as Guest");
-      check("and its menu opens for a guest", /Welcome, Guest!/.test(g.text()) && !g.button("Your Orders"));
+      check("and its menu opens for a guest", /Guest/.test(g.text()) && !g.button("Your Orders"));
       check("the public kiosk page reported no errors", g.w.errors.length === 0, g.w.errors.slice(0, 2).join(" | "));
     } finally { pub.close(); }
 

@@ -74,3 +74,85 @@
   .table { min-width: 640px; }
   .filters .loc, .filters .stat-sel { width: 100%; }
 }
+
+/* Opt-in automatic layout: add "fit" to a .table and the browser sizes every column from its content, so no widths are set by hand.
+   Short values (class nw, numbers, status, actions) stay on one line; the other columns wrap between words and share the rest of the width.
+   overflow-wrap is break-word, not the base rule's "anywhere": anywhere shrinks a column's minimum to one letter and text would collapse.
+   The table is never narrower than that minimum, so the wrapper's sideways scroll (.tscroll) starts only when the content truly cannot fit. */
+.table.fit { table-layout: auto; min-width: 0; }
+.table.fit th, .table.fit td { padding-right: 16px; overflow-wrap: break-word; }
+.table.fit th:last-child, .table.fit td:last-child { padding-right: 14px; }
+.table.fit .nw, .table.fit .r, .table.fit td.state, .table.fit .acts { white-space: nowrap; }
+.table.fit .acts { flex-wrap: nowrap; }
+
+/* Card layout, for a .table that is also .fit and .rowcards: on a phone each row is a small card, the header row is kept for screen readers
+   only, and every cell shows its column's name (data-label, set by shell.js) before its value. Nothing scrolls sideways. */
+@media (max-width: 760px) {
+  .tscroll:has(> .table.rowcards) { overflow: visible; }
+  .table.fit.rowcards, .table.fit.rowcards tbody, .table.fit.rowcards tfoot, .table.fit.rowcards tr, .table.fit.rowcards td { display: block; width: 100%; min-width: 0; }
+  .table.fit.rowcards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table.fit.rowcards tr { background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 6px 14px; margin-bottom: 10px; }
+  .table.fit.rowcards tr.sel { border-color: var(--navy); }
+  .table.fit.rowcards td, .table.fit.rowcards td:first-child, .table.fit.rowcards td:last-child {
+    display: block; overflow: hidden; height: auto; padding: 6px 0; border: 0; text-align: right; white-space: normal; }
+  .table.fit.rowcards td + td { border-top: 1px solid var(--hover); }
+  .table.fit.rowcards td:empty { display: none; }
+  .top:not(:has(.subpanel.on)) { display: none; }
+  .table.fit.rowcards td::before { content: attr(data-label); float: left; max-width: 45%; margin-right: 16px; font-weight: 600; color: var(--muted); text-align: left; } /* floated, so a cell with an item and a second line (supplier) keeps them together */
+  .table.fit.rowcards td[data-label=""]::before { content: none; }
+  .table.fit.rowcards td[data-label=""], .table.fit.rowcards td[colspan] { text-align: left; } /* the "No lines yet" row has no label */
+  .table.fit.rowcards td:has(> .acts)::before { content: none; } /* the buttons take the whole row instead of sitting beside the word "Actions" */
+  .table.fit.rowcards .acts { flex-wrap: wrap; justify-content: flex-start; white-space: normal; }
+}
+
+/* Phone navigation (components in shell.js): sub-tabs, full-screen sheets, the Filters button. Hidden or inline on wider screens. */
+.subtabs, .filterbar, .sheet .sheethead { display: none; }
+@media (max-width: 760px) {
+  .subtabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; margin-bottom: 16px; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); }
+  .subtabs button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text); padding: 6px 4px; font: inherit; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; text-align: center; }
+  .subtabs button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+  .subtabs .badge, .filterbtn .badge { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--hover); color: var(--navy); font-size: 12px; font-weight: 700; }
+  .subtabs button[aria-pressed="true"] .badge { background: #fff; }
+  .subtabs button { white-space: nowrap; }
+  @media (max-width: 560px) { .subtabs button { flex-direction: column; gap: 2px; } } /* label above its count on a slim screen, the same for every tab */
+  @media (max-width: 420px) { .subtabs button { font-size: 12.5px; padding: 6px 2px; } }
+  .subpanel:not(.on) { display: none; }
+
+  .filterbar { display: flex; justify-content: flex-end; width: 100%; margin: 0 0 12px; }
+  .pview > .filterbar, .results > .filterbar { margin: -12px 0 -8px; } /* a list with no title row to hold the button gets a row of its own, snug under its header */
+  .phead.bar { justify-content: flex-end; padding: 4px; border: 1.5px solid var(--border); border-radius: var(--radius); background: #fff; } /* no title row: the buttons get a strip of their own, like the tab bars */
+  .hide-phone { display: none; } /* a button's longer wording, when the title row has no room for it */
+  .cardtools .pbtn, .cardtools .filterbtn { min-height: 40px; padding: 6px 10px; font-size: 13px; white-space: nowrap; } /* the title row's buttons, small enough to share it */
+  .titleaction .filterbtn { min-height: 40px; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+  .filterbtn { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 1.5px solid var(--border); border-radius: var(--radius); background: #fff;
+    color: var(--navy); font: inherit; font-size: 14px; font-weight: 600; }
+
+  .pform.sheet { position: fixed; inset: 0; z-index: 900; width: auto; max-width: none; margin: 0; border: 0; border-radius: 0; background: #fff; padding: 0 16px 24px; overflow-y: auto; }
+  .sheet .sheethead { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 12px; margin: 0 -16px 16px; padding: 4px 16px; background: var(--navy); color: #fff; font-size: 17px; font-weight: 600; }
+  .sheetback { min-height: 44px; padding: 0 8px 0 0; border: 0; background: none; color: #fff; font: inherit; font-weight: 600; }
+  .sheet > h2 { display: none; } /* the sheet's own title bar says it */
+  .main > .tabs, .inventory-toolbar > .tabs { width: 100%; } /* a page's own tab strip spans the screen, like the sub-tabs below it; the small toggles inside a section don't */
+  .main > .tabs > .tab, .inventory-toolbar > .tabs > .tab { flex: 1 1 auto; text-align: center; }
+  .sheet:focus { outline: none; }
+  .sheet .pfilters, .sheet .ofilters, .sheet .osearch { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin: 0 0 16px; padding: 0; border: 0; background: none; }
+  .sheet .pfilters > *, .sheet .ofilters > *, .sheet .osearch > * { width: 100%; max-width: none; min-width: 0; }
+  .sheet .pfilters .select, .sheet .pfilters .field { width: 100%; }
+}
+
+/* Pop-up windows (the Modal from shell.js) on the pages that use them: the filter controls stack, the way they do in a sheet */
+.modal.popup .pfilters, .modal.popup .ofilters, .modal.popup .osearch { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin: 0 0 16px; padding: 0; border: 0; background: none; }
+.modal.popup .pfilters > *, .modal.popup .ofilters > *, .modal.popup .osearch > * { width: 100%; max-width: none; min-width: 0; }
+.modal.popup > h2 + h2 { display: none; } /* a form's own title repeats the window's */
+.modal.popup .pactions { display: flex; gap: 12px; } .modal.popup .pactions > * { flex: 1; }
+.modal.popup .btns { margin-top: 8px; }
+.modal.popup label.check { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 4px; }
+.modal.popup .pf { margin-bottom: 16px; } /* a form's fields need air between them; the page's own column supplies it with a gap */
+
+/* The buttons in a list's title row (Add stock item, Print count sheet, and on a phone Filters), side by side at the row's right end */
+.cardtools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.filterslot:empty { display: none; }
+.modal.popup .pform { border: 0; border-radius: 0; padding: 0; background: none; box-shadow: none; } /* a form inside a pop-up is not a card inside a card */
+.modal.popup .pform + .pform { margin-top: 24px; }
+.modal.popup .pform > h3:first-child { display: none; } /* a form's own heading repeats the window's title */
+@media (max-width: 760px) { .oleft:not(:has(.subpanel.on)), .oside:not(:has(.subpanel.on)) { display: none; } }

@@ -9,8 +9,7 @@ const fromEmployee = (e) => ({
 });
 
 function StaffTable({ data, rows, busy, onEdit, onAct, editingId }) {
-  return html`<table className="table mg" aria-label="Employees">
-    <colgroup><col /><col style=${{ width: 112 }} /><col style=${{ width: 140 }} /><col style=${{ width: 84 }} /><col style=${{ width: 68 }} /><col style=${{ width: 164 }} /></colgroup>
+  return html`<div className="tscroll"><table className="table mg fit rowcards" aria-label="Employees">
     <thead><tr><th>Employee</th><th>Role</th><th>Locations</th><th className="r">Pay rate</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>${rows.map((e) => html`<tr key=${e.id} className=${`${editingId === e.id ? "sel" : ""} ${e.active ? "" : "off"}`}>
       <td className="person" data-initials=${initials(`${e.firstName} ${e.lastName}`)}><b>${e.firstName} ${e.lastName}</b><span className="sub">No. ${e.number}</span></td>
@@ -26,7 +25,7 @@ function StaffTable({ data, rows, busy, onEdit, onAct, editingId }) {
               onClick=${() => onAct(e, "deactivate")}>Deactivate</button>`}
       </div>`}</td></tr>`)}
       ${!rows.length && html`<tr><td colSpan="6">No employees match.</td></tr>`}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function StaffForm({ data, form, setForm, msg, busy, onSave, onClear }) {
@@ -34,7 +33,7 @@ function StaffForm({ data, form, setForm, msg, busy, onSave, onClear }) {
   const editing = !!form.id;
   const self = form.id === data.me;
   const digits = (n) => (e) => e.target.value.replace(/\D/g, "").slice(0, n);
-  return html`<aside className="pform pside" aria-label=${editing ? "Edit employee" : "Add employee"}>
+  return html`<${Sheet} popup title=${editing ? "Edit employee" : "Add employee"} onClose=${onClear}>
     <h2>${editing ? "Edit employee" : "Add employee"}</h2>
     <form className="stack" style=${{ gap: 16 }} onSubmit=${(e) => { e.preventDefault(); onSave(); }}>
       <label className="pf"><b>First name</b><input className="field" maxLength="50" value=${form.firstName} onChange=${(e) => set({ firstName: e.target.value })} /></label>
@@ -62,7 +61,7 @@ function StaffForm({ data, form, setForm, msg, busy, onSave, onClear }) {
       <div className="pactions"><button className="pbtn" type="submit" disabled=${busy}>Save</button>
         <button className="pbtn outline" type="button" onClick=${onClear}>Clear</button></div>
     </form>
-  </aside>`;
+  <//>`;
 }
 
 function App() {
@@ -111,13 +110,16 @@ function App() {
       <${PageTitle}>Employees<//>
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<div className="staff">
         <section className="pview">
-          <header className="phead end">
-            <div className="pfilters">
-              <select className="select" aria-label="Role" value=${role} onChange=${(e) => setRole(e.target.value)}>
-                <option value="all">All roles</option>${data.roles.map((r) => html`<option key=${r.id} value=${r.id}>${r.name}</option>`)}</select>
-              <label className="check"><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> Show inactive</label>
-              <button className="pbtn" onClick=${() => show(empty(data))}>Add employee</button>
-            </div></header>
+          <header className="phead end bar">
+            <${Filters} popup active=${(role !== "all" ? 1 : 0) + (showInactive ? 1 : 0)}>
+              <div className="pfilters">
+                <select className="select" aria-label="Role" value=${role} onChange=${(e) => setRole(e.target.value)}>
+                  <option value="all">All roles</option>${data.roles.map((r) => html`<option key=${r.id} value=${r.id}>${r.name}</option>`)}</select>
+                <label className="check"><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> Show inactive</label>
+              </div>
+            <//>
+            <div className="cardtools"><button className="pbtn" onClick=${() => show(empty(data))}>Add employee</button><span className="filterslot"></span></div>
+          </header>
           ${note && html`<${Message} msg=${note} />`}
           <${StaffTable} data=${data} rows=${rows} busy=${busy} onEdit=${(e) => show(fromEmployee(e))} onAct=${act} editingId=${form?.id} />
         </section>

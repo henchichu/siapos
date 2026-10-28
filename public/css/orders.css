@@ -17,10 +17,8 @@ a.pbtn.outline { color: var(--navy); }
 .table a { color: var(--navy); font-weight: 600; text-decoration: none; }
 .table a:hover, .table a:focus-visible { text-decoration: underline; }
 .table td .opts { display: block; color: var(--muted); margin-top: 2px; }
-/* The results table keeps its fixed columns, with a floor that leaves Source readable; below it the table scrolls in its own box */
+/* The results table sizes its own columns (shift.css, "fit") and scrolls in its own box only when its content cannot fit */
 .tscroll { max-width: 100%; overflow-x: auto; }
-.results .table.t-orders { min-width: 780px; }
-.t-orders td { overflow-wrap: break-word; }
 
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; padding: 0; }
 .metric { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -43,3 +41,4 @@ a.pbtn.outline { color: var(--navy); }
   .results .table, .osec .table { min-width: 560px; }
   .results, .osec { overflow-x: auto; }
 }
+@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .metric b { font-size: 20px; } }

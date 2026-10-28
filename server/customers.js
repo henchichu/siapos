@@ -162,14 +162,16 @@ const loginLimits = [rateLimit(60, 60 * 1000), rateLimit(10, 60 * 1000, { by: "d
 router.post("/customer/login", loginLimits, async (req, res) => {
   if (req.noPhoneSignIn) throw new HttpError(403, "Phone sign-in isn't available on this address. Continue as a guest.");
   const k = await place(req);
-  const digits = check.phoneDigits(req.body.phone);
-  if (!digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
+  // A member is found by phone or by email: some were enrolled with only an email. Either is as easy to know as the other, so the rules around this switch are the same.
+  const email = String(req.body.email || "").trim() && check.email(req.body.email);
+  const digits = email ? null : check.phoneDigits(req.body.phone);
+  if (!email && !digits) return res.status(400).json({ error: "Enter a valid 10-digit US phone number." });
   const [[c]] = await pool.query(
     `SELECT c.CustomerID AS id FROM Customer c
-      WHERE c.BusinessID = ? AND c.Active AND c.PhoneDigits = ?
+      WHERE c.BusinessID = ? AND c.Active AND ${email ? "LOWER(c.Email) = ?" : "c.PhoneDigits = ?"}
       ORDER BY c.CustomerID LIMIT 1`,
-    [k.BusinessID, digits]);
-  if (!c) return res.status(404).json({ error: "We don't have an account for that number. Continue as a guest, or ask a team member." });
+    [k.BusinessID, email || digits]);
+  if (!c) return res.status(404).json({ error: `We don't have an account for that ${email ? "email" : "number"}. Continue as a guest, or ask a team member.` });
   signIn(req, res, c.id, k.BusinessID);
   res.json(await me(c.id));
 });
@@ -184,7 +186,7 @@ router.post("/customer/logout", (req, res) => {
 // Who is signed in on this iPad, with points read live from the ledger
 async function me(customerId) {
   const [[c]] = await pool.query(
-    `SELECT c.FirstName AS firstName, c.Phone AS phone, t.Name AS tier, la.LoyaltyAccountID AS account,
+    `SELECT c.FirstName AS firstName, c.Phone AS phone, c.Email AS email, t.Name AS tier, la.LoyaltyAccountID AS account,
             COALESCE((SELECT SUM(lt.PointsChange) FROM LoyaltyTransaction lt WHERE lt.LoyaltyAccountID = la.LoyaltyAccountID), 0) AS points
        FROM Customer c
        LEFT JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
@@ -193,6 +195,7 @@ async function me(customerId) {
   return {
     firstName: c.firstName || "there",
     maskedPhone: c.phone ? `(***) ***-${String(c.phone).replace(/\D/g, "").slice(-4)}` : null,
+    maskedEmail: c.email ? c.email.replace(/^(.).*(@.*)$/, "$1***$2") : null, // for a member enrolled with only an email
     member: !!c.account,
     points: c.account ? Number(c.points) : null,
     tier: c.tier || null,
@@ -252,11 +255,27 @@ router.post("/customer/orders", orderLimits, async (req, res) => {
 const PAID_HERE = { "Card": [2, "card"], "Apple Pay": [5, "apple"], "Google Pay": [6, "google"] }; // payment method code, mock kind
 // The mock takes no money, so it is offered only when MOCK_PAY=1 (development); without it the public page offers Cash only
 const mockPay = () => process.env.MOCK_PAY === "1";
+// An order still on its way: waiting for payment, confirmed, being made, or ready. Its customer can't place another until it is picked up.
+// shortcut: a guest is a browser (the device cookie) remembered in memory, so clearing cookies or a restart forgets it; a shared screen can't tell
+// guests apart, so it never holds one back. Move to a column on Orders when guests need a firmer rule.
+const guestLast = new Map();
+async function activeOrder(req, businessId, customerId) {
+  const guestId = !customerId && !shared() && guestLast.get(req.device);
+  if (!customerId && !guestId) return null;
+  const [[o]] = await pool.query(
+    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.OrderStatusCode AS statusCode, st.Description AS status, l.TimeZone AS tz
+       FROM Orders o JOIN OrderStatus st ON st.OrderStatusCode = o.OrderStatusCode JOIN Location l ON l.LocationID = o.LocationID
+      WHERE ${customerId ? "o.CustomerID = ?" : "o.OrderID = ? AND o.CustomerID IS NULL"} AND o.BusinessID = ? AND o.ChannelCode IN (2, 3) AND o.OrderStatusCode IN (1, 2, 3, 4)
+      ORDER BY o.OrderDateTime DESC LIMIT 1`, [customerId || guestId, businessId]);
+  return o ? { id: o.id, orderNumber: o.orderNumber, placedAt: o.placedAt, tz: o.tz, statusCode: o.statusCode, status: statusLabel(o.status) } : null;
+}
 const UNPAID_MAX_ITEMS = 20; // an unpaid order holds stock, so one can't take a whole shelf
 async function placeOrder(req) {
   const k = await place(req);
   const s = currentCustomer(req, k.BusinessID);
   const customerId = s?.customerId || null;
+  const open = await activeOrder(req, k.BusinessID, customerId);
+  if (open) throw new HttpError(409, `Your order #${open.orderNumber} is still in progress. You can order again once it has been picked up.`);
   const payWith = String(req.body.paymentMethod || "");
   const paidHere = mockPay() ? PAID_HERE[payWith] : null;
   if (payWith !== "Cash" && !paidHere) throw new HttpError(400, "Choose how you'll pay.");
@@ -312,7 +331,10 @@ async function placeOrder(req) {
     // shortcut: a deadlock reruns this, charging again; harmless for the mock, a real processor needs an idempotency key
     if (paidHere && priced.totalCents > 0) charge(paidHere[1], req.body.card);
     return { orderId, orderNumber: o.OrderNumber, totalCents: priced.totalCents, paid: !!paidHere };
-  }).then((receipt) => { notify(k.LocationID); return receipt; });
+  }).then((receipt) => {
+    if (!customerId) { guestLast.set(req.device, receipt.orderId); if (guestLast.size > 5000) guestLast.delete(guestLast.keys().next().value); }
+    notify(k.LocationID); return receipt;
+  });
 }
 
 // One order. Signed in: only that customer's own orders. Guest: only guest orders, found by their unguessable id.
@@ -335,6 +357,12 @@ router.get("/customer/orders/:id", async (req, res) => {
     status: statusLabel(o.status), statusCode: o.statusCode, completedAt: o.completedAt,
     items: items.map((i) => ({ name: i.sized ? `${i.product}, ${i.size}` : i.product, qty: Number(i.qty), lineTotal: Number(i.line) })),
   });
+});
+
+// The order the island shows: this customer's newest one that is still in progress, or none
+router.get("/customer/active-order", async (req, res) => {
+  const k = await place(req);
+  res.json({ order: await activeOrder(req, k.BusinessID, currentCustomer(req, k.BusinessID)?.customerId || null) });
 });
 
 // Signed-in customer's own orders, newest first

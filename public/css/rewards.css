@@ -11,7 +11,6 @@
 .mcards span { font-size: 14px; color: var(--muted); }
 .mcards b { font-size: 32px; overflow-wrap: anywhere; }
 .history .tablewrap { overflow-x: auto; }
-.history .table { min-width: 860px; }
 .history .table td { vertical-align: middle; }
 
 .odetail { gap: 20px; }

@@ -28,19 +28,19 @@ test("configured business name follows kiosk navigation, checkout, and order his
     const button = [...w.document.querySelectorAll("button")].find(b => b.textContent.trim() === text);
     assert(button, text); button.click(); await wait();
   };
-  const header = () => assert.equal(w.document.querySelector(".header h1")?.textContent, businessName);
+  const header = () => assert.equal(w.document.querySelector(".nav h1 .label")?.textContent, businessName); // the navigation names the café on every screen after the entry one
   try {
     await wait(); header();
-    await click("Redeem"); header();
+    await click("Rewards"); header();
     await click("Browse Menu"); header();
-    await click("Add"); await click("Add to my order");
+    w.document.querySelector(".tile button").click(); await wait(); w.document.querySelector(".customize .confirm").click(); await wait();
     await click("Checkout"); header();
     await click("Cash"); await click("Place order");
     assert.equal(w.document.querySelector(".confirm-overlay .where")?.textContent, businessName + " · Pickup at this counter");
     await click("Back to menu"); await click("Your Orders"); header();
     w.document.querySelector(".order-card").click(); await wait(); header();
     assert.equal(w.document.querySelector(".details .where")?.textContent, businessName);
-    await click("Back to Customer Login");
+    await click("Sign out");
     assert.equal(w.document.querySelector(".topbar p")?.textContent, businessName);
     assert(!w.document.body.textContent.includes("ClockIt Cafe"));
     assert(!w.document.querySelector("coffee"), "business name is escaped as text");

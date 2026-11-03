@@ -93,7 +93,7 @@ test("details reconcile, and a refund shows up in payments and status", async ()
   assert.equal(Math.round(sum * 100), Math.round(d.totals.total * 100), "items - discount + tax = total");
   assert.deepEqual(d.payments.map((p) => [p.type, p.method, p.amount]), [["Payment", "Cash", d.total]]);
   assert.deepEqual(d.where.location, "Brewbean Downtown");
-  assert.deepEqual([d.where.rungUpBy, d.where.customer, d.where.pickup], ["Sam Rivera", "Walk-in", null]);
+  assert.deepEqual([d.where.rungUpBy, d.where.customer], ["Sam Rivera", "Walk-in"]);
   assert.ok(d.history.every((h) => h.status && h.at));
 
   const lookup = (await sam.call(`/refunds/order?q=${s.number}`)).body;
@@ -106,16 +106,9 @@ test("details reconcile, and a refund shows up in payments and status", async ()
   assert.equal(after.canRefund, true);
 });
 
-test("an order that isn't completed can't be refunded; an online one has no register and a pickup", async () => {
+test("an order that isn't completed can't be refunded", async () => {
   const [[pending]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE OrderStatusCode = 1 AND BusinessID = 'biz-brewbean' LIMIT 1");
   if (pending) assert.equal((await leo.call(`/orders/${pending.id}`)).body.canRefund, false);
-  const [[online]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE ChannelCode = 2 AND BusinessID = 'biz-brewbean' LIMIT 1");
-  const d = (await leo.call(`/orders/${online.id}`)).body;
-  assert.equal(d.source, "Online");
-  assert.deepEqual([d.where.register, d.where.rungUpBy], [null, "Online"]);
-  assert.ok(d.where.pickup && "at" in d.where.pickup);
-  const listed = (await search({ from: "2026-01-01", to: "2026-12-31", status: "any" })).body.orders.find((o) => o.id === online.id);
-  if (listed) assert.equal(listed.source, "Online");
 });
 
 test("a missing order is a 404, and an order outside my locations isn't visible", async () => {

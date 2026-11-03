@@ -16,9 +16,8 @@ function whenLine(stage, t, tz, now) {
 }
 
 function Ticket({ stage, t, tz, now, action, busy }) {
-  const pickup = t.pickupAt ? clock(t.pickupAt, tz) : "ASAP";
   return html`<article className="ticket" aria-label=${`Order ${t.number}`}>
-    <div className="top"><b>Order ${t.number}</b><span>${t.online ? `Online · pickup ${pickup}` : "Register"}</span></div>
+    <div className="top"><b>Order ${t.number}</b><span>Register</span></div>
     <p className="meta">${t.customer} · ${whenLine(stage, t, tz, now)}</p>
     ${t.items.map((i, n) => {
       const detail = [i.size, i.options.join(", ")].filter(Boolean).join(" · ");
@@ -27,7 +26,6 @@ function Ticket({ stage, t, tz, now, action, busy }) {
         ${detail && html`<p className="opts">${detail}</p>`}
       <//>`;
     })}
-    ${t.note && html`<p className="note">Note: ${t.note}</p>`}
     ${action && html`<button className="kbtn block" disabled=${busy} onClick=${() => action.run(t)}>${action.label}</button>`}
   </article>`;
 }

@@ -18,11 +18,10 @@ SET @D = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', @tz));    -- today, café lo
 INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
 VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7);
 
--- Both take online orders for the history; Campus switches off at the end
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone, AcceptsOnlineOrders)
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
 VALUES
-    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz, TRUE),
-    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz, TRUE);
+    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz),
+    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz);
 
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
@@ -317,12 +316,12 @@ CREATE TABLE _seed_order (OrderID CHAR(36) PRIMARY KEY, LocationID CHAR(36), h B
                           Total DECIMAL(10,2), Tip DECIMAL(10,2));
 INSERT INTO _seed_order
 SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:00'),
-       IF(MOD(x.h, 10) = 0, 2, 1),                                            -- 1 = POS, 2 = ONLINE
-       IF(MOD(x.h, 10) = 0, NULL, IF(x.lc = 'dt', 'reg-dt-1', 'reg-cp-1')),
-       IF(MOD(x.h, 10) = 0, NULL, IF(x.lc = 'dt', 'emp-sam', 'emp-priya')),
-       IF(MOD(x.h, 10) = 0 OR MOD(x.h, 5) = 0,
+       1,                                                                     -- 1 = POS
+       IF(x.lc = 'dt', 'reg-dt-1', 'reg-cp-1'),
+       IF(x.lc = 'dt', 'emp-sam', 'emp-priya'),
+       IF(MOD(x.h, 5) = 0,
           ELT(MOD(x.h, 4) + 1, 'cus-ava', 'cus-ben', 'cus-chloe', 'cus-diego'), NULL),
-       IF(MOD(x.h, 10) <> 0 AND MOD(x.h, 3) = 0, 1, 2),                       -- 1 = CASH, 2 = CARD
+       IF(MOD(x.h, 3) = 0, 1, 2),                                             -- 1 = CASH, 2 = CARD
        NULL, NULL
   FROM (SELECT CONCAT('ord-', lc, '-', LPAD(d.n, 2, '0'), '-', LPAD(s.n, 2, '0')) OrderID,
                l.LocationID, l.lc,
@@ -420,16 +419,12 @@ UPDATE _seed_line l
  WHERE l.VariantID IN ('var-croissant', 'var-muffin') AND HOUR(o.LocalAt) < 10;
 
 -- Same steps the backend takes: open the order, add lines, total it, pay, complete
--- Some online orders pick a time (20 min out) or leave a note; the rest are "as soon as possible"
-INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime,
-                    PickupAt, CustomerNote)
-SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt,
-       IF(ChannelCode = 2 AND MOD(h, 3) = 0, UtcAt + INTERVAL 20 MINUTE, NULL),
-       IF(ChannelCode = 2 AND MOD(h, 4) < 2, ELT(MOD(h, 4) + 1, 'Extra hot, please', 'Name on the cup: Sam'), NULL)
+INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime)
+SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt
   FROM _seed_order
  UNION ALL       -- cancelled below; inserted here so order numbers follow time
 SELECT 'ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00'), NULL, NULL
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00')
  ORDER BY 8, 1;
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, UnitCost, LineCost,
@@ -588,8 +583,5 @@ SELECT 'ref-0001', CONCAT('pay-', SUBSTRING(@ret_order, 5)), 'ret-0001', @ret_or
   FROM OrderItem WHERE OrderItemID = @ret_line;
 
 DROP TABLE _seed_loss, _seed_comp, _seed_linemod, _seed_line, _seed_menu, _seed_order, _seed_stock, _seed_shift, _seed_seq;
-
--- Campus has stopped taking online orders (Settings shows one On, one Off)
-UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus';
 
 COMMIT;

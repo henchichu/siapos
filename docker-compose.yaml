@@ -19,7 +19,6 @@ services:
     secrets:
       - db_root_password
       - app_user_password
-      - kiosk_user_password
     healthcheck:
       # The marker comes from 99-ready.sh, so a restart after a failed init (which skips init) never reports healthy
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 && test -f /var/lib/mysql/.siapos-ready"]
@@ -27,7 +26,7 @@ services:
       retries: 20
 
   # The staff side: registers, kitchen, timecards, reports. Published to this machine only; reach it from elsewhere over a
-  # private network (see README). Also runs the jobs that cancel unpaid kiosk orders and tell kitchen screens about new ones.
+  # private network (see README).
   pos-api:
     build: .
     restart: unless-stopped
@@ -51,7 +50,6 @@ services:
       UPLOAD_DIR: /app/uploads
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
       TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
-      KIOSK_HOST: ${KIOSK_HOST:-localhost} # the public hostname (same default as caddy), so each café's full order link is built on it
     volumes:
       - uploads:/app/uploads
     secrets:
@@ -60,67 +58,12 @@ services:
       mysql-db:
         condition: service_healthy
 
-  # The public side: the order page phones open (/order/<café id>) and /api/customer/*, nothing of the staff side. Its own
-  # database login (kiosk_user) that can only read the menu and write orders, its own small pool, and the pictures read-only.
-  kiosk-api:
-    build: .
-    command: ["node", "server/kiosk.js"]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    expose:
-      - "3001"            # reachable only by other containers (the caddy service below)
-    environment:
-      KIOSK_PORT: 3001
-      DB_HOST: mysql-db
-      DB_PORT: 3306
-      DB_NAME: miniworld
-      DB_USER: kiosk_user
-      DB_PASSWORD_FILE: /run/secrets/kiosk_user_password
-      DB_POOL_SIZE: 8
-      UPLOAD_DIR: /app/uploads
-      COOKIE_SECURE: ${COOKIE_SECURE:-0}
-      KIOSK_SHARED_DEVICE: ${KIOSK_SHARED_DEVICE:-} # 1 when the order screen is one shared iPad: it signs customers out quickly
-      KIOSK_PHONE_SIGNIN: ${KIOSK_PHONE_SIGNIN:-}   # 1 lets customers sign in by phone on the public address: demos with made-up customers only
-    volumes:
-      - uploads:/app/uploads:ro
-    secrets:
-      - kiosk_user_password
-    depends_on:
-      mysql-db:
-        condition: service_healthy
-
-  # The only way in from the internet: Caddy takes HTTPS on 80 and 443 (it gets its certificate for KIOSK_HOST by itself)
-  # and forwards to the kiosk side only. Off by default; on the server: docker compose --profile public up -d
-  caddy:
-    image: caddy:2
-    profiles: ["public"]
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      KIOSK_HOST: ${KIOSK_HOST:-localhost}   # the public hostname; with localhost Caddy makes its own certificate
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    depends_on:
-      kiosk-api:
-        condition: service_healthy
-
 volumes:
   mysql_data:
   uploads:
-  caddy_data:
 
 secrets:
   db_root_password:
     file: ./sql/secrets/root_password.txt
   app_user_password:
     file: ./sql/secrets/app_user_password.txt
-  kiosk_user_password:
-    file: ./sql/secrets/kiosk_user_password.txt

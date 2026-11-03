@@ -68,7 +68,7 @@ router.get("/rewards/members/:id", async (req, res) => {
   const { businessId, employeeId, locationId } = req.session;
   const m = await findMember(businessId, req.params.id);
   const [orders] = await pool.query(
-    `SELECT o.OrderID AS id, o.OrderNumber AS number, o.OrderDateTime AS at, o.ChannelCode AS channel, o.OrderStatusCode AS status,
+    `SELECT o.OrderID AS id, o.OrderNumber AS number, o.OrderDateTime AS at, o.OrderStatusCode AS status,
             o.Total AS total, l.TimeZone AS tz,
             COALESCE((SELECT SUM(oi.Quantity) FROM OrderItem oi WHERE oi.OrderID = o.OrderID), 0) AS items,
             COALESCE((SELECT SUM(r.Amount) FROM Refund r WHERE r.OrderID = o.OrderID AND r.RefundStatusCode = ?), 0) AS refunded,
@@ -93,7 +93,6 @@ router.get("/rewards/members/:id", async (req, res) => {
       number: o.number,
       at: o.at,
       tz: o.tz,
-      source: o.channel === 2 ? "Online" : "Register",
       items: Number(o.items),
       totalCents: cents(o.total),
       refundedCents: cents(o.refunded),
@@ -122,7 +121,7 @@ router.get("/rewards/members/:id", async (req, res) => {
 router.get("/rewards/orders/:id", async (req, res) => {
   const { businessId } = req.session;
   const [[o]] = await pool.query(
-    `SELECT o.OrderID AS id, o.OrderNumber AS number, o.OrderDateTime AS at, o.ChannelCode AS channel, os.Description AS status,
+    `SELECT o.OrderID AS id, o.OrderNumber AS number, o.OrderDateTime AS at, os.Description AS status,
             o.Subtotal AS subtotal, o.DiscountAmount AS discount, o.Tax AS tax, o.Total AS total, o.PricesIncludeTax AS included,
             l.Name AS location, l.TimeZone AS tz, e.FirstName AS staff, c.CustomerID AS memberId
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderStatus os ON os.OrderStatusCode = o.OrderStatusCode
@@ -158,7 +157,6 @@ router.get("/rewards/orders/:id", async (req, res) => {
     at: o.at,
     tz: o.tz,
     location: o.location,
-    source: o.channel === 2 ? "Online" : "Register",
     status: label(o.status),
     staff: o.staff,
     taxIncluded: !!o.included,

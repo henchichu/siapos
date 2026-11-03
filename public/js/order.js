@@ -42,8 +42,6 @@ function Info({ data, sub }) {
         <li>Register: ${w.register || "none"}</li>
         <li>Rung up by: ${w.rungUpBy || "—"}</li>
         <li>Customer: ${w.customer}</li>
-        ${w.pickup && html`<li>Pickup: ${w.pickup.at ? when(w.pickup.at, data.timeZone) : "as soon as possible"}</li>`}
-        <li>Note: ${w.note || "none"}</li>
       </ul>
     </section>
     <section className=${`osec ${panelOf("history", sub)}`} aria-label="Status history">

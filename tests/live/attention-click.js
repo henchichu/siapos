@@ -25,7 +25,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
     asked.push(made.body.orderNumber);
   }
 
-  const leo = await call("10420001", "111111"); // the Campus manager
+  const leo = await call("10420001", "111111"); // the Downtown manager
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/attention.html", pretendToBeVisual: true }).window;
   w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   w.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie: leo.cookie() } });
@@ -40,7 +40,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const panel = (title) => $(`section.panel[aria-label='${title}']`);
   const count = (title) => Number(panel(title).querySelector(".count").textContent);
 
-  check("heading and where and when", /Needs attention/.test($(".heading").textContent) && /Brewbean Campus · today/.test($(".heading").textContent));
+  check("heading and where and when", /Needs attention/.test($(".heading").textContent) && /Brewbean Downtown · today/.test($(".heading").textContent));
   check("four panels, as in the wireframe", $$("section.panel h3").map((h) => h.textContent).join("|") === "Stock losses reported today|Stock to reorder|Timecards waiting for approval|Refunds waiting for an override");
   check("menu: Needs attention is current, with all nine links for a manager", byText(".nav a.link", "Needs attention")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 9);
   check("both stock panels open Inventory", panel("Stock losses reported today").querySelector("a").getAttribute("href") === "/inventory.html" && panel("Stock to reorder").querySelector("a").getAttribute("href") === "/inventory.html");
@@ -70,7 +70,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("neither is listed any more", !card(first) && !card(second));
   await click(byText("dialog button", "Close"), 600);
   check("the panel's count went down by two", count("Refunds waiting for an override") === startCount - 2 && !refundRows().some((t) => asked.some((n) => t.includes(String(n)))));
-  check("a manager's location is plain text, not a menu", !$(".nav .where") && /Brewbean Campus/.test($(".nav .who").textContent));
+  check("a manager's location is plain text, not a menu", !$(".nav .where") && /Brewbean Downtown/.test($(".nav .who").textContent));
 
   check("page: no React warnings", errors.filter((e) => !/Not implemented/.test(e)).length === 0, errors.join(" | "));
 

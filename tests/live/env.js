@@ -58,8 +58,8 @@ async function removeCatalog({ products = [], groups = [], promotions = [] }) {
   }
 }
 
-// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Campus
-async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
+// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Downtown
+async function topUp(stockItemId, atLeast, locationId = "loc-downtown") {
   const [[row]] = await pool.query("SELECT Quantity AS qty, AverageUnitCost AS cost FROM Inventory WHERE LocationID = ? AND StockItemID = ?", [locationId, stockItemId]);
   if (Number(row.qty) >= atLeast) return;
   await pool.query(

@@ -52,7 +52,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("a barista's menu lists only Kitchen and My shift", links.join("|") === "Kitchen|My shift", links.join("|"));
 
   await click(byText("button", "Report a loss"), 500);
-  check("Report a loss opens screen 2, #loss", /What was lost\?/.test(text()) && /Reported today at Brewbean Campus/.test(text()) && w.location.hash === "#loss");
+  check("Report a loss opens screen 2, #loss", /What was lost\?/.test(text()) && /Reported today at Brewbean Downtown/.test(text()) && w.location.hash === "#loss");
   check("today's loss is listed", /Whole milk/.test(text()) && /Broken or spilled/.test(text()));
   check("Report loss is disabled until an item and amount are set", byText("button", "Report loss").disabled);
   await click(byText("button", "Back to tickets"));

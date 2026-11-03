@@ -52,7 +52,7 @@ test("a search defaults to today and finds a fresh sale with the fields the page
   assert.ok(row.source && row.source !== "Online" && row.total > 0 && row.timeZone);
   assert.ok(r.body.orders.every((o, i, a) => i === 0 || a[i - 1].placedAt >= o.placedAt), "newest first");
   const f = r.body.filters;
-  assert.deepEqual(f.locations.map((l) => l.id), mine = ["loc-campus", "loc-downtown"]);
+  assert.deepEqual(f.locations.map((l) => l.id), mine = ["loc-downtown"]);
   assert.ok(f.employees.some((e) => e.name === "Sam Rivera") && f.statuses.length === 7 && f.statuses[4].name === "Completed");
 });
 
@@ -63,7 +63,6 @@ test("filters combine, and bad input is refused", async () => {
   assert.equal(await found({ employeeId: "all", status: "any", locationId: "all" }), true);
   assert.equal(await found({ employeeId: "emp-priya" }), false, "another employee");
   assert.equal(await found({ status: "6" }), false, "another status");
-  assert.equal(await found({ locationId: "loc-campus" }), false, "another location");
   assert.equal(await found({ from: "2020-01-01", to: "2020-01-31" }), false, "another month");
 
   for (const bad of [{ from: "yesterday" }, { to: "2026-02-31" }, { from: "2026-13-01" }, { to: "2026-10-32" }, { from: "2026-10-02", to: "2026-10-01" }, { from: "2020-01-01", to: "2026-01-01" }, { status: "9" }, { status: "1 OR 1=1" }])
@@ -120,7 +119,7 @@ test("a missing order is a 404, and an order outside my locations isn't visible"
     assert.equal((await manager.call(`/orders/${s.id}`)).status, 404, "Downtown is no longer the manager's");
     const r = await search({ from: today, to: today });
     assert.ok(!r.body.orders.some((o) => o.orderNumber === s.number));
-    assert.deepEqual(r.body.filters.locations.map((l) => l.id), ["loc-campus"]);
+    assert.deepEqual(r.body.filters.locations, []);
     assert.equal((await search({ locationId: "loc-downtown" })).status, 403);
   } finally {
     await pool.query("UPDATE EmployeeLocation SET Active = TRUE WHERE EmployeeID = 'emp-maya' AND LocationID = 'loc-downtown'");

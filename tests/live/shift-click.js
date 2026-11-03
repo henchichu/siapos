@@ -35,7 +35,7 @@ async function open(base, number, pin, hash = "") {
   const b = await open(base, "10420005", "555555");
   check("barista opens My shift with no tabs", /Time clock/.test(b.text()) && !b.$(".tabs") && !/Team timecards/.test(b.text()));
   check("barista menu: Kitchen and My shift only, My shift current", b.$$(".nav a.link").map((a) => a.textContent).join("|") === "Kitchen|My shift" && b.byText(".nav a.link", "My shift").getAttribute("aria-current") === "page");
-  check("labels filled: employee, location, rate", /Jordan Lee/.test(b.text()) && /Brewbean Campus/.test(b.text()) && /Hourly rate: \$16\.00/.test(b.text()));
+  check("labels filled: employee, location, rate", /Jordan Lee/.test(b.text()) && /Brewbean Downtown/.test(b.text()) && /Hourly rate: \$16\.00/.test(b.text()));
   const btn = (t) => b.byText(".tbtn", t);
   check("clocked out: only Clock in is enabled", !btn("Clock in").disabled && btn("Clock out").disabled && btn("Break Start").disabled && btn("Break End").disabled && /Not clocked in/.test(b.text()));
   await b.click(btn("Clock in"), 600);
@@ -53,11 +53,11 @@ async function open(base, number, pin, hash = "") {
   await b.click(btn("Clock out"), 300);
   await b.click(b.byText("dialog button", "Clock out"), 700);
   check("confirmed: shift submitted", /Not clocked in/.test(b.text()) && /SUBMITTED/.test(b.text()) && !btn("Clock out") .disabled === false);
-  check("sales cards present", /Today's sales at Brewbean Campus/.test(b.text()) && /Orders/.test(b.text()) && /Net sales/.test(b.text()) && /Items sold/.test(b.text()));
+  check("sales cards present", /Today's sales at Brewbean Downtown/.test(b.text()) && /Orders/.test(b.text()) && /Net sales/.test(b.text()) && /Items sold/.test(b.text()));
   check("barista page: no React warnings", b.w.errors.length === 0, b.w.errors.join(" | "));
 
   // Manager: Team timecards first, with the toggle
-  const m = await open(base, "10420001", "111111"); // the general manager, who works at Campus where the seeded cards are
+  const m = await open(base, "10420001", "111111"); // the general manager, who works at Downtown where the seeded cards are
   check("manager opens Team timecards", /Timecards/.test(m.text()) && !!m.$(".filters") && m.byText(".tab", "Team timecards").getAttribute("aria-pressed") === "true");
   check("manager sees all nine menu links", m.$$(".nav a.link").length === 9);
   check("counter text", /\d+ waiting for approval/.test(m.text()));

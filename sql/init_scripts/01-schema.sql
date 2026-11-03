@@ -878,12 +878,30 @@ CREATE TABLE IF NOT EXISTS Customer (
             OR Phone IS NOT NULL
         ),
 
-    CONSTRAINT UQ_Customer_Business_Email
-        UNIQUE (BusinessID, Email),            -- NULLs allowed; case-insensitive collation
+    CONSTRAINT UQ_Customer_Email
+        UNIQUE (Email),                        -- the sign-in name, so unique across businesses; NULLs allowed; case-insensitive collation
 
     INDEX IX_Customer_BusinessID (BusinessID),
     INDEX IX_Customer_Phone (BusinessID, Phone),
     INDEX IX_Customer_PhoneDigits (BusinessID, PhoneDigits)
+) ENGINE=InnoDB;
+
+-- A customer who can sign in (with their email) to order at the kiosk. No row: no sign-in. An employee's email always signs in as the employee.
+CREATE TABLE IF NOT EXISTS CustomerCredential (
+    CustomerID CHAR(36) NOT NULL,
+    PasswordHash VARCHAR(255) NOT NULL,        -- 8 characters or more, checked before hashing
+    FailedAttempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    LockedUntil DATETIME NULL,
+
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (CustomerID),
+
+    CONSTRAINT FK_CustomerCredential_Customer
+        FOREIGN KEY (CustomerID)
+        REFERENCES Customer(CustomerID)
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatus (

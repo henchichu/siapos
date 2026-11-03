@@ -43,10 +43,3 @@ The app has no screens for creating a business, cafés, roles, employees, tax ra
 4. Add products and stock in the app (Products, Inventory), and the rest of the team with `sql/provision/maintenance.sql`.
 
 `sql/provision/maintenance.sql` holds the statements for everything else: adding or switching off an employee, new passwords and PINs, unlocking an account, raises, roles and permissions, a second café (with its tax rates), refund limits, categories and more pay periods. Pay periods run out after a year, and nobody can clock in once they have. A timecard may be approved by the person who owns it, and so may a discount or refund override: anyone holding the permission can sign.
-
-## Signing in and approvals
-
-Staff sign in with an email and a password of 8 characters or more. The email is the sign-in name and is unique across the app (one person, one account, one business); it is not case-sensitive. Five wrong passwords lock the account for 15 minutes, and a wrong email and a wrong password get the same answer. A new password, or a cleared lock, is a statement in `sql/provision/maintenance.sql`
-
-
-The dev shop (`sql/dev/`) signs in with each person's email and the password `<first name>-dev-pass`, for example `maya@brewbean.example.com` / `maya-dev-pass` (general manager Maya, manager Leo, servers Sam and Priya, barista Jordan, assistant manager Ana). Their employee numbers are `10420001` to `10420006` and their approval PINs `111111` to `666666`, in that order.

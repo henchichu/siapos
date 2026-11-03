@@ -13,7 +13,7 @@ t "second, not preferred"      ok   "INSERT INTO StockItemSupplier (StockItemID,
 t "switch preferred (2 steps)" ok   "UPDATE StockItemSupplier SET IsPreferred=0 WHERE StockItemID='S1' AND SupplierID='SU1'; UPDATE StockItemSupplier SET IsPreferred=1 WHERE StockItemID='S1' AND SupplierID='SU2';"
 t "duplicate email"            fail "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('CU2','B1','c@d.e');"
 t "duplicate email, case"      fail "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('CU2','B1','C@D.E');"
-t "same email, other business" ok   "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('CU3','B2','c@d.e');"
+t "same email, other business" fail "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('CU3','B2','c@d.e');"
 t "two phone-only customers"   ok   "INSERT INTO Customer (CustomerID,BusinessID,Phone) VALUES ('CU4','B1','555'),('CU5','B1','555');"
 
 echo "--- B1/A1/A2: ledger drives inventory ---"

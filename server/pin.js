@@ -55,7 +55,7 @@ async function recordFailure(conn, employeeId) {
 const clearLockout = (db, employeeId) =>
   db.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
 
-// A wrong email costs the same time as a wrong password, so the answer time doesn't say which emails exist
+// A wrong password costs the same time as a right one, so the answer time doesn't say whether the account has a password
 const DUMMY = hashSecret("no such person");
 
 // Sign-in: the email and password. Wrong tries count against that employee, and five lock the account.
@@ -65,12 +65,12 @@ const authenticatePassword = (email, password) =>
     // Locking the credential row serialises concurrent guesses so none escape the attempt counter. Only that row:
     // locking the joined Business and Role rows too made two sign-ins deadlock, and every sign-in wait for every other.
     const emp = await findEmployee(conn, String(email).trim(), "FOR UPDATE OF c", "email");
-    const good = verifySecret(String(password), emp?.PasswordHash || DUMMY);
-    if (emp && !emp.IsLocked && emp.PasswordHash && good) {
+    if (!emp) return { status: "missing" };
+    const good = verifySecret(String(password), emp.PasswordHash || DUMMY);
+    if (!emp.IsLocked && emp.PasswordHash && good) {
       await clearLockout(conn, emp.EmployeeID);
       return { status: "ok", emp };
     }
-    if (!emp) return { status: "missing" };
     if (emp.IsLocked) return { status: "locked", lockedUntil: emp.LockedUntil };
     return recordFailure(conn, emp.EmployeeID);
   });
@@ -112,4 +112,4 @@ const grantedCodes = (db, employeeId) =>
     )
     .then(([rows]) => rows.map((r) => r.code));
 
-module.exports = { findEmployee, workplace, authenticate, authenticatePassword, hasPermission, grantedCodes };
+module.exports = { DUMMY, findEmployee, workplace, authenticate, authenticatePassword, hasPermission, grantedCodes };

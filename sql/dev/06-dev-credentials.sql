@@ -17,3 +17,14 @@ ON DUPLICATE KEY UPDATE
     PinHash = VALUES(PinHash),
     FailedPinAttempts = 0,
     LockedUntil = NULL;
+
+-- Customers who can sign in to the kiosk with their email: <first name lowercase>-dev-pass (Ben has no email, so no sign-in)
+INSERT INTO CustomerCredential (CustomerID, PasswordHash)
+VALUES
+    ('cus-ava', 'scrypt$9c74c3e4140675b6e8567a89c17c924d$bc850955d91772b3afe413cb59ae2c5c5deafd1af2a8a70eeafaad7aea7a846512a923736c6fde81a19e625e3432bf9bfbb17832360309d3d02aac1aadffa640'),
+    ('cus-chloe', 'scrypt$95952609f8aae0f369b3e1187f3db302$c34a3f39996f1138605928baf24f4cc1466a9485a07003f3b81a5ce490440b7ba33b2d54d81001dc22308d4b5ebb51a8a35c3486a0bf315e5044a668cb40864e'),
+    ('cus-diego', 'scrypt$c05a8419070d45f3df908e07156ae502$0c0024f15d11fcdaa22c71edf81d575aed87b37f307e2988533c1a372ca749dc8030a23f86cfc610652724b4e653feeb4374e8ac9a1a4fef331cd637eb7d5c63')
+ON DUPLICATE KEY UPDATE
+    PasswordHash = VALUES(PasswordHash),
+    FailedAttempts = 0,
+    LockedUntil = NULL;

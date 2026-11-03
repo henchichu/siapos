@@ -1,16 +1,16 @@
 USE miniworld;
 
--- DEV ONLY. A few open tickets at Campus (where Jordan works) so the kitchen screen has something on it:
+-- DEV ONLY. A few open tickets (Jordan works the kitchen) so the kitchen screen has something on it:
 -- two New, two Preparing, one Ready, plus one stock loss reported today.
 SET @biz = 'biz-brewbean';
 
 INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime, OrderStatusCode)
 VALUES
-    ('ord-kds-1', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-ava',   1, UTC_TIMESTAMP() - INTERVAL 6 MINUTE,  2),
-    ('ord-kds-2', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 3 MINUTE,  2),
-    ('ord-kds-3', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-ben',   1, UTC_TIMESTAMP() - INTERVAL 11 MINUTE, 3),
-    ('ord-kds-4', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-chloe', 1, UTC_TIMESTAMP() - INTERVAL 15 MINUTE, 3),
-    ('ord-kds-5', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 20 MINUTE, 4);
+    ('ord-kds-1', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', 'cus-ava',   1, UTC_TIMESTAMP() - INTERVAL 6 MINUTE,  2),
+    ('ord-kds-2', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 3 MINUTE,  2),
+    ('ord-kds-3', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', 'cus-ben',   1, UTC_TIMESTAMP() - INTERVAL 11 MINUTE, 3),
+    ('ord-kds-4', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', 'cus-chloe', 1, UTC_TIMESTAMP() - INTERVAL 15 MINUTE, 3),
+    ('ord-kds-5', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 20 MINUTE, 4);
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal, TaxCategoryID, TaxRate, TaxAmount)
 VALUES
@@ -47,7 +47,7 @@ SELECT oi.OrderItemID, oi.OrderID, vr.StockItemID, vr.QuantityPerUnit * oi.Quant
   FROM OrderItem oi
   JOIN VariantRecipe vr ON vr.VariantID = oi.VariantID
   JOIN StockItem s ON s.StockItemID = vr.StockItemID
-  JOIN Inventory i ON i.StockItemID = vr.StockItemID AND i.LocationID = 'loc-campus'
+  JOIN Inventory i ON i.StockItemID = vr.StockItemID AND i.LocationID = 'loc-downtown'
  WHERE oi.OrderID LIKE 'ord-kds-%';
 INSERT INTO OrderItemComponent (OrderItemID, StockItemID, BusinessID, QuantityUsed, StockUnitCode, UnitCost)
 SELECT OrderItemID, StockItemID, @biz, Qty, StockUnitCode, Cost FROM _kds_comp;
@@ -56,7 +56,7 @@ UPDATE OrderItem oi
        oi.LineCost = ROUND(oi.Quantity * oi.UnitCost, 6)
  WHERE oi.OrderID LIKE 'ord-kds-%';
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID, QuantityChange, UnitCost, TransactionTypeCode, OrderID)
-SELECT UUID(), @biz, k.StockItemID, 'loc-campus', 'emp-priya', -SUM(k.Qty), k.Cost, 2, k.OrderID
+SELECT UUID(), @biz, k.StockItemID, 'loc-downtown', 'emp-priya', -SUM(k.Qty), k.Cost, 2, k.OrderID
   FROM _kds_comp k GROUP BY k.OrderID, k.StockItemID, k.Cost;
 DROP TEMPORARY TABLE _kds_comp;
 
@@ -70,7 +70,7 @@ SELECT CONCAT('h3-', OrderID), OrderID, @biz, 3, OrderDateTime + INTERVAL 2 MINU
 UNION ALL
 SELECT CONCAT('h4-', OrderID), OrderID, @biz, 4, OrderDateTime + INTERVAL 9 MINUTE, 'emp-jordan' FROM Orders WHERE OrderID = 'ord-kds-5';
 
--- One loss already reported today at Campus (cost read first: the ledger trigger updates Inventory)
-SET @milk_cost = (SELECT AverageUnitCost FROM Inventory WHERE LocationID = 'loc-campus' AND StockItemID = 'stk-milk');
+-- One loss already reported today (cost read first: the ledger trigger updates Inventory)
+SET @milk_cost = (SELECT AverageUnitCost FROM Inventory WHERE LocationID = 'loc-downtown' AND StockItemID = 'stk-milk');
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID, QuantityChange, UnitCost, TransactionTypeCode, Note)
-VALUES ('kds-loss-1', @biz, 'stk-milk', 'loc-campus', 'emp-jordan', -500, @milk_cost, 5, 'Dropped the jug');
+VALUES ('kds-loss-1', @biz, 'stk-milk', 'loc-downtown', 'emp-jordan', -500, @milk_cost, 5, 'Dropped the jug');

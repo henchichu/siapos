@@ -84,22 +84,22 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, ?, 'biz-brewbean', ?, CONVERT_TZ(? + INTERVAL 1 DAY + INTERVAL 13 HOUR, '+00:00', '+00:00'), ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 30, 2)`,
     [`te-t-${start}-${n}`, who, place, id, start, start]);
-  await shift("emp-priya", "loc-campus", 1); await shift("emp-jordan", "loc-campus", 2); await shift("emp-sam", "loc-downtown", 3);
+  await shift("emp-priya", "loc-downtown", 1); await shift("emp-jordan", "loc-downtown", 2); await shift("emp-sam", "loc-downtown", 3);
   const get = (q) => maya.call(`/team/timecards?payPeriodId=${id}&${q}`);
 
   let t = await get("status=SUBMITTED");
   assert.equal(t.body.rows.length, 3);
   assert.equal(t.body.waiting, 3);
   assert.equal(t.body.rows[0].hours, 7.5, "8h on the clock less a 30 minute break");
-  t = await get("status=SUBMITTED&locationId=loc-campus");
-  assert.equal(t.body.rows.length, 2);
-  assert.equal(t.body.waiting, 2, "the count follows period and location, not the status filter");
+  t = await get("status=SUBMITTED&locationId=loc-downtown");
+  assert.equal(t.body.rows.length, 3);
+  assert.equal(t.body.waiting, 3, "the count follows period and location, not the status filter");
 
   assert.equal((await priya.call("/team/timecards/x/approve", {})).status, 403, "a server can't approve");
   const close = () => maya.call(`/team/pay-periods/${id}/close`, {});
   assert.match((await close()).body.error, /3 timecards are still open or waiting/);
 
-  const sam = (await get("status=SUBMITTED&locationId=loc-downtown")).body.rows[0];
+  const sam = (await get("status=SUBMITTED")).body.rows.find((r) => r.id.endsWith("-3"));
   assert.equal((await maya.call(`/team/timecards/${sam.id}/reject`, {})).status, 200);
   assert.equal((await maya.call(`/team/timecards/${sam.id}/approve`, {})).status, 409, "a rejected card can't be approved");
   assert.equal((await get("status=REJECTED")).body.rows.length, 1);
@@ -110,7 +110,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const future = await edit({ clockIn: `${start}T08:00`, clockOut: "2999-01-01T09:00", breakMinutes: 0 });
   assert.deepEqual([future.status, future.body.error], [400, "A shift can't end in the future."]);
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:30`, breakMinutes: 30 })).status, 200);
-  const fixed = (await get("locationId=loc-downtown")).body.rows[0];
+  const fixed = (await get("locationId=loc-downtown")).body.rows.find((r) => r.id === sam.id);
   assert.deepEqual([fixed.status, fixed.hours, fixed.breakMinutes], ["SUBMITTED", 8, 30], "an edited card goes back to Submitted");
 
   const all = await maya.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" });
@@ -137,7 +137,7 @@ test("a manager may approve or edit their own timecard", async () => {
   made.push(id);
   const card = (who, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
-     VALUES (?, ?, 'loc-campus', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
+     VALUES (?, ?, 'loc-downtown', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
     [`te-own-${start}-${n}`, who, id, start, start]);
   await card("emp-maya", 1);
   const mine = `te-own-${start}-1`;

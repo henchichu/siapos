@@ -1,4 +1,4 @@
-// Needs the dev database. Sells a coffee at Campus, then walks it through the kitchen. Adds test data to the dev DB.
+// Needs the dev database. Sells a coffee at Downtown, then walks it through the kitchen. Adds test data to the dev DB.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { start, client, pool, unlock, topUp, creds } = require("./env");

@@ -7,7 +7,7 @@ const { cents, dollars } = require("./pricing");
 const { verifyOverride } = require("./override");
 const { requirePermission } = require("./session");
 const { myLocations } = require("./locations");
-const { hasPermission, isOwner } = require("./pin");
+const { hasPermission } = require("./pin");
 const { label } = require("./labels");
 
 const PERM_SIGN_REFUND_OVERRIDES = 3;
@@ -264,13 +264,11 @@ async function lockWaiting(conn, session, id) {
 
 router.post("/refunds/:id/approve", needSigner, async (req, res) => {
   const managerId = await verifyOverride(
-    req.session, String(req.body.managerNumber), String(req.body.managerPin), [PERM_SIGN_REFUND_OVERRIDES, PERM_APPROVE_DISCOUNTS], { selfOk: true }
+    req.session, String(req.body.managerNumber), String(req.body.managerPin), [PERM_SIGN_REFUND_OVERRIDES, PERM_APPROVE_DISCOUNTS]
   );
   const { employeeId, businessId } = req.session;
   const out = await pool.tx(async (conn) => {
     const ref = await lockWaiting(conn, req.session, req.params.id);
-    // the one who asked for the refund can't be the one who signs it, unless they are an owner
-    if (managerId === ref.CreatedBy && !(await isOwner(managerId))) throw new HttpError(403, "Another manager has to approve this: you can't approve your own.");
     const [[payment]] = await conn.query(
       `SELECT p.Amount - COALESCE((SELECT SUM(r.Amount) FROM Refund r WHERE r.PaymentID = p.PaymentID AND r.RefundStatusCode <> 3 AND r.RefundID <> ?), 0) AS Remaining, pm.Description
          FROM Payment p JOIN PaymentMethod pm USING (PaymentMethodCode) WHERE p.PaymentID = ? FOR UPDATE`,

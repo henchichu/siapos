@@ -22,10 +22,7 @@ VALUES
     (16, 'Search orders', 'Stock and orders'),
     (17, 'See team timecards', 'People'),
     (18, 'Approve timecards', 'People'),
-    (19, 'Manage employees and pay rates', 'People'),
-    (20, 'See reports', 'Business'),
-    (21, 'Change settings', 'Business'),
-    (22, 'Manage roles', 'Business')
+    (20, 'See reports', 'Business')
 ON DUPLICATE KEY UPDATE
     Name = VALUES(Name),
     GroupName = VALUES(GroupName);

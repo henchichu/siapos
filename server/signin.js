@@ -6,7 +6,7 @@ const session = require("./session");
 const { access } = require("./nav");
 
 const DESTINATIONS = { REGISTER: "/register.html", KITCHEN: "/kitchen.html", SHIFT: "/shift.html" };
-const NO_CAFE = "You aren't assigned to a café. Ask an owner to add you to one.";
+const NO_CAFE = "You aren't assigned to a café. Ask a manager to add you to one.";
 
 async function signInAs(res, emp) {
   const place = await workplace(emp.EmployeeID);

@@ -2,7 +2,7 @@ const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { requirePermission } = require("./session");
-const { isOwner, hasPermission } = require("./pin");
+const { hasPermission } = require("./pin");
 const { LOSS_REASONS } = require("./attention");
 const { mondayOf, splitOvertime, shiftPay } = require("./overtime");
 const { isDate } = require("./dates");
@@ -26,25 +26,22 @@ router.use("/reports", requirePermission(PERM_REPORTS));
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 864e5);
 
-// Owners see every location and may add them all up; anyone else only the location they signed in to
+// Reports cover the one location the person signed in to
 async function places(session) {
-  const owner = await isOwner(session.employeeId);
   const [rows] = await pool.query(
-    `SELECT LocationID AS id, Name AS name, TimeZone AS timeZone FROM Location
-      WHERE BusinessID = ? AND Active ${owner ? "" : "AND LocationID = ?"} ORDER BY Name`,
-    owner ? [session.businessId] : [session.businessId, session.locationId]
+    "SELECT LocationID AS id, Name AS name, TimeZone AS timeZone FROM Location WHERE BusinessID = ? AND Active AND LocationID = ? ORDER BY Name",
+    [session.businessId, session.locationId]
   );
-  return { owner, locations: rows };
+  return { locations: rows };
 }
 
-// The ?location= asked for, checked against what this person may see. "all" is owners only.
+// The ?location= asked for, which can only be the location they signed in to
 async function scope(req) {
-  const { owner, locations } = await places(req.session);
+  const { locations } = await places(req.session);
   const asked = String(req.query.location || "");
-  if (asked === "all" && owner) return { owner, locations, chosen: locations };
-  const one = locations.find((l) => l.id === (asked || req.session.locationId)) || (!asked && locations[0]);
+  const one = locations.find((l) => l.id === (asked || req.session.locationId));
   if (!one) throw new HttpError(403, "You can only see reports for your own location.");
-  return { owner, locations, chosen: [one] };
+  return { locations, chosen: [one] };
 }
 
 // Today's date where the café is, so a default range ends on the café's today, not the server's
@@ -79,14 +76,13 @@ async function categories(businessId) {
 }
 
 router.get("/reports/options", async (req, res) => {
-  const { owner, locations } = await places(req.session);
+  const { locations } = await places(req.session);
   const home = locations.find((l) => l.id === req.session.locationId) || locations[0];
   const day = await today(home?.timeZone || "UTC");
   const periods = await payPeriods(req.session.businessId, day);
   res.json({
-    canPickAll: owner,
     locations: locations.map(({ id, name }) => ({ id, name })),
-    location: owner ? "all" : home?.id,
+    location: home?.id,
     today: day,
     payPeriods: periods.list,
     payPeriod: periods.current,
@@ -147,7 +143,7 @@ router.get("/reports/sales-by-day", async (req, res) => {
     .map((day) => ({ day, net: list.filter((r) => r.day === day).reduce((a, r) => a + r.net, 0) }));
   res.json({
     from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     cards: {
       net: total.net,
       orders: total.orders,
@@ -198,7 +194,7 @@ router.get("/reports/top-sellers", async (req, res) => {
     ...(costs && { cost, margin: revenue - cost, marginPct: pct(revenue - cost, revenue) }) };
   res.json({
     from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     category: category === "none" ? "No category" : known.find((c) => c.id === category)?.name || "All categories",
     seesCosts: costs,
     cards: { units: total.units, revenue, cost, marginPct: costs ? total.marginPct : null },
@@ -245,7 +241,7 @@ router.get("/reports/losses", async (req, res) => {
   const usedCents = cents(used.cost);
   res.json({
     from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     reason: reason ? LOSS_REASONS[REASONS[reason]] : "All reasons",
     seesCosts: costs,
     cards: {
@@ -316,7 +312,7 @@ router.get("/reports/labor", async (req, res) => {
   const { total: sales } = await salesByDay(businessId, chosen, period.start, period.end);
   res.json({
     period,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     cards: { hours: hours(minutes), cost, net: sales.net, laborPct: sales.net > 0 ? Math.round((cost / sales.net) * 1000) / 10 : null },
     rows,
     total: { shifts: counted.length, regularHours: hours(counted.reduce((a, s) => a + s.regular, 0)), overtimeHours: hours(counted.reduce((a, s) => a + s.overtime, 0)), pay: cost },
@@ -383,7 +379,7 @@ router.get("/reports/live", async (req, res) => {
   res.json({
     day, by, from,
     isToday: day === (await today(chosen[0].timeZone)),
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     timeZone: chosen[0].timeZone,
     updatedAt: new Date().toISOString(),
     seesCosts: costs,

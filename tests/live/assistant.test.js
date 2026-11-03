@@ -40,13 +40,12 @@ test("her Home has the Orders tile, a server's doesn't", async () => {
   assert.ok(!(await sam.call("/session")).body.tiles.includes("Orders"));
 });
 
-test("Reports and Employees are closed to her: no menu item or tile, the pages go home, the API says 403", async () => {
+test("Reports are closed to her: no menu item or tile, the page goes home, the API says 403", async () => {
   const me = (await ana.call("/session")).body;
-  assert.ok(!me.nav.includes("Reports") && !me.nav.includes("Employees") && !me.tiles.includes("Reports") && !me.tiles.includes("Employees"));
-  for (const p of ["/reports.html", "/employees.html"]) assert.equal((await page(ana, p)).headers.get("location"), "/register.html", p);
+  assert.ok(!me.nav.includes("Reports") && !me.tiles.includes("Reports"));
+  assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/register.html");
   assert.equal((await ana.call("/reports/options")).status, 403);
   assert.equal((await ana.call("/reports/sales-by-day")).status, 403);
-  assert.equal((await ana.call("/employees")).status, 403);
 });
 
 test("every page on her menu opens", async () => {
@@ -80,7 +79,6 @@ test("Needs attention: stock and timecards, but not refunds waiting for an overr
   assert.equal(r.status, 200);
   for (const k of ["losses", "pendingDeliveries", "timecards"]) assert.ok(r.body[k] && Array.isArray(r.body[k].rows), k);
   assert.equal(r.body.refunds, null);
-  assert.equal((await ana.call("/session")).body.canSwitch, false);
   assert.equal((await ana.call("/refunds/waiting")).status, 403);
 });
 
@@ -123,11 +121,6 @@ test("inventory and products: she can see and change them, at her café only", a
   assert.equal((await ana.call("/inventory?locationId=loc-downtown")).status, 403);
 });
 
-test("only an owner switches location", async () => {
-  assert.equal((await ana.call("/locations")).status, 403);
-  assert.equal((await ana.call("/locations/switch", { locationId: "loc-downtown" })).status, 403);
-});
-
 test("a wrong PIN is refused and a server's number can't sign for her", async () => {
   const bad = client(env.base);
   assert.equal((await bad.call("/login/pin", { employeeNumber: "10420006", pin: "000000" })).status, 401);
@@ -135,11 +128,9 @@ test("a wrong PIN is refused and a server's number can't sign for her", async ()
   assert.equal((await ana.call("/refunds", { orderId: campus.id, reason: "x", managerNumber: "10420003", managerPin: "333333", lines: lineOf(campus) })).status, 403);
 });
 
-test("the one who asked for a refund can't be the one who approves it, unless an owner", async () => {
+test("the one who asked for a refund may approve it themselves, or someone else may", async () => {
   const asked = await sale(sam);
   assert.equal((await leo.call("/refunds/request", { orderId: asked.id, lines: lineOf(asked), reason: "own request" })).status, 200);
   const [waiting] = (await leo.call("/refunds/waiting")).body.refunds.filter((r) => r.orderNumber === asked.number);
-  const own = await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" });
-  assert.deepEqual([own.status, /Another manager/.test(own.body.error)], [403, true]);
-  assert.equal((await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420001", managerPin: "111111" })).status, 200, "another manager's or an owner's PIN works");
+  assert.equal((await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" })).status, 200, "self-approval is allowed");
 });

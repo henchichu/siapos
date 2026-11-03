@@ -10,7 +10,7 @@ const { start, client, pool } = require("./env");
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PAGES = ["home", "register", "kitchen", "attention", "orders", "rewards", "products", "inventory", "reports", "employees", "settings", "shift"];
+const PAGES = ["home", "register", "kitchen", "attention", "orders", "rewards", "products", "inventory", "reports", "shift"];
 // the scripts a page loads after React, in its own order (api.js, shell.js, its own)
 const scriptsOf = (page) => [...fs.readFileSync(path.join(root, `public/${page}.html`), "utf8").matchAll(/src="\/js\/([^"]+)"/g)].map((m) => m[1]);
 

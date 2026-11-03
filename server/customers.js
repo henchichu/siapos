@@ -49,7 +49,7 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 // A small memory for lookups that rarely change (a café): each answer is kept for ms. shortcut: per process, so a
-// change in Settings shows within a few seconds, not at once.
+// change in the database shows within a few seconds, not at once.
 const memos = [];
 function memo(ms, fn) {
   const kept = new Map();

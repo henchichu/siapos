@@ -15,20 +15,19 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
-// "/" is the front page with the tour that leads to the one-time sign-up. Once the business exists, or for anyone signed in, it is
-// the staff sign-in or home screen; with DEMO_MODE=1 it is the tour for everyone not signed in (server/demo.js).
+// "/" is the staff sign-in, or the home screen for anyone signed in; with DEMO_MODE=1 it is the tour for everyone not signed in (server/demo.js).
 // The phones' order page is a separate server (server/kiosk.js).
 const demo = require("./demo");
 app.get("/", async (req, res) => {
   if (session.fromRequest(req)) return res.redirect("/home.html");
-  if (!demo.on() && await require("./setup").signupClosed(pool)) return res.redirect("/login.html");
+  if (!demo.on()) return res.redirect("/login.html");
   res.sendFile(path.resolve(__dirname, "../public/tour.html"));
 });
 
-// The tour's sample pages: the real staff pages, run on recorded sample data by public/js/api.js. Open only until the one business exists.
-const TOUR_PAGES = ["home", "register", "kitchen", "attention", "orders", "rewards", "products", "inventory", "reports", "employees", "settings", "shift"];
+// The tour's sample pages: the real staff pages, run on recorded sample data by public/js/api.js. Open only with DEMO_MODE=1.
+const TOUR_PAGES = ["home", "register", "kitchen", "attention", "orders", "rewards", "products", "inventory", "reports", "shift"];
 app.get("/tour/:page.html", async (req, res, next) => {
-  if (!TOUR_PAGES.includes(req.params.page) || (!demo.on() && await require("./setup").signupClosed(pool))) return next();
+  if (!TOUR_PAGES.includes(req.params.page) || !demo.on()) return next();
   res.sendFile(path.resolve(__dirname, `../public/${req.params.page}.html`));
 });
 
@@ -37,15 +36,8 @@ app.use(require("./vendor"));
 // The tour asks for the demo sign-ins; without DEMO_MODE there are none
 app.get("/api/demo", (req, res) => (demo.on() ? res.json({ credentials: demo.CREDENTIALS }) : res.status(404).json({ error: "Not found" })));
 app.use("/api", express.json(), router);
-app.get("/settings.html", async (req, res, next) => {
-  const s = session.fromRequest(req);
-  if (!s) return res.redirect("/login.html");
-  if (await hasPermission(pool, s.employeeId, 21) || await hasPermission(pool, s.employeeId, 22)) return next();
-  res.redirect(s.info.home);
-});
-
-// Reports, Employees and Rewards are checked live against their permissions (20, 19 and 9), so taking one away works at once
-const LIVE = { "/reports.html": 20, "/employees.html": 19, "/rewards.html": 9 };
+// Reports and Rewards are checked live against their permissions (20 and 9), so taking one away works at once
+const LIVE = { "/reports.html": 20, "/rewards.html": 9 };
 app.get(Object.keys(LIVE), async (req, res, next) => {
   const s = session.fromRequest(req);
   if (!s) return res.redirect("/login.html");

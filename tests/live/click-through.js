@@ -70,7 +70,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const [mn, mp] = $$("dialog .override input");
   await type(mn, "10420003"); await type(mp, "333333");
   await click(byText("dialog button", "Apply discount"), 600);
-  check("server credentials blocked, modal and inputs kept", !!$("dialog[open]") && /Unauthorized\. Supervisor or Owner credentials required to override\./.test($("dialog .msg").textContent) && mn.value === "10420003");
+  check("server credentials blocked, modal and inputs kept", !!$("dialog[open]") && /Unauthorized\. Supervisor credentials required to override\./.test($("dialog .msg").textContent) && mn.value === "10420003");
   await type(mn, "10420002"); await type(mp, "222222");
   await click(byText("dialog button", "Complaint"));
   await click(byText("dialog button", "Apply discount"), 800);

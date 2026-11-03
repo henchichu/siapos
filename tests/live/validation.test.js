@@ -76,10 +76,10 @@ test("kiosk: guest name and note are checked, and too-long is an error rather th
   refused(await order({ note: "no\u0000pe" }), /can't be shown/);
 });
 
-test("register: tips, gift card codes and card numbers are checked", async () => {
+test("register: tips, payment methods and card numbers are checked", async () => {
   const sale = (payment) => sam.call("/register/orders", { items: [{ key: "a", variantId: "var-croissant", quantity: 1 }], payment });
   for (const tip of ["1e2", "-5", "2.555", "abc"]) refused(await sale({ method: "card", card: TEST_CARD, tip }), /valid tip/);
-  for (const giftCardCode of ["", "short", "has space in it"]) refused(await sale({ method: "gift", giftCardCode }), /gift card code/);
+  refused(await sale({ method: "gift" }), /payment method/);
   refused(await sale({ method: "card", card: { ...TEST_CARD, number: "4242 4242 4242 4241" } }), /card number isn't valid/);
 });
 

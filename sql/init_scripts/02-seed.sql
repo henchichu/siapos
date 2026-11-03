@@ -25,8 +25,7 @@ VALUES
     (19, 'Manage employees and pay rates', 'People'),
     (20, 'See reports', 'Business'),
     (21, 'Change settings', 'Business'),
-    (22, 'Manage roles', 'Business'),
-    (23, 'Manage gift cards', 'Selling')
+    (22, 'Manage roles', 'Business')
 ON DUPLICATE KEY UPDATE
     Name = VALUES(Name),
     GroupName = VALUES(GroupName);
@@ -79,7 +78,6 @@ INSERT INTO PaymentMethod (PaymentMethodCode, Description, Active)
 VALUES 
     (1, 'CASH', TRUE),
     (2, 'CARD', TRUE),
-    (3, 'GIFT_CARD', TRUE),
     (4, 'OTHER', TRUE),
     (5, 'APPLE_PAY', TRUE),
     (6, 'GOOGLE_PAY', TRUE)
@@ -139,16 +137,6 @@ VALUES
 ON DUPLICATE KEY UPDATE
     Description = VALUES(Description),
     Active = VALUES(Active);
-
-INSERT INTO GiftCardTransactionType (GiftCardTransactionTypeCode, Description)
-VALUES
-    (1, 'ISSUE'),
-    (2, 'REDEEM'),
-    (3, 'REFUND'),
-    (4, 'CANCEL'),
-    (5, 'ADJUST')
-ON DUPLICATE KEY UPDATE
-    Description = VALUES(Description);
 
 INSERT INTO LoyaltyTransactionType (LoyaltyTransactionTypeCode, Description, Active)
 VALUES

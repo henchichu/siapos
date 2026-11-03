@@ -66,17 +66,6 @@ test("every day in the range has a bar, and the bars, rows and cards agree", asy
   assert.equal(one.reduce((a, b) => a + b.cards.tax, 0), all.cards.tax);
 });
 
-test("selling a gift card isn't a sale", async () => {
-  const [[gift]] = await pool.query(
-    `SELECT DATE_FORMAT(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') AS day, o.LocationID AS loc, l.Name AS name
-       FROM Orders o JOIN Location l USING (LocationID) WHERE o.OrderID = 'ord-dt-gift-sale'`);
-  const [[every]] = await pool.query(
-    `SELECT SUM(oi.NetAmount + oi.DiscountAmount) AS gross FROM Orders o JOIN Location l USING (LocationID) JOIN OrderItem oi ON oi.OrderID = o.OrderID
-      WHERE o.LocationID = ? AND o.OrderStatusCode IN (2, 3, 4, 5, 7) AND DATE(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone)) = ?`, [gift.loc, gift.day]);
-  const body = await report(maya, { from: gift.day, to: gift.day, location: gift.loc });
-  assert.equal(rowFor(body, gift.day, gift.name).gross, Math.round(Number(every.gross) * 100) - 2500, "the $25 card is left out");
-});
-
 const top = async (c, q) => { const r = await c.call(`/reports/top-sellers?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };
 
 test("Top sellers: one ranking by units sold, matching what was sold", async () => {
@@ -87,7 +76,6 @@ test("Top sellers: one ranking by units sold, matching what was sold", async () 
   assert.deepEqual(all.rows.map((r) => r.rank), all.rows.map((_, i) => i + 1));
   for (let i = 1; i < all.rows.length; i++) assert.ok(all.rows[i - 1].units >= all.rows[i].units, "most units first");
   for (const r of all.rows) assert.equal(r.margin, r.revenue - r.cost);
-  assert.ok(!all.rows.some((r) => /gift/i.test(r.product)), "gift cards aren't listed");
   assert.equal(all.cards.revenue, all.total.revenue);
   assert.equal(all.cards.marginPct, Math.round((all.total.margin / all.total.revenue) * 1000) / 10);
 
@@ -95,7 +83,7 @@ test("Top sellers: one ranking by units sold, matching what was sold", async () 
   const [[sold]] = await pool.query(
     `SELECT SUM(oi.Quantity) AS units, SUM(oi.NetAmount) AS revenue, SUM(oi.LineCost) AS cost
        FROM Orders o JOIN Location l USING (LocationID) JOIN OrderItem oi USING (OrderID) JOIN ProductVariant v USING (VariantID) JOIN Product p ON p.ProductID = v.ProductID
-      WHERE NOT p.IsGiftCard AND o.OrderStatusCode IN (2, 3, 4, 5, 7) AND DATE(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone)) BETWEEN ? AND ?`, [from, today]);
+      WHERE o.OrderStatusCode IN (2, 3, 4, 5, 7) AND DATE(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone)) BETWEEN ? AND ?`, [from, today]);
   assert.equal(all.total.units, Number(sold.units));
   assert.equal(all.total.revenue, Math.round(Number(sold.revenue) * 100));
   assert.ok(Math.abs(all.total.cost - Number(sold.cost) * 100) <= all.rows.length, "cost, give or take a cent a row");

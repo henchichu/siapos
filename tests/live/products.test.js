@@ -25,7 +25,6 @@ test("who sees which Products view", async () => {
   assert.equal(server.status, 200);
   assert.equal(server.body.canEdit, false);
   assert.ok(server.body.products.length > 0 && server.body.products.every((p) => p.cost === undefined && p.margin === undefined), "a server sees no costs");
-  assert.ok(!server.body.products.some((p) => p.name === "Gift card"), "gift cards aren't catalog products");
   assert.equal((await sam.call("/products", { name: "x" })).status, 403);
   assert.equal((await sam.call("/option-groups")).status, 403);
   assert.equal((await sam.call("/promotions")).status, 403);
@@ -119,7 +118,7 @@ test("option groups: options, stock effects, rules, offered products", async () 
   assert.equal((await group({ min: "3", max: "2" })).status, 400, "most can't be below fewest");
   assert.equal((await group({ max: "0" })).status, 400);
   assert.equal((await group({ min: "4", max: "" })).status, 400, "fewest more than the 3 options would make the product unsellable");
-  assert.equal((await group({ productIds: ["prd-giftcard"] })).status, 404, "gift cards take no options");
+  assert.equal((await group({ productIds: ["prd-nope"] })).status, 404, "an unknown product");
   assert.equal((await group({ options: [{ name: "A", priceDelta: "0", effect: { type: "swap", fromId: "stk-milk", toId: "stk-milk" } }] })).status, 400);
   const made = await group({});
   assert.equal(made.status, 200);
@@ -165,7 +164,7 @@ test("promotions: validate, add, edit, end, show ended", async () => {
   assert.equal((await promo({ value: "0" })).status, 400);
   assert.equal((await promo({ ends: await plus(-1) })).status, 400, "ends before it starts");
   assert.equal((await promo({ productIds: [] })).status, 400);
-  assert.equal((await promo({ productIds: ["prd-giftcard"] })).status, 404);
+  assert.equal((await promo({ productIds: ["prd-nope"] })).status, 404);
   assert.equal((await sam.call("/promotions", {})).status, 403);
 
   const running = await promo({});

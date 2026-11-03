@@ -149,12 +149,6 @@ test("stock goes back when a refund is approved, not when it is asked for", asyn
   assert.equal(await bags(), afterSale + 1, "approving puts the bag back");
 });
 
-test("an order that sold a gift card can't be asked for", async () => {
-  const gift = await ask({ orderId: "ord-dt-gift-sale", line: { orderItemId: "ord-dt-gift-sale-0", bought: 1 } });
-  assert.equal(gift.status, 409);
-  assert.match(gift.body.error, /gift card/);
-});
-
 test("only an owner can switch location, among their own locations", async () => {
   const me = async () => (await maya.call("/session")).body;
   for (const who of [leo, sam]) {

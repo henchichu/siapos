@@ -6,13 +6,12 @@ a Simple Industry Agnostic Point Of Sale System
 
 ## Setup
 
-1. Create the secret files (the database passwords and the key that protects gift card codes). Never commit them: `.gitignore` isn't tracked, so check `git status` before every commit.
+1. Create the secret files (the database passwords). Never commit them: `.gitignore` isn't tracked, so check `git status` before every commit.
    ```sh
    mkdir -p sql/secrets
    openssl rand -base64 24 > sql/secrets/root_password.txt
    openssl rand -base64 24 > sql/secrets/app_user_password.txt
    openssl rand -base64 24 > sql/secrets/kiosk_user_password.txt
-   openssl rand -base64 24 > sql/secrets/giftcard_secret.txt
    ```
    The database container reads these files as another user, so they must be world-readable: run `chmod 644 sql/secrets/*.txt` if a file is private (mode 600). Otherwise MySQL restarts in a loop with `Permission denied` and the app containers never start.
 
@@ -23,7 +22,6 @@ a Simple Industry Agnostic Point Of Sale System
    | `root_password.txt` | MySQL root | required |
    | `app_user_password.txt` | `pos-api`'s database login (`app_user`) | required |
    | `kiosk_user_password.txt` | `kiosk-api`'s database login (`kiosk_user`, menu and orders only) | required: compose won't start without it |
-   | `giftcard_secret.txt` | the key that protects gift card codes | required; for the demo shop it must be `dev-giftcard-secret` (see below) |
 
    | `.env` variable (next to `docker-compose.yaml`) | Default | Set it when |
    |---|---|---|
@@ -53,8 +51,6 @@ The demo shop and the known dev PINs live in `sql/dev/` and are **not** loaded b
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml down -v 
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 ```
-
-The demo gift card `dev-seed-card-0001` only matches the dev secret `dev-giftcard-secret`; put that in `sql/secrets/giftcard_secret.txt` for development.
 
 ## Phone ordering
 

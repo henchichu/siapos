@@ -1,5 +1,5 @@
 const REASONS = ["Regular", "Employee", "Complaint", "Damaged"];
-const METHODS = [["cash", "Cash"], ["card", "Card"], ["apple", "Apple Pay"], ["google", "Google Pay"], ["gift", "Gift card"]];
+const METHODS = [["cash", "Cash"], ["card", "Card"], ["apple", "Apple Pay"], ["google", "Google Pay"]];
 const TIPPED = ["card", "apple", "google"]; // the methods that go through the (mock) processor, where a tip can be added
 
 const unitOf = (line) => line.variant.priceCents + line.modifiers.reduce((a, m) => a + m.deltaCents, 0);
@@ -276,8 +276,6 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
         <input className="field" inputMode="numeric" autoComplete="off" placeholder="Security code" aria-label="Card security code" value=${order.card.cvc}
           onChange=${(e) => setOrder({ card: { ...order.card, cvc: e.target.value } })} /></div>`}
       ${(order.method === "apple" || order.method === "google") && html`<p className="sub">Test mode: the wallet payment is approved at once, and nothing is charged for real.</p>`}
-      ${order.method === "gift" && html`<label>Gift card code
-        <input className="field" autoComplete="off" value=${order.giftCode} onChange=${(e) => setOrder({ giftCode: e.target.value })} /></label>`}
       <${Message} msg=${msg || (pricingError && { kind: "error", text: pricingError })} />
     </div>
     <div className="btns">
@@ -287,7 +285,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
   </aside>`;
 }
 
-const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "", card: { number: "", expiry: "", cvc: "" } };
+const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, card: { number: "", expiry: "", cvc: "" } };
 
 // Kiosk orders the customer chose to pay for in cash: take the cash to send them to the kitchen, or cancel to free their stock
 function KioskOrdersModal({ onClose }) {
@@ -400,7 +398,7 @@ function App() {
         discount: order.discount?.terms,
         approvalToken: order.discount?.token,
         customerId: order.member?.id,
-        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", giftCardCode: order.giftCode, card: order.method === "card" ? order.card : undefined },
+        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", card: order.method === "card" ? order.card : undefined },
       });
       resetOrder();
       setNotice(`Sale complete: order ${done.orderNumber}, ${money(done.totalCents)}${done.tipCents ? ` + ${money(done.tipCents)} tip` : ""}.`);

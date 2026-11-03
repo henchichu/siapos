@@ -32,7 +32,7 @@ test.after(async () => { child?.kill(); await db?.end(); await pool.end(); });
 const denied = (sql) => assert.rejects(db.query(sql), (e) => e.code === "ER_TABLEACCESS_DENIED_ERROR" || e.code === "ER_COLUMNACCESS_DENIED_ERROR", sql);
 
 test("the public login can't read anything about staff, pay or money owed, and can't change the menu", async () => {
-  for (const table of ["Employee", "EmployeeCredential", "EmployeePayRate", "Role", "RolePermission", "TimeEntry", "Refund", "GiftCard", "Supplier"])
+  for (const table of ["Employee", "EmployeeCredential", "EmployeePayRate", "Role", "RolePermission", "TimeEntry", "Refund", "Supplier"])
     await denied(`SELECT * FROM ${table} LIMIT 1`);
   await denied("UPDATE Product SET Name = Name");
   await denied("DELETE FROM Orders WHERE 1 = 0");

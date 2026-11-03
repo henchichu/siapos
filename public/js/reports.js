@@ -162,7 +162,7 @@ function SalesByDay({ options }) {
           <tfoot><tr><td>Total</td><td></td><td className="r">${report.total.orders}</td><td className="r">${money(report.total.gross)}</td>
             <td className="r">${money(report.total.discounts)}</td><td className="r">${money(report.total.refunds)}</td><td className="r">${money(report.total.net)}</td></tr></tfoot>
         </table></div>
-        <p className="sub">Net sales are before tax and tips. A refund comes off the day it was paid back. Gift cards count when they're spent, not when they're sold.</p>
+        <p className="sub">Net sales are before tax and tips. A refund comes off the day it was paid back.</p>
       </div><//>`}
   </section>`;
 }
@@ -198,7 +198,7 @@ function TopSellers({ options }) {
           <tfoot><tr><td>Total</td><td></td><td></td><td className="r">${units(report.total.units)}</td><td className="r">${money(report.total.revenue)}</td>
             ${costs && html`<${React.Fragment}><td className="r">${money(report.total.cost)}</td><td className="r">${money(report.total.margin)}</td><td className="r">${percent(report.total.marginPct)}</td><//>`}</tr></tfoot>
         </table></div>
-        <p className="sub">Ranked by units sold. Revenue is after discounts and before tax, and doesn't take refunds off. Gift cards aren't listed.</p>
+        <p className="sub">Ranked by units sold. Revenue is after discounts and before tax, and doesn't take refunds off.</p>
       </div><//>`}
   </section>`;
 }

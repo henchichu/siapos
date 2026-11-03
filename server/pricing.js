@@ -63,7 +63,7 @@ async function priceCart(db, session, body) {
        FROM ProductVariant v
        JOIN Product p ON p.ProductID = v.ProductID AND p.BusinessID = v.BusinessID
        LEFT JOIN LocationTaxRate r ON r.LocationID = ? AND r.TaxCategoryID = v.TaxCategoryID
-      WHERE v.VariantID IN (?) AND v.BusinessID = ? AND v.Active AND p.Active AND NOT p.IsGiftCard`,
+      WHERE v.VariantID IN (?) AND v.BusinessID = ? AND v.Active AND p.Active`,
     [session.locationId, items.map((i) => String(i.variantId)), session.businessId]
   );
   const variantById = Object.fromEntries(variants.map((v) => [v.VariantID, v]));

@@ -7,8 +7,6 @@ const sessions = new Map();
 const SESSION_MS = 8 * 60 * 60 * 1000; // one shift
 const IDLE_MS = 15 * 60 * 1000; // no sign of the person; public/js/shell.js warns before this
 const APPROVAL_MS = 10 * 60 * 1000;
-const GIFT_TRIES = 5;
-const GIFT_WINDOW_MS = 15 * 60 * 1000;
 
 // Idle time counts from sign-in or the last touch(). Page polling doesn't touch, so a screen left alone still times out.
 const over = (s) => s.expires < Date.now() || Date.now() - s.active >= IDLE_MS;
@@ -79,15 +77,7 @@ const releaseApproval = (session, token) => { const a = session.approvals.get(to
 // Spent once the sale is committed, so a failed sale doesn't cost the manager a second sign-off
 const spendApproval = (session, token) => session.approvals.delete(token);
 
-// Wrong gift card codes: a few per session per 15 minutes, so codes can't be guessed at the till
-const giftAllowed = (s) => !(s.giftFails && s.giftFails.n >= GIFT_TRIES && Date.now() - s.giftFails.since < GIFT_WINDOW_MS);
-function giftFailed(s) {
-  const g = s.giftFails;
-  s.giftFails = g && Date.now() - g.since < GIFT_WINDOW_MS ? { n: g.n + 1, since: g.since } : { n: 1, since: Date.now() };
-}
-const giftOk = (s) => { s.giftFails = null; };
-
 module.exports = {
   create, destroy, endSessionsOf, fromRequest, requireSession, requirePermission,
-  grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk,
+  grantApproval, checkApproval, releaseApproval, spendApproval,
 };

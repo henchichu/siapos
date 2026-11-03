@@ -1,10 +1,10 @@
 // Needs the dev database. Clocks Jordan in and out today and builds its own old pay period for the manager tests.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool } = require("./env");
+const { start, client, pool, creds } = require("./env");
 
 let env;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 

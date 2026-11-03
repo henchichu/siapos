@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS Employee (
     FirstName VARCHAR(50) NOT NULL,
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255) NOT NULL,
-    EmployeeNumber CHAR(8) NOT NULL,           -- typed at sign-in, so unique across businesses
+    EmployeeNumber CHAR(8) NOT NULL,           -- a non-secret ID, unique across businesses: names a colleague at the counter, and who approves with a PIN
     RoleID CHAR(36) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
@@ -184,8 +184,9 @@ CREATE TABLE IF NOT EXISTS Employee (
         REFERENCES Role(RoleID, BusinessID)
         ON DELETE RESTRICT,
         
-    CONSTRAINT UQ_Employee_Business_Email
-        UNIQUE (BusinessID, Email),
+    -- the email is the sign-in name, so it is unique across businesses
+    CONSTRAINT UQ_Employee_Email
+        UNIQUE (Email),
 
     CONSTRAINT UQ_Employee_EmployeeNumber
         UNIQUE (EmployeeNumber),
@@ -200,8 +201,8 @@ CREATE TABLE IF NOT EXISTS Employee (
 
 CREATE TABLE IF NOT EXISTS EmployeeCredential (
     EmployeeID CHAR(36) NOT NULL,
-    PasswordHash VARCHAR(255),
-    PinHash VARCHAR(255),                      -- 6-digit PIN; the backend checks length before hashing
+    PasswordHash VARCHAR(255) NOT NULL,        -- signs in with the employee's email; 8 characters or more, checked before hashing
+    PinHash VARCHAR(255),                      -- 6-digit approval PIN, typed with the employee number to sign off a discount or refund; NULL: cannot approve
     FailedPinAttempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
     LockedUntil DATETIME NULL,
 
@@ -210,9 +211,6 @@ CREATE TABLE IF NOT EXISTS EmployeeCredential (
 
     PRIMARY KEY (EmployeeID),
 
-    CONSTRAINT CK_EmployeeCredential_Secret
-        CHECK (PasswordHash IS NOT NULL OR PinHash IS NOT NULL),
-    
     CONSTRAINT FK_EmployeeCredential_Employee
         FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)

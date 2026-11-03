@@ -3,22 +3,32 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, startKiosk, client, phone, pool, TEST_CARD } = require("./env");
+const { start, startKiosk, client, phone, pool, TEST_CARD, creds, unlock } = require("./env");
 
 let env, pub, maya, sam; // env: the staff server, pub: the public order page
-const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login", creds(number))).status, 200); return c; };
 const refused = (r, pattern) => { assert.equal(r.status, 400, JSON.stringify(r.body)); assert.match(r.body.error, pattern); };
 
 test.before(async () => { env = await start(); pub = await startKiosk(); maya = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); });
 test.beforeEach(() => require("../../server/customers").resetOrderLimit());
 test.after(async () => { env.server.close(); pub.server.close(); await pool.end(); });
 
-test("login: an employee number that isn't 8 digits is refused before any lookup", async () => {
+test("login: missing or oversize entries are refused, and a wrong email and a wrong password get the same answer", async () => {
   const c = client(env.base);
-  for (const employeeNumber of ["123", "1234567a", "123456789", "", "10420001 "]) {
-    refused(await c.call("/login/employee", { employeeNumber }), /8 digits/);
-    refused(await c.call("/login/pin", { employeeNumber, pin: "111111" }), /8 digits/);
-  }
+  for (const body of [{}, { email: "", password: "x" }, { email: "leo@brewbean.example.com" }, { email: "leo@brewbean.example.com", password: "" },
+    { email: "x".repeat(256), password: "x" }, { email: "leo@brewbean.example.com", password: "x".repeat(201) }, { email: ["a"], password: "x" }])
+    refused(await c.call("/login", body), /email and password/);
+  const wrongPassword = await c.call("/login", { ...creds("10420002"), password: "wrong-password" });
+  const wrongEmail = await c.call("/login", { email: "nobody@brewbean.example.com", password: "wrong-password" });
+  assert.deepEqual([wrongPassword.status, wrongPassword.body], [401, { error: "Incorrect email or password." }]);
+  assert.deepEqual([wrongEmail.status, wrongEmail.body], [401, { error: "Incorrect email or password." }]);
+  await unlock("emp-leo");
+});
+
+test("login: the email is trimmed and not case-sensitive; the employee number and PIN do not sign in", async () => {
+  const ok = await client(env.base).call("/login", { email: "  LEO@Brewbean.Example.com ", password: creds("10420002").password });
+  assert.equal(ok.status, 200);
+  assert.equal((await client(env.base).call("/login", { employeeNumber: "10420002", pin: "222222" })).status, 400);
 });
 
 test("a supplier's name, email and phone are checked", async () => {

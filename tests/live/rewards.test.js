@@ -2,14 +2,14 @@
 // one stays in the database as a walk-in sale, as the other tests' sales do. Diego is enrolled and then put back as he was.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, topUp, TEST_CARD } = require("./env");
+const { start, client, pool, pickUp, topUp, TEST_CARD, creds } = require("./env");
 
 let env, maya, leo, ana, sam, jordan;
 let enrolled = 0;
 let chloe; // her membership as it was before the run
 const tag = String(Math.floor(Math.random() * 1e6)).padStart(6, "0");
 const surname = `Member ${tag.replace(/\d/g, (d) => "abcdefghij"[d])}`; // names are letters only
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const search = async (c, q, inactive = false) => (await c.call(`/rewards/members?q=${encodeURIComponent(q)}&inactive=${inactive ? 1 : 0}`)).body;
 // a phone nobody has: 555 numbers with this run's digits

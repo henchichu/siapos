@@ -1,11 +1,11 @@
 // Needs the dev database. Each run adds a few real test sales to it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock, pickUp, topUp, TEST_CARD } = require("./env");
+const { start, client, pool, unlock, pickUp, topUp, TEST_CARD, creds } = require("./env");
 
 const DENIED = "Unauthorized. Supervisor credentials required to override.";
 let env, sam;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const croissant = { key: "a", variantId: "var-croissant", quantity: 1 };
 
 test.before(async () => { env = await start(); await topUp("stk-croissant", 60, "loc-downtown"); sam = await signIn("10420003", "333333"); });
@@ -62,8 +62,8 @@ test("wrong override PINs lock the cashier, not the manager", async () => {
   const priya = await signIn("10420004", "444444");
   const discount = { applyTo: "order", type: "percent", value: 5, reason: "Regular" };
   for (let i = 0; i < 5; i++) await priya.call("/register/discount/authorize", { discount, managerNumber: "10420002", managerPin: "000000", items: [croissant] });
-  assert.equal((await client(env.base).call("/login/pin", { employeeNumber: "10420002", pin: "222222" })).status, 200); // Leo still signs in
-  assert.equal((await client(env.base).call("/login/pin", { employeeNumber: "10420004", pin: "444444" })).status, 423); // Priya is locked
+  assert.equal((await client(env.base).call("/login", creds("10420002"))).status, 200); // Leo still signs in
+  assert.equal((await client(env.base).call("/login", creds("10420004"))).status, 423); // Priya is locked
   await unlock("emp-priya");
 });
 

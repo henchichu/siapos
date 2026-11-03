@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool } = require("./env");
+const { start, client, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -17,7 +17,7 @@ const scriptsOf = (page) => [...fs.readFileSync(path.join(root, `public/${page}.
 (async () => {
   const { server, base } = await start();
   const owner = client(base);
-  const login = await owner.call("/login/pin", { employeeNumber: "10420001", pin: "111111" });
+  const login = await owner.call("/login", creds("10420001"));
   if (login.status !== 200) throw new Error(`Maya can't sign in (${login.status}): is this a database with the dev seed?`);
   const responses = {};
   for (const page of PAGES) {

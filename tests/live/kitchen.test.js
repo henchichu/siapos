@@ -1,10 +1,10 @@
 // Needs the dev database. Sells a coffee at Campus, then walks it through the kitchen. Adds test data to the dev DB.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock, topUp } = require("./env");
+const { start, client, pool, unlock, topUp, creds } = require("./env");
 
 let env;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const find = (tickets, queue, number) => tickets.body.queues[queue].find((t) => t.number === number);
 
 test.before(async () => { env = await start(); await topUp("stk-oat", 3000); }); // the sale below uses oat milk

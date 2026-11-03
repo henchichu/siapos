@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool, removeCatalog } = require("./env");
+const { start, client, pool, removeCatalog, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -13,7 +13,7 @@ let cleanup = async () => {}; // runs on success and on a crash, so a failed run
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/products.html", pretendToBeVisual: true }).window;
   w.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } });
@@ -53,7 +53,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("server page: no React warnings", s.w.errors.length === 0, s.w.errors.join(" | "));
 
   // Manager: four tabs
-  const lc = client(base); await lc.call("/login/pin", { employeeNumber: "10420002", pin: "222222" });
+  const lc = client(base); await lc.call("/login", creds("10420002"));
   const stamp = Date.now().toString(36);
   const made = await lc.call("/products", { name: `UI test ${stamp}`, categoryId: "cat-bakery", active: true });
   const [[{ today }]] = await pool.query("SELECT DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', 'America/Chicago'), '%Y-%m-%d') AS today");

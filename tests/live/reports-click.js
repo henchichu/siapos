@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool } = require("./env");
+const { start, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -12,7 +12,7 @@ let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/reports.html", pretendToBeVisual: true }).window;
   w.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } });
@@ -64,7 +64,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("Updated, and a refresh every minute while it's today", /Updated \d/.test(m.$(".livebar").textContent) && [...m.w.timers.values()].some((t) => t.ms === 60000));
 
   const ordersNow = Number(hFoot()[1]);
-  const priya = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420004", pin: "444444" }) });
+  const priya = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420004")) });
   const sale = await fetch(base + "/api/register/orders", { method: "POST", headers: { "content-type": "application/json", cookie: priya.headers.get("set-cookie").split(";")[0] },
     body: JSON.stringify({ items: [{ key: "a", variantId: "var-amer-s", quantity: 1 }], payment: { method: "cash" } }) });
   check("(a sale comes in)", sale.status === 200);

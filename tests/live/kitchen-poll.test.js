@@ -4,7 +4,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, client, pool } = require("./env");
+const { start, client, pool, creds } = require("./env");
 const { startPolling } = require("../../server/watchers");
 
 let env, timer;
@@ -13,7 +13,7 @@ test.after(async () => { clearInterval(timer); env.server.close(); await pool.en
 
 test("an order placed elsewhere reaches an open kitchen screen without being asked", async () => {
   const leo = client(env.base);
-  assert.equal((await leo.call("/login/pin", { employeeNumber: "10420002", pin: "222222" })).status, 200);
+  assert.equal((await leo.call("/login", creds("10420002"))).status, 200);
   const stop = new AbortController();
   const res = await fetch(`${env.base}/api/kitchen/stream`, { headers: { cookie: leo.cookie() }, signal: stop.signal });
   assert.equal(res.status, 200);

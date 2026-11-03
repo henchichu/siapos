@@ -1,10 +1,10 @@
 // Needs the dev database. Sells croissants as Sam (Downtown) and asks for refunds on them; every request ends approved or rejected.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, topUp } = require("./env");
+const { start, client, pool, pickUp, topUp, creds } = require("./env");
 
 let env, leo, sam, jordan, maya;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const MGR = { managerNumber: "10420002", managerPin: "222222" };
 const attention = async () => (await leo.call("/attention")).body;

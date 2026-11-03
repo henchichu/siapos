@@ -2,10 +2,10 @@
 // Needs the dev database. Sells croissants at both cafés; every refund asked for here is rejected again.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp } = require("./env");
+const { start, client, pool, pickUp, creds } = require("./env");
 
 let env, ana, leo, priya, sam, campus, downtown;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const ANA = { managerNumber: "10420006", managerPin: "666666" };
 
@@ -121,9 +121,9 @@ test("inventory and products: she can see and change them, at her café only", a
   assert.equal((await ana.call("/inventory?locationId=loc-downtown")).status, 403);
 });
 
-test("a wrong PIN is refused and a server's number can't sign for her", async () => {
+test("a wrong password is refused and a server's number can't sign for her", async () => {
   const bad = client(env.base);
-  assert.equal((await bad.call("/login/pin", { employeeNumber: "10420006", pin: "000000" })).status, 401);
+  assert.equal((await bad.call("/login", { ...creds("10420006"), password: "not-her-password" })).status, 401);
   await pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = 'emp-ana'");
   assert.equal((await ana.call("/refunds", { orderId: campus.id, reason: "x", managerNumber: "10420003", managerPin: "333333", lines: lineOf(campus) })).status, 403);
 });

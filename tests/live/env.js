@@ -86,4 +86,8 @@ async function removeBusiness(id) {
   for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
 }
 
-module.exports = { start, client, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };
+// Root, for setting up what app_user may not write (loyalty points, pay periods): the same SQL a business owner would run
+const admin = require("mysql2/promise").createPool({ host: process.env.DB_HOST || "127.0.0.1", port: Number(process.env.DB_PORT) || 3306, database: process.env.DB_NAME || "miniworld", user: "root",
+  password: fs.readFileSync(path.join(root, "sql/secrets/root_password.txt"), "utf8").trim(), timezone: "Z" });
+
+module.exports = { admin, start, client, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

@@ -1,7 +1,7 @@
 // Needs the dev database. Adds one real test sale and refunds it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, TEST_CARD, creds } = require("./env");
+const { start, client, pool, admin, pickUp, TEST_CARD, creds } = require("./env");
 const { mondayOf, shiftPay } = require("../../server/overtime");
 
 let env, maya, leo, sam, priya;
@@ -17,7 +17,7 @@ test.before(async () => {
   sam = await signIn("10420003", "333333");
   priya = await signIn("10420004", "444444");
 });
-test.after(async () => { env.server.close(); await pool.end(); });
+test.after(async () => { env.server.close(); await pool.end(); await admin.end(); });
 
 test("owners and managers open Reports, for the one location they signed in to", async () => {
   assert.equal((await page(maya, "/reports.html")).status, 200);
@@ -218,7 +218,7 @@ test("hours past 40 in a Monday to Sunday week are overtime at 1.5x, counting ev
     assert.equal(after.regularHours - before.regularHours, 0);
     assert.equal(after.pay - before.pay, shiftPay({ regular: 0, overtime: 120 }, 2400), "2 hours at $36");
   } finally {
-    await pool.query("DELETE FROM TimeEntry WHERE TimeEntryID = ?", [id]);
+    await admin.query("DELETE FROM TimeEntry WHERE TimeEntryID = ?", [id]);
     await pool.query("DELETE FROM EmployeeLocation WHERE EmployeeID = 'emp-leo' AND LocationID = 'loc-campus'");
   }
 });

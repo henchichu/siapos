@@ -2,7 +2,7 @@
 // one stays in the database as a walk-in sale, as the other tests' sales do. Diego is enrolled and then put back as he was.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, topUp, TEST_CARD, creds } = require("./env");
+const { start, client, pool, admin, pickUp, topUp, TEST_CARD, creds } = require("./env");
 
 let env, maya, leo, ana, sam, jordan;
 let enrolled = 0;
@@ -38,7 +38,7 @@ test.after(async () => {
     const ids = rows.map((r) => r.id);
     if (ids.length) {
       // redemptions first, so a balance never dips below zero on the way; then the sales become walk-ins
-      await pool.query("DELETE FROM LoyaltyTransaction WHERE CustomerID IN (?) ORDER BY PointsChange", [ids]);
+      await admin.query("DELETE FROM LoyaltyTransaction WHERE CustomerID IN (?) ORDER BY PointsChange", [ids]);
       await pool.query("UPDATE Orders SET CustomerID = NULL WHERE CustomerID IN (?)", [ids]);
       await pool.query("DELETE FROM LoyaltyAccount WHERE CustomerID IN (?)", [ids]);
       await pool.query("DELETE FROM Customer WHERE CustomerID IN (?)", [ids]);
@@ -48,7 +48,7 @@ test.after(async () => {
     await pool.query("UPDATE Customer SET Email = 'diego@example.com', Phone = NULL WHERE CustomerID = 'cus-diego'");
     if (chloe) await pool.query("UPDATE LoyaltyAccount SET Active = ? WHERE CustomerID = 'cus-chloe'", [chloe.active]);
   } finally {
-    env.server.close(); await pool.end();
+    env.server.close(); await pool.end(); await admin.end();
   }
 });
 
@@ -176,8 +176,8 @@ test("history: paid orders, total spent less refunds, points per order, adjustme
     lines: [{ orderItemId: found.body.lines[0].orderItemId, qty: 1, restock: false }] });
   assert.equal(refund.status, 200, refund.body.error);
   // points don't come from sales yet, so the test writes them: an adjustment, and a redemption on the order
-  await pool.query("INSERT INTO LoyaltyTransaction (LoyaltyTransactionID, LoyaltyAccountID, CustomerID, LoyaltyTransactionTypeCode, PointsChange) VALUES (UUID(), ?, ?, 3, 10)", [acct.id, id]);
-  await pool.query("INSERT INTO LoyaltyTransaction (LoyaltyTransactionID, LoyaltyAccountID, OrderID, CustomerID, LoyaltyTransactionTypeCode, PointsChange) VALUES (UUID(), ?, ?, ?, 2, -4)", [acct.id, found.body.orderId, id]);
+  await admin.query("INSERT INTO LoyaltyTransaction (LoyaltyTransactionID, LoyaltyAccountID, CustomerID, LoyaltyTransactionTypeCode, PointsChange) VALUES (UUID(), ?, ?, 3, 10)", [acct.id, id]);
+  await admin.query("INSERT INTO LoyaltyTransaction (LoyaltyTransactionID, LoyaltyAccountID, OrderID, CustomerID, LoyaltyTransactionTypeCode, PointsChange) VALUES (UUID(), ?, ?, ?, 2, -4)", [acct.id, found.body.orderId, id]);
 
   assert.equal((await jordan.call(`/rewards/members/${id}`)).status, 403);
   const h = (await sam.call(`/rewards/members/${id}`)).body;

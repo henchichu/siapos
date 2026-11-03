@@ -2,7 +2,7 @@
 // The ledger can't be edited, so each run leaves its movements, one delivery and one count behind.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, removeCatalog, creds } = require("./env");
+const { start, client, pool, admin, removeCatalog, creds } = require("./env");
 const madeSuppliers = [];
 const madeProducts = []; // switched-off products that use a test ingredient; removed before the ingredient
 const madeItems = []; // stock items created here, removed again (never stocked, so they have no ledger rows and can go)
@@ -19,8 +19,8 @@ test.after(async () => {
   try { // never stocked or delivered to, so they have no ledger rows and can go
     await removeCatalog({ products: madeProducts });
     if (madeSuppliers.length) await pool.query("DELETE FROM Supplier WHERE SupplierID IN (?)", [madeSuppliers]);
-    if (madeItems.length) for (const sql of ["DELETE FROM StockItemSupplier WHERE StockItemID IN (?)", "DELETE FROM Inventory WHERE StockItemID IN (?)", "DELETE FROM StockItem WHERE StockItemID IN (?)"]) await pool.query(sql, [madeItems]);
-  } finally { env.server.close(); await pool.end(); }
+    if (madeItems.length) for (const sql of ["DELETE FROM StockItemSupplier WHERE StockItemID IN (?)", "DELETE FROM Inventory WHERE StockItemID IN (?)", "DELETE FROM StockItem WHERE StockItemID IN (?)"]) await admin.query(sql, [madeItems]);
+  } finally { env.server.close(); await pool.end(); await admin.end(); }
 });
 
 test("only managers reach Inventory", async () => {

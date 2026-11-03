@@ -6,24 +6,6 @@ USE miniworld;
 
 DELIMITER $$
 
--- Location: TimeZone must be a name MySQL can convert (tz tables are loaded at init)
-CREATE PROCEDURE CheckLocationTimeZone(IN pTimeZone VARCHAR(64))
-BEGIN
-    IF CONVERT_TZ('2000-01-01 00:00:00', '+00:00', pTimeZone) IS NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Location.TimeZone is not a known timezone name';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_Location_BeforeInsert BEFORE INSERT ON Location FOR EACH ROW
-BEGIN
-    CALL CheckLocationTimeZone(NEW.TimeZone);
-END$$
-
-CREATE TRIGGER TR_Location_BeforeUpdate BEFORE UPDATE ON Location FOR EACH ROW
-BEGIN
-    CALL CheckLocationTimeZone(NEW.TimeZone);
-END$$
-
 -- True when the employee and their role are active and the role holds the permission
 CREATE FUNCTION HasPermission(pEmployeeID CHAR(36), pPermissionCode TINYINT UNSIGNED) RETURNS BOOLEAN
 READS SQL DATA
@@ -35,47 +17,12 @@ BEGIN
                                    WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = pPermissionCode));
 END$$
 
--- Inventory is driven by its ledger: Quantity and AverageUnitCost change only
--- when an InventoryTransaction is inserted, and ledger rows are immutable.
-CREATE TRIGGER TR_Inventory_BeforeInsert BEFORE INSERT ON Inventory FOR EACH ROW
-BEGIN
-    IF NEW.Quantity <> 0 OR NEW.AverageUnitCost IS NOT NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'New Inventory rows start empty; add stock with a RESTOCK or ADJUSTMENT';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_Inventory_BeforeUpdate BEFORE UPDATE ON Inventory FOR EACH ROW
-BEGIN
-    IF (NEW.Quantity <> OLD.Quantity OR NOT (NEW.AverageUnitCost <=> OLD.AverageUnitCost))
-       AND @siapos_ledger_write IS NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Inventory quantity and cost change only through InventoryTransaction';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_InventoryTransaction_BeforeInsert BEFORE INSERT ON InventoryTransaction FOR EACH ROW
-BEGIN
-    DECLARE vQuantity DECIMAL(12,3);
-
-    SELECT Quantity INTO vQuantity
-      FROM Inventory
-     WHERE LocationID = NEW.LocationID AND StockItemID = NEW.StockItemID
-       FOR UPDATE;
-
-    IF vQuantity + NEW.QuantityChange < 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient stock for this movement';
-    END IF;
-END$$
-
+-- Inventory is driven by its ledger: Quantity and AverageUnitCost change only here, when an
+-- InventoryTransaction is inserted (a trigger writes with its definer's rights, which app_user
+-- lacks on those columns). Ledger rows are append-only: app_user has no UPDATE or DELETE on
+-- the table. See 03-privileges.sql.
 CREATE TRIGGER TR_InventoryTransaction_AfterInsert AFTER INSERT ON InventoryTransaction FOR EACH ROW
 BEGIN
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET @siapos_ledger_write = NULL;
-        RESIGNAL;
-    END;
-
-    SET @siapos_ledger_write = 1;
-
     -- AverageUnitCost is assigned first so it still sees the old Quantity.
     -- Weighted average on stock coming in at a known cost (RESTOCK, or RETURN at its sale cost).
     UPDATE Inventory
@@ -92,18 +39,6 @@ BEGIN
            END,
            Quantity = Quantity + NEW.QuantityChange
      WHERE LocationID = NEW.LocationID AND StockItemID = NEW.StockItemID;
-
-    SET @siapos_ledger_write = NULL;
-END$$
-
-CREATE TRIGGER TR_InventoryTransaction_BeforeUpdate BEFORE UPDATE ON InventoryTransaction FOR EACH ROW
-BEGIN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Inventory transactions are immutable; post an ADJUSTMENT instead';
-END$$
-
-CREATE TRIGGER TR_InventoryTransaction_BeforeDelete BEFORE DELETE ON InventoryTransaction FOR EACH ROW
-BEGIN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Inventory transactions are immutable; post an ADJUSTMENT instead';
 END$$
 
 -- OrderItem: the variant must have a recipe, and whole-unit variants sell in whole numbers
@@ -169,11 +104,6 @@ BEGIN
     CALL CheckOrderItemTax(NEW.OrderID, NEW.VariantID, NEW.TaxCategoryID, NEW.TaxRate);
 END$$
 
-CREATE TRIGGER TR_OrderItem_BeforeDelete BEFORE DELETE ON OrderItem FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(OLD.OrderID);
-END$$
-
 CREATE TRIGGER TR_OrderItem_BeforeUpdate BEFORE UPDATE ON OrderItem FOR EACH ROW
 BEGIN
     CALL CheckOrderOpen(OLD.OrderID);
@@ -211,27 +141,8 @@ BEGIN
     CALL CheckModifierOffered(NEW.OrderItemID, NEW.ModifierID);
 END$$
 
-CREATE TRIGGER TR_OrderItemModifier_BeforeUpdate BEFORE UPDATE ON OrderItemModifier FOR EACH ROW
-BEGIN
-    CALL CheckOrderItemOpen(OLD.OrderItemID);
-    CALL CheckOrderItemOpen(NEW.OrderItemID);
-    CALL CheckModifierOffered(NEW.OrderItemID, NEW.ModifierID);
-END$$
-
-CREATE TRIGGER TR_OrderItemModifier_BeforeDelete BEFORE DELETE ON OrderItemModifier FOR EACH ROW
-    CALL CheckOrderItemOpen(OLD.OrderItemID)$$
-
 CREATE TRIGGER TR_OrderItemComponent_BeforeInsert BEFORE INSERT ON OrderItemComponent FOR EACH ROW
     CALL CheckOrderItemOpen(NEW.OrderItemID)$$
-
-CREATE TRIGGER TR_OrderItemComponent_BeforeUpdate BEFORE UPDATE ON OrderItemComponent FOR EACH ROW
-BEGIN
-    CALL CheckOrderItemOpen(OLD.OrderItemID);
-    CALL CheckOrderItemOpen(NEW.OrderItemID);
-END$$
-
-CREATE TRIGGER TR_OrderItemComponent_BeforeDelete BEFORE DELETE ON OrderItemComponent FOR EACH ROW
-    CALL CheckOrderItemOpen(OLD.OrderItemID)$$
 
 -- Payment: non-failed payments can't exceed the order total; a cancelled order takes no
 -- live payments (1 PENDING, 2 AUTHORIZED, 3 COMPLETED), though old ones may still be marked REFUNDED
@@ -286,11 +197,6 @@ BEGIN
     CALL CheckPayment(NEW.PaymentID, NEW.OrderID, NEW.Amount, NEW.PaymentStatusCode);
 END$$
 
-CREATE TRIGGER TR_Payment_BeforeDelete BEFORE DELETE ON Payment FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(OLD.OrderID);
-END$$
-
 -- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
 -- checks they add up to Orders.DiscountAmount). A one-off is signed by someone with permission 4
 -- (Approve discounts). A staff discount (StaffEmployeeID) needs no signature unless the business
@@ -329,26 +235,8 @@ END$$
 CREATE TRIGGER TR_OrderDiscount_BeforeInsert BEFORE INSERT ON OrderDiscount FOR EACH ROW
     CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID, NEW.StaffEmployeeID, NEW.Amount)$$
 
-CREATE TRIGGER TR_OrderDiscount_BeforeUpdate BEFORE UPDATE ON OrderDiscount FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(OLD.OrderID);
-    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID, NEW.StaffEmployeeID, NEW.Amount);
-END$$
-
-CREATE TRIGGER TR_OrderDiscount_BeforeDelete BEFORE DELETE ON OrderDiscount FOR EACH ROW
-    CALL CheckOrderOpen(OLD.OrderID)$$
-
 CREATE TRIGGER TR_PromotionRedemption_BeforeInsert BEFORE INSERT ON PromotionRedemption FOR EACH ROW
     CALL CheckOrderOpen(NEW.OrderID)$$
-
-CREATE TRIGGER TR_PromotionRedemption_BeforeUpdate BEFORE UPDATE ON PromotionRedemption FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(OLD.OrderID);
-    CALL CheckOrderOpen(NEW.OrderID);
-END$$
-
-CREATE TRIGGER TR_PromotionRedemption_BeforeDelete BEFORE DELETE ON PromotionRedemption FOR EACH ROW
-    CALL CheckOrderOpen(OLD.OrderID)$$
 
 -- Refund: only completed payments; non-failed refunds can't exceed the payment;
 -- tax refunded can't exceed tax collected, and merchandise refunded can't exceed
@@ -655,97 +543,8 @@ BEGIN
     END IF;
 END$$
 
--- Loyalty: a balance never goes below zero, whether by a redemption, an edit or a deleted earning
-CREATE PROCEDURE CheckLoyaltyBalance(IN pAccountID CHAR(36), IN pExcludeID CHAR(36), IN pPoints INT)
-BEGIN
-    DECLARE vLock CHAR(36);
-    DECLARE vBalance BIGINT;
-
-    SELECT LoyaltyAccountID INTO vLock FROM LoyaltyAccount WHERE LoyaltyAccountID = pAccountID FOR UPDATE;
-
-    SELECT COALESCE(SUM(PointsChange), 0) INTO vBalance
-      FROM LoyaltyTransaction
-     WHERE LoyaltyAccountID = pAccountID AND LoyaltyTransactionID <> pExcludeID;
-
-    IF vBalance + pPoints < 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Not enough loyalty points';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_LoyaltyTransaction_BeforeInsert BEFORE INSERT ON LoyaltyTransaction FOR EACH ROW
-BEGIN
-    CALL CheckLoyaltyBalance(NEW.LoyaltyAccountID, NEW.LoyaltyTransactionID, NEW.PointsChange);
-END$$
-
-CREATE TRIGGER TR_LoyaltyTransaction_BeforeUpdate BEFORE UPDATE ON LoyaltyTransaction FOR EACH ROW
-BEGIN
-    CALL CheckLoyaltyBalance(OLD.LoyaltyAccountID, OLD.LoyaltyTransactionID, 0);   -- in case it moves accounts
-    CALL CheckLoyaltyBalance(NEW.LoyaltyAccountID, NEW.LoyaltyTransactionID, NEW.PointsChange);
-END$$
-
-CREATE TRIGGER TR_LoyaltyTransaction_BeforeDelete BEFORE DELETE ON LoyaltyTransaction FOR EACH ROW
-BEGIN
-    CALL CheckLoyaltyBalance(OLD.LoyaltyAccountID, OLD.LoyaltyTransactionID, 0);
-END$$
-
--- Labor: no overlapping pay rates, pay periods or shifts; shifts fall in their
--- pay period (by the location's local date); closed pay periods are frozen
-CREATE PROCEDURE CheckPayRate(IN pPayRateID CHAR(36), IN pEmployeeID CHAR(36),
-                              IN pFrom DATETIME, IN pTo DATETIME)
-BEGIN
-    DECLARE vLock CHAR(36);
-
-    SELECT EmployeeID INTO vLock FROM Employee WHERE EmployeeID = pEmployeeID FOR UPDATE;
-
-    IF EXISTS (
-        SELECT 1 FROM EmployeePayRate
-         WHERE EmployeeID = pEmployeeID
-           AND PayRateID <> pPayRateID
-           AND EffectiveFrom < COALESCE(pTo, '9999-12-31')
-           AND pFrom < COALESCE(EffectiveTo, '9999-12-31')
-    ) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Pay rate overlaps another rate for this employee; close the current rate first';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_EmployeePayRate_BeforeInsert BEFORE INSERT ON EmployeePayRate FOR EACH ROW
-BEGIN
-    CALL CheckPayRate(NEW.PayRateID, NEW.EmployeeID, NEW.EffectiveFrom, NEW.EffectiveTo);
-END$$
-
-CREATE TRIGGER TR_EmployeePayRate_BeforeUpdate BEFORE UPDATE ON EmployeePayRate FOR EACH ROW
-BEGIN
-    CALL CheckPayRate(NEW.PayRateID, NEW.EmployeeID, NEW.EffectiveFrom, NEW.EffectiveTo);
-END$$
-
-CREATE PROCEDURE CheckPayPeriod(IN pPayPeriodID CHAR(36), IN pBusinessID CHAR(36),
-                                IN pStart DATE, IN pEnd DATE)
-BEGIN
-    DECLARE vLock CHAR(36);
-
-    SELECT BusinessID INTO vLock FROM Business WHERE BusinessID = pBusinessID FOR UPDATE;
-
-    IF EXISTS (
-        SELECT 1 FROM PayPeriod
-         WHERE BusinessID = pBusinessID
-           AND PayPeriodID <> pPayPeriodID
-           AND StartDate <= pEnd
-           AND pStart <= EndDate
-    ) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Pay period overlaps another pay period';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_PayPeriod_BeforeInsert BEFORE INSERT ON PayPeriod FOR EACH ROW
-BEGIN
-    CALL CheckPayPeriod(NEW.PayPeriodID, NEW.BusinessID, NEW.StartDate, NEW.EndDate);
-END$$
-
-CREATE TRIGGER TR_PayPeriod_BeforeUpdate BEFORE UPDATE ON PayPeriod FOR EACH ROW
-BEGIN
-    CALL CheckPayPeriod(NEW.PayPeriodID, NEW.BusinessID, NEW.StartDate, NEW.EndDate);
-END$$
-
+-- Labor: no overlapping shifts; shifts fall in their pay period (by the location's
+-- local date); closed pay periods are frozen
 CREATE PROCEDURE CheckPayPeriodOpen(IN pPayPeriodID CHAR(36))
 BEGIN
     IF (SELECT Closed FROM PayPeriod WHERE PayPeriodID = pPayPeriodID) THEN
@@ -797,11 +596,6 @@ BEGIN
     CALL CheckPayPeriodOpen(OLD.PayPeriodID);
     CALL CheckTimeEntry(NEW.TimeEntryID, NEW.EmployeeID, NEW.LocationID, NEW.PayPeriodID,
                         NEW.ClockInAt, NEW.ClockOutAt);
-END$$
-
-CREATE TRIGGER TR_TimeEntry_BeforeDelete BEFORE DELETE ON TimeEntry FOR EACH ROW
-BEGIN
-    CALL CheckPayPeriodOpen(OLD.PayPeriodID);
 END$$
 
 DELIMITER ;

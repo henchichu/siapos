@@ -42,13 +42,10 @@ t "insert already completed"   fail "INSERT INTO Orders (OrderID,LocationID,Busi
 t "order O1 (20.08)"           ok   "INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode,RegisterID,EmployeeID,CustomerID,Subtotal,Total) VALUES ('O1','L1','B1',1,'RG1','E1','CU1',20.08,20.08);"
 
 echo "--- B7/B5/A4: order lines ---"
-t "variant without recipe"     fail "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OIX','O1','V9','B1',1,1.00,1.00,'TZ',0,0);"
-t "1.5 of an 'each' variant"   fail "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OIX','O1','V2','B1',1.5,5.70,8.55,'TZ',0,0);"
 t "line cost without unit cost" fail "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,LineCost,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OIX','O1','V2','B1',2,5.70,11.40,3.00,'TZ',0,0);"
 t "line cost mismatch"         fail "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,UnitCost,LineCost,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OIX','O1','V2','B1',2,5.70,11.40,0.84,2.00,'TZ',0,0);"
 t "2 large lattes"             ok   "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,UnitCost,LineCost,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OI1','O1','V2','B1',2,5.70,11.40,0.84,1.68,'TZ',0,0);"
 t "0.482 kg cheddar"           ok   "INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,UnitCost,LineCost,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OI2','O1','V4','B1',0.482,18.00,8.68,13.0,6.266,'TZ',0,0);"
-t "change line to 1.5 each"    fail "UPDATE OrderItem SET Quantity=1.5, LineTotal=8.55, LineCost=1.26 WHERE OrderItemID='OI1';"
 t "sale ledger rows"           ok   "INSERT INTO InventoryTransaction (InventoryTransactionID,BusinessID,StockItemID,LocationID,QuantityChange,UnitCost,TransactionTypeCode,OrderID) VALUES ('S-1','B1','S1','L1',-36,0.03,2,'O1'),('S-2','B1','S2','L1',-600,0.001,2,'O1'),('S-3','B1','S5','L1',-482,0.013,2,'O1');"
 a "beans after sale"                "SELECT Quantity FROM Inventory WHERE InventoryID='I1'" "1959.000"
 

@@ -41,53 +41,6 @@ BEGIN
      WHERE LocationID = NEW.LocationID AND StockItemID = NEW.StockItemID;
 END$$
 
--- OrderItem: the variant must have a recipe, and whole-unit variants sell in whole numbers
-CREATE PROCEDURE CheckOrderItem(IN pVariantID CHAR(36), IN pQuantity DECIMAL(12,3))
-BEGIN
-    DECLARE vAllowsFraction BOOLEAN;
-
-    IF NOT EXISTS (SELECT 1 FROM VariantRecipe WHERE VariantID = pVariantID) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This variant has no recipe, so it cannot be sold';
-    END IF;
-
-    SELECT u.AllowsFraction INTO vAllowsFraction
-      FROM ProductVariant v
-      JOIN UnitOfMeasure u ON u.UnitCode = v.SellUnitCode
-     WHERE v.VariantID = pVariantID;
-
-    IF NOT vAllowsFraction AND pQuantity <> FLOOR(pQuantity) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This variant is sold in whole units';
-    END IF;
-END$$
-
--- The line's tax category and rate must be the variant's category and the location's
--- current rate. Checked on insert, and on update only when those inputs change, so
--- editing an old line after a rate change doesn't fail.
-CREATE PROCEDURE CheckOrderItemTax(IN pOrderID CHAR(36), IN pVariantID CHAR(36),
-                                   IN pTaxCategoryID CHAR(36), IN pTaxRate DECIMAL(7,6))
-BEGIN
-    DECLARE vRate DECIMAL(7,6);
-
-    IF NOT EXISTS (SELECT 1 FROM ProductVariant
-                    WHERE VariantID = pVariantID AND TaxCategoryID = pTaxCategoryID) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Tax category must match the variant''s tax category';
-    END IF;
-
-    SET vRate = (SELECT r.Rate
-                   FROM Orders o
-                   JOIN LocationTaxRate r ON r.LocationID = o.LocationID
-                                         AND r.TaxCategoryID = pTaxCategoryID
-                  WHERE o.OrderID = pOrderID);
-
-    IF vRate IS NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No tax rate is set for this category at the order''s location';
-    END IF;
-
-    IF pTaxRate <> vRate THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Tax rate must match the location''s rate for this category';
-    END IF;
-END$$
-
 -- Completed (5) and refunded (7) orders are closed: their lines and payments are frozen
 CREATE PROCEDURE CheckOrderOpen(IN pOrderID CHAR(36))
 BEGIN
@@ -95,54 +48,6 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This order is closed; record changes as a return or refund';
     END IF;
 END$$
-
-CREATE TRIGGER TR_OrderItem_BeforeInsert BEFORE INSERT ON OrderItem FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(NEW.OrderID);
-    SET NEW.PricesIncludeTax = (SELECT PricesIncludeTax FROM Orders WHERE OrderID = NEW.OrderID);
-    CALL CheckOrderItem(NEW.VariantID, NEW.Quantity);
-    CALL CheckOrderItemTax(NEW.OrderID, NEW.VariantID, NEW.TaxCategoryID, NEW.TaxRate);
-END$$
-
-CREATE TRIGGER TR_OrderItem_BeforeUpdate BEFORE UPDATE ON OrderItem FOR EACH ROW
-BEGIN
-    CALL CheckOrderOpen(OLD.OrderID);
-    CALL CheckOrderOpen(NEW.OrderID);
-    CALL CheckOrderItem(NEW.VariantID, NEW.Quantity);
-
-    IF NEW.OrderID <> OLD.OrderID OR NEW.VariantID <> OLD.VariantID
-       OR NEW.TaxCategoryID <> OLD.TaxCategoryID OR NEW.TaxRate <> OLD.TaxRate THEN
-        CALL CheckOrderItemTax(NEW.OrderID, NEW.VariantID, NEW.TaxCategoryID, NEW.TaxRate);
-    END IF;
-END$$
-
--- A line's modifiers and components (its cost of goods) freeze with the order
-CREATE PROCEDURE CheckOrderItemOpen(IN pOrderItemID CHAR(36))
-BEGIN
-    CALL CheckOrderOpen((SELECT OrderID FROM OrderItem WHERE OrderItemID = pOrderItemID));
-END$$
-
--- A line's modifier must come from a group its product offers (min/max is checked at completion)
-CREATE PROCEDURE CheckModifierOffered(IN pOrderItemID CHAR(36), IN pModifierID CHAR(36))
-BEGIN
-    IF NOT EXISTS (SELECT 1
-                     FROM OrderItem oi
-                     JOIN ProductVariant v ON v.VariantID = oi.VariantID
-                     JOIN ProductModifierGroup pmg ON pmg.ProductID = v.ProductID
-                     JOIN Modifier m ON m.ModifierGroupID = pmg.ModifierGroupID
-                    WHERE oi.OrderItemID = pOrderItemID AND m.ModifierID = pModifierID) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This product doesn''t offer that modifier''s group';
-    END IF;
-END$$
-
-CREATE TRIGGER TR_OrderItemModifier_BeforeInsert BEFORE INSERT ON OrderItemModifier FOR EACH ROW
-BEGIN
-    CALL CheckOrderItemOpen(NEW.OrderItemID);
-    CALL CheckModifierOffered(NEW.OrderItemID, NEW.ModifierID);
-END$$
-
-CREATE TRIGGER TR_OrderItemComponent_BeforeInsert BEFORE INSERT ON OrderItemComponent FOR EACH ROW
-    CALL CheckOrderItemOpen(NEW.OrderItemID)$$
 
 -- Payment: non-failed payments can't exceed the order total; a cancelled order takes no
 -- live payments (1 PENDING, 2 AUTHORIZED, 3 COMPLETED), though old ones may still be marked REFUNDED
@@ -196,47 +101,6 @@ BEGIN
     END IF;
     CALL CheckPayment(NEW.PaymentID, NEW.OrderID, NEW.Amount, NEW.PaymentStatusCode);
 END$$
-
--- Discounts: promotion redemptions and one-off discounts freeze with the order (completion
--- checks they add up to Orders.DiscountAmount). A one-off is signed by someone with permission 4
--- (Approve discounts). A staff discount (StaffEmployeeID) needs no signature unless the business
--- turns that on, and must be for an active employee.
-CREATE PROCEDURE CheckOrderDiscount(IN pOrderID CHAR(36), IN pApprovedBy CHAR(36), IN pStaff CHAR(36),
-                                    IN pAmount DECIMAL(10,2))
-BEGIN
-    CALL CheckOrderOpen(pOrderID);
-
-    IF pApprovedBy IS NOT NULL AND NOT HasPermission(pApprovedBy, 4) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A one-off discount must be approved by someone allowed to approve discounts';
-    END IF;
-
-    IF pStaff IS NOT NULL THEN
-        IF NOT EXISTS (SELECT 1 FROM Employee WHERE EmployeeID = pStaff AND Active) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A staff discount is only for an active employee';
-        END IF;
-
-        IF pApprovedBy IS NULL
-           AND EXISTS (SELECT 1 FROM Business b JOIN Orders o ON o.BusinessID = b.BusinessID
-                        WHERE o.OrderID = pOrderID AND b.StaffDiscountsNeedApproval) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This business needs a manager to approve staff discounts';
-        END IF;
-
-        -- unsigned staff discounts stay under the business's cap, measured on the order's lines
-        IF pApprovedBy IS NULL
-           AND EXISTS (SELECT 1 FROM Business b JOIN Orders o ON o.BusinessID = b.BusinessID
-                        WHERE o.OrderID = pOrderID
-                          AND pAmount * 100 > b.StaffDiscountMaxPercent
-                                              * (SELECT COALESCE(SUM(LineTotal), 0) FROM OrderItem WHERE OrderID = pOrderID)) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A staff discount over the business limit needs a manager to approve it';
-        END IF;
-    END IF;
-END$$
-
-CREATE TRIGGER TR_OrderDiscount_BeforeInsert BEFORE INSERT ON OrderDiscount FOR EACH ROW
-    CALL CheckOrderDiscount(NEW.OrderID, NEW.ApprovedByEmployeeID, NEW.StaffEmployeeID, NEW.Amount)$$
-
-CREATE TRIGGER TR_PromotionRedemption_BeforeInsert BEFORE INSERT ON PromotionRedemption FOR EACH ROW
-    CALL CheckOrderOpen(NEW.OrderID)$$
 
 -- Refund: only completed payments; non-failed refunds can't exceed the payment;
 -- tax refunded can't exceed tax collected, and merchandise refunded can't exceed

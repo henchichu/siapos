@@ -107,6 +107,20 @@ async function afterRefund(conn, { order, paymentId, remainingBefore, totalCents
   return !open.n;
 }
 
+// A refund over the business's limit, or on an order older than its limit in days, is a rule-breaker: whoever signs it must hold
+// the override permission, not just any approving one. (This used to be a database trigger.) A limit left empty is switched off.
+const OVERRIDE_REFUSED = "This refund breaks a refund rule; a manager must sign the override.";
+async function requireOverrideIfNeeded(conn, { businessId, orderId, totalCents, signerId }) {
+  const [[r]] = await conn.query(
+    `SELECT b.RefundOverrideAmount AS maxAmount,
+            COALESCE(o.CompletedAt, o.OrderDateTime) < UTC_TIMESTAMP() - INTERVAL b.RefundOverrideDays DAY AS tooOld
+       FROM Business b JOIN Orders o ON o.OrderID = ? WHERE b.BusinessID = ?`,
+    [orderId, businessId]
+  );
+  const breaks = (r.maxAmount != null && totalCents > cents(r.maxAmount)) || !!r.tooOld;
+  if (breaks && !(await hasPermission(conn, signerId, PERM_SIGN_REFUND_OVERRIDES))) throw new HttpError(409, OVERRIDE_REFUSED);
+}
+
 function readRefundBody(body) {
   const reason = check.note(body.reason, "reason", 255, { required: true });
   const wanted = body.lines;
@@ -120,7 +134,7 @@ function readRefundBody(body) {
 // items count as returned, while stock, payment and order are left alone until a manager approves it.
 async function recordRefund(conn, { session, orderId, wanted, reason, managerId = null, pending = false }) {
   const { employeeId, businessId } = session;
-  // Order first, then payments: the same lock order the DB's own checks use
+  // Order first, then payments: the same lock order every refund uses, so two at once can't deadlock
   const [[order]] = await conn.query(
     "SELECT OrderID, LocationID, OrderStatusCode FROM Orders WHERE OrderID = ? AND BusinessID = ? FOR UPDATE",
     [String(orderId), businessId]
@@ -146,6 +160,7 @@ async function recordRefund(conn, { session, orderId, wanted, reason, managerId 
     const item = items.find((i) => i.OrderItemID === l.orderItemId);
     if (!item) throw new HttpError(400, "An item isn't part of this order.");
     if (l.qty > Number(item.Quantity) - Number(item.Returned)) throw new HttpError(409, "More items than are left to return. A refund for some of them may be waiting for a manager.");
+    item.Returned = Number(item.Returned) + l.qty; // a request that lists the same item twice counts both
     const restock = l.restock ? l.qty : 0;
     if (restock && !item.RestockOnReturn) throw new HttpError(400, "That item can't go back to stock.");
 
@@ -192,6 +207,7 @@ async function recordRefund(conn, { session, orderId, wanted, reason, managerId 
     [payment.PaymentID, returnId, order.OrderID, businessId, dollars(totalCents), dollars(taxCents), reason, pending ? 1 : 2, managerId, employeeId]
   );
 
+  if (!pending) await requireOverrideIfNeeded(conn, { businessId, orderId: order.OrderID, totalCents, signerId: managerId });
   const orderRefunded = pending ? false
     : await afterRefund(conn, { order, paymentId: payment.PaymentID, remainingBefore: cents(payment.Remaining), totalCents, employeeId, businessId });
   return { itemsCents: netCents, taxCents, totalCents, method: label(payment.Description), orderRefunded };
@@ -274,6 +290,7 @@ router.post("/refunds/:id/approve", needSigner, async (req, res) => {
          FROM Payment p JOIN PaymentMethod pm USING (PaymentMethodCode) WHERE p.PaymentID = ? FOR UPDATE`,
       [ref.RefundID, ref.PaymentID]
     );
+    await requireOverrideIfNeeded(conn, { businessId, orderId: ref.OrderID, totalCents: cents(ref.Amount), signerId: managerId });
     const [back] = await conn.query("SELECT OrderItemID, QuantityRestocked FROM ReturnItem WHERE ReturnID = ? AND QuantityRestocked > 0", [ref.ReturnID]);
     for (const b of back) await postRestock(conn, ref.LocationID, employeeId, b.OrderItemID, Number(b.QuantityRestocked));
     await conn.query("UPDATE Returns SET ApprovedByEmployeeID = ?, UpdatedBy = ? WHERE ReturnID = ?", [managerId, employeeId, ref.ReturnID]);

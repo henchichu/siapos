@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { start, client, pool, pickUp, creds } = require("./env");
 
-let env, ana, leo, priya, sam, campus, downtown;
+let env, ana, manager, priya, sam, campus, downtown;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const ANA = { managerNumber: "10420006", managerPin: "666666" };
@@ -19,12 +19,12 @@ async function sale(who, n = 1) {
 }
 const lineOf = (s, qty = 1) => [{ orderItemId: s.line.orderItemId, qty, restock: false }];
 const reject = async () => {
-  for (const r of (await leo.call("/refunds/waiting")).body.refunds) await leo.call(`/refunds/${r.id}/reject`, {});
+  for (const r of (await manager.call("/refunds/waiting")).body.refunds) await manager.call(`/refunds/${r.id}/reject`, {});
 };
 
 test.before(async () => {
   env = await start();
-  [ana, leo, priya, sam] = await Promise.all([["10420006", "666666"], ["10420002", "222222"], ["10420004", "444444"], ["10420003", "333333"]].map(([n, p]) => signIn(n, p)));
+  [ana, manager, priya, sam] = await Promise.all([["10420006", "666666"], ["10420001", "111111"], ["10420004", "444444"], ["10420003", "333333"]].map(([n, p]) => signIn(n, p)));
   campus = await sale(priya); downtown = await sale(sam);
 });
 test.after(async () => { await reject(); env.server.close(); await pool.end(); });
@@ -77,7 +77,7 @@ test("an order at another café can't be found or refunded from here", async () 
 test("Needs attention: stock and timecards, but not refunds waiting for an override", async () => {
   const r = await ana.call("/attention");
   assert.equal(r.status, 200);
-  for (const k of ["losses", "pendingDeliveries", "timecards"]) assert.ok(r.body[k] && Array.isArray(r.body[k].rows), k);
+  for (const k of ["losses", "reorder", "timecards"]) assert.ok(r.body[k] && Array.isArray(r.body[k].rows), k);
   assert.equal(r.body.refunds, null);
   assert.equal((await ana.call("/refunds/waiting")).status, 403);
 });
@@ -86,11 +86,11 @@ test("refunds: she can ask for one at her café, but not at Downtown, and cannot
   assert.equal((await ana.call("/refunds/request", { orderId: downtown.id, reason: "x", lines: lineOf(downtown) })).status, 403);
   const asked = await ana.call("/refunds/request", { orderId: campus.id, reason: "Wrong order", lines: lineOf(campus) });
   assert.equal(asked.status, 200);
-  const waiting = (await leo.call("/refunds/waiting")).body.refunds.find((r) => r.orderNumber === campus.number);
+  const waiting = (await manager.call("/refunds/waiting")).body.refunds.find((r) => r.orderNumber === campus.number);
   assert.ok(waiting, "it waits on a manager's list");
   assert.equal((await ana.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" })).status, 403, "approve needs the override permission");
   assert.equal((await ana.call(`/refunds/${waiting.id}/reject`, {})).status, 403);
-  assert.equal((await leo.call(`/refunds/${waiting.id}/reject`, {})).status, 200);
+  assert.equal((await manager.call(`/refunds/${waiting.id}/reject`, {})).status, 200);
 });
 
 test("refunds: her own number signs only what no override is needed for", async () => {
@@ -130,7 +130,7 @@ test("a wrong password is refused and a server's number can't sign for her", asy
 
 test("the one who asked for a refund may approve it themselves, or someone else may", async () => {
   const asked = await sale(sam);
-  assert.equal((await leo.call("/refunds/request", { orderId: asked.id, lines: lineOf(asked), reason: "own request" })).status, 200);
-  const [waiting] = (await leo.call("/refunds/waiting")).body.refunds.filter((r) => r.orderNumber === asked.number);
-  assert.equal((await leo.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" })).status, 200, "self-approval is allowed");
+  assert.equal((await manager.call("/refunds/request", { orderId: asked.id, lines: lineOf(asked), reason: "own request" })).status, 200);
+  const [waiting] = (await manager.call("/refunds/waiting")).body.refunds.filter((r) => r.orderNumber === asked.number);
+  assert.equal((await manager.call(`/refunds/${waiting.id}/approve`, { managerNumber: "10420002", managerPin: "222222" })).status, 200, "self-approval is allowed");
 });

@@ -3,11 +3,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { start, client, pool, pickUp, topUp, creds } = require("./env");
 
-let env, leo, maya, sam, jordan, mine;
+let env, manager, maya, sam, jordan, mine;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const MGR = { managerNumber: "10420002", managerPin: "222222" };
-const search = (q = {}) => leo.call(`/orders?${new URLSearchParams(q)}`);
+const search = (q = {}) => manager.call(`/orders?${new URLSearchParams(q)}`);
 const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Chicago" }); // the demo cafés' day, not UTC's
 
 async function sale(n = 2) {
@@ -21,7 +21,7 @@ async function sale(n = 2) {
 test.before(async () => {
   await topUp("stk-croissant", 60, "loc-downtown"); // the test sales are croissants at Sam's café, and every run uses some
   env = await start();
-  [leo, maya, sam, jordan] = await Promise.all([["10420002", "222222"], ["10420001", "111111"], ["10420003", "333333"], ["10420005", "555555"]].map(([n, p]) => signIn(n, p)));
+  [manager, maya, sam, jordan] = await Promise.all([["10420001", "111111"], ["10420001", "111111"], ["10420003", "333333"], ["10420005", "555555"]].map(([n, p]) => signIn(n, p)));
 });
 test.after(async () => { env.server.close(); await pool.end(); });
 
@@ -33,7 +33,7 @@ test("only roles that may search orders get the pages and the API", async () => 
   assert.equal((await page(sam, "/orders.html")).headers.get("location"), "/register.html");
   assert.equal((await page(sam, "/order.html?id=x")).headers.get("location"), "/register.html");
   assert.equal((await page(jordan, "/orders.html")).headers.get("location"), "/kitchen.html");
-  for (const who of [leo, maya]) {
+  for (const who of [manager, maya]) {
     assert.equal((await who.call("/orders")).status, 200);
     assert.equal((await page(who, "/orders.html")).status, 200);
     assert.equal((await page(who, "/order.html")).status, 200);
@@ -82,7 +82,7 @@ test("a search lists at most 200 rows but counts them all", async () => {
 
 test("details reconcile, and a refund shows up in payments and status", async () => {
   const s = await sale(2);
-  const d = (await leo.call(`/orders/${s.id}`)).body;
+  const d = (await manager.call(`/orders/${s.id}`)).body;
   assert.equal(d.orderNumber, s.number);
   assert.equal(d.status, "Completed");
   assert.equal(d.canRefund, true);
@@ -99,7 +99,7 @@ test("details reconcile, and a refund shows up in payments and status", async ()
   const lookup = (await sam.call(`/refunds/order?q=${s.number}`)).body;
   const done = await sam.call("/refunds", { orderId: s.id, reason: "Test", ...MGR, lines: [{ orderItemId: lookup.lines[0].orderItemId, qty: 2, restock: false }] });
   assert.equal(done.status, 200);
-  const after = (await leo.call(`/orders/${s.id}`)).body;
+  const after = (await manager.call(`/orders/${s.id}`)).body;
   assert.equal(after.status, "Refunded");
   assert.deepEqual(after.payments.map((p) => [p.type, p.status]), [["Payment", "Refunded"], ["Refund", "Completed"]]);
   assert.equal(after.payments[1].amount, -d.total);
@@ -108,22 +108,22 @@ test("details reconcile, and a refund shows up in payments and status", async ()
 
 test("an order that isn't completed can't be refunded", async () => {
   const [[pending]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE OrderStatusCode = 1 AND BusinessID = 'biz-brewbean' LIMIT 1");
-  if (pending) assert.equal((await leo.call(`/orders/${pending.id}`)).body.canRefund, false);
+  if (pending) assert.equal((await manager.call(`/orders/${pending.id}`)).body.canRefund, false);
 });
 
 test("a missing order is a 404, and an order outside my locations isn't visible", async () => {
-  assert.equal((await leo.call("/orders/no-such-order")).status, 404);
+  assert.equal((await manager.call("/orders/no-such-order")).status, 404);
   const s = await sale();
-  assert.equal((await leo.call(`/orders/${s.id}`)).status, 200);
-  await pool.query("UPDATE EmployeeLocation SET Active = FALSE WHERE EmployeeID = 'emp-leo' AND LocationID = 'loc-downtown'");
+  assert.equal((await manager.call(`/orders/${s.id}`)).status, 200);
+  await pool.query("UPDATE EmployeeLocation SET Active = FALSE WHERE EmployeeID = 'emp-maya' AND LocationID = 'loc-downtown'");
   try {
-    assert.equal((await leo.call(`/orders/${s.id}`)).status, 404, "Downtown is no longer Leo's");
+    assert.equal((await manager.call(`/orders/${s.id}`)).status, 404, "Downtown is no longer the manager's");
     const r = await search({ from: today, to: today });
     assert.ok(!r.body.orders.some((o) => o.orderNumber === s.number));
     assert.deepEqual(r.body.filters.locations.map((l) => l.id), ["loc-campus"]);
     assert.equal((await search({ locationId: "loc-downtown" })).status, 403);
   } finally {
-    await pool.query("UPDATE EmployeeLocation SET Active = TRUE WHERE EmployeeID = 'emp-leo' AND LocationID = 'loc-downtown'");
+    await pool.query("UPDATE EmployeeLocation SET Active = TRUE WHERE EmployeeID = 'emp-maya' AND LocationID = 'loc-downtown'");
   }
-  assert.equal((await leo.call(`/orders/${s.id}`)).status, 200);
+  assert.equal((await manager.call(`/orders/${s.id}`)).status, 200);
 });

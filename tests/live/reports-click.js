@@ -146,10 +146,10 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("an earlier period: her old rate", pRow("Priya Shah")[5] === "$16.50" && /closed/.test(m.field("Pay period").selectedOptions[0].textContent));
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
-  const l = await open(base, "10420002", "222222");
+  const l = await open(base, "10420002", "222222"); // Leo works at Downtown only
   await l.click(l.byText(".tabs .tab", "1. Sales by day"), 700);
   check("a manager has no location list", !l.field("Location"));
-  check("and sees only their own location's figures", l.rows().length > 0 && l.rows().every((r) => r.children[1].textContent === "Brewbean Campus"));
+  check("and sees only their own location's figures", l.rows().length > 0 && l.rows().every((r) => r.children[1].textContent === "Brewbean Downtown"));
   check("manager page: no React warnings", l.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, l.w.errors.join(" | "));
 
   server.close(); await pool.end();

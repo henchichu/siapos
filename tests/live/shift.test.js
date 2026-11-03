@@ -74,7 +74,7 @@ test("time clock: each button works only in the right state, and Clock out submi
 });
 
 test("team timecards: filters, approve, reject, edit, approve all, close", async () => {
-  const leo = await signIn("10420002", "222222");
+  const maya = await signIn("10420001", "111111");
   const priya = await signIn("10420004", "444444");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-t-${start}`;
@@ -85,7 +85,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
      VALUES (?, ?, ?, 'biz-brewbean', ?, CONVERT_TZ(? + INTERVAL 1 DAY + INTERVAL 13 HOUR, '+00:00', '+00:00'), ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 30, 2)`,
     [`te-t-${start}-${n}`, who, place, id, start, start]);
   await shift("emp-priya", "loc-campus", 1); await shift("emp-jordan", "loc-campus", 2); await shift("emp-sam", "loc-downtown", 3);
-  const get = (q) => leo.call(`/team/timecards?payPeriodId=${id}&${q}`);
+  const get = (q) => maya.call(`/team/timecards?payPeriodId=${id}&${q}`);
 
   let t = await get("status=SUBMITTED");
   assert.equal(t.body.rows.length, 3);
@@ -96,15 +96,15 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   assert.equal(t.body.waiting, 2, "the count follows period and location, not the status filter");
 
   assert.equal((await priya.call("/team/timecards/x/approve", {})).status, 403, "a server can't approve");
-  const close = () => leo.call(`/team/pay-periods/${id}/close`, {});
+  const close = () => maya.call(`/team/pay-periods/${id}/close`, {});
   assert.match((await close()).body.error, /3 timecards are still open or waiting/);
 
   const sam = (await get("status=SUBMITTED&locationId=loc-downtown")).body.rows[0];
-  assert.equal((await leo.call(`/team/timecards/${sam.id}/reject`, {})).status, 200);
-  assert.equal((await leo.call(`/team/timecards/${sam.id}/approve`, {})).status, 409, "a rejected card can't be approved");
+  assert.equal((await maya.call(`/team/timecards/${sam.id}/reject`, {})).status, 200);
+  assert.equal((await maya.call(`/team/timecards/${sam.id}/approve`, {})).status, 409, "a rejected card can't be approved");
   assert.equal((await get("status=REJECTED")).body.rows.length, 1);
 
-  const edit = (body) => leo.call(`/team/timecards/${sam.id}/edit`, body);
+  const edit = (body) => maya.call(`/team/timecards/${sam.id}/edit`, body);
   assert.equal((await edit({ clockIn: `${start}T09:00`, clockOut: `${start}T08:00`, breakMinutes: 0 })).status, 400, "out before in");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T09:00`, breakMinutes: 90 })).status, 400, "break longer than the shift");
   const future = await edit({ clockIn: `${start}T08:00`, clockOut: "2999-01-01T09:00", breakMinutes: 0 });
@@ -113,11 +113,11 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const fixed = (await get("locationId=loc-downtown")).body.rows[0];
   assert.deepEqual([fixed.status, fixed.hours, fixed.breakMinutes], ["SUBMITTED", 8, 30], "an edited card goes back to Submitted");
 
-  const all = await leo.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" });
+  const all = await maya.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" });
   assert.equal(all.body.approved, 3);
   t = await get("status=APPROVED");
   assert.equal(t.body.rows.length, 3);
-  assert.match(t.body.rows[0].approvedBy, /^Leo /);
+  assert.match(t.body.rows[0].approvedBy, /^Maya /);
   assert.equal(t.body.waiting, 0);
 
   const done = await close();
@@ -126,11 +126,11 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   assert.equal(done.body.message, "Success: Pay period successfully finalized and closed");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:00`, breakMinutes: 0 })).status, 409, "closed periods are locked");
   assert.equal((await close()).status, 409);
-  assert.equal((await leo.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
+  assert.equal((await maya.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
 });
 
 test("a manager may approve or edit their own timecard", async () => {
-  const leo = await signIn("10420002", "222222");
+  const maya = await signIn("10420001", "111111");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-own-${start}`;
   await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
@@ -139,10 +139,10 @@ test("a manager may approve or edit their own timecard", async () => {
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, 'loc-campus', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
     [`te-own-${start}-${n}`, who, id, start, start]);
-  await card("emp-leo", 1);
+  await card("emp-maya", 1);
   const mine = `te-own-${start}-1`;
   const times = { clockIn: `${start}T08:00`, clockOut: `${start}T20:00`, breakMinutes: 0 };
-  assert.equal((await leo.call(`/team/timecards/${mine}/edit`, times)).status, 200, "edit their own");
-  assert.equal((await leo.call(`/team/timecards/${mine}/approve`, {})).status, 200, "approve their own");
-  assert.equal((await leo.call(`/team/timecards?payPeriodId=${id}`)).body.rows[0].status, "APPROVED");
+  assert.equal((await maya.call(`/team/timecards/${mine}/edit`, times)).status, 200, "edit their own");
+  assert.equal((await maya.call(`/team/timecards/${mine}/approve`, {})).status, 200, "approve their own");
+  assert.equal((await maya.call(`/team/timecards?payPeriodId=${id}`)).body.rows[0].status, "APPROVED");
 });

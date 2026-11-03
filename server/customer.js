@@ -1,8 +1,12 @@
 const crypto = require("crypto");
 const express = require("express");
 const pool = require("./database/connection");
-const { verifySecret } = require("./auth");
+const { verifySecret, hashSecret } = require("./auth");
 const { DUMMY } = require("./pin");
+const { HttpError } = require("./errors");
+const check = require("./validate");
+const rateLimit = require("./ratelimit");
+const session = require("./session");
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
@@ -69,6 +73,39 @@ const authenticate = (email, password) =>
   });
 
 const router = express.Router();
+
+// Self sign-up: a first name, an email and a password make a customer, signed in at once. The email must be new: no other
+// customer's (even a walk-in staff entered, which would hand a stranger that person's points) and no employee's.
+// Nothing proves the email is theirs: there is no mail service to verify it with.
+const TAKEN = "That email is already registered. Sign in instead.";
+router.post("/signup", rateLimit(5, 60 * 60 * 1000, { ban: true }), async (req, res) => {
+  const problems = [];
+  const firstName = check.collect(problems, () => check.personName(req.body.firstName, "first name"));
+  const email = check.collect(problems, () => check.email(req.body.email, { required: true }));
+  const { password, confirm } = req.body;
+  if (typeof password !== "string" || password.length < 8 || password.length > 200) problems.push("Choose a password of 8 to 200 characters.");
+  else if (password !== confirm) problems.push("The passwords don't match. Type the same password in both.");
+  if (problems.length) throw new HttpError(400, problems[0]);
+
+  const [[b]] = await pool.query("SELECT BusinessID AS id FROM Business WHERE Active LIMIT 1");
+  if (!b) throw new HttpError(404, "Sign-up isn't open right now.");
+  const customerId = crypto.randomUUID();
+  const hash = hashSecret(password);
+  try {
+    await pool.tx(async (conn) => {
+      const [[e]] = await conn.query("SELECT EXISTS (SELECT 1 FROM Employee WHERE Email = ?) AS taken", [email]);
+      if (e.taken) throw new HttpError(409, TAKEN);
+      await conn.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, ?, ?, ?)", [customerId, b.id, firstName, email]);
+      await conn.query("INSERT INTO CustomerCredential (CustomerID, PasswordHash) VALUES (?, ?)", [customerId, hash]);
+    });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") throw new HttpError(409, TAKEN);
+    throw err;
+  }
+  session.destroy(req, res); // one kind of sign-in per browser
+  create(res, { customerId, businessId: b.id, firstName });
+  res.json({ redirect: "/kiosk.html" });
+});
 
 // Who is signed in, with points read live from the ledger
 router.get("/customer/me", requireCustomer, async (req, res) => {

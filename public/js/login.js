@@ -75,6 +75,7 @@ function App() {
       ${messages}
       <button type="submit" className="signbtn" disabled=${busy || locked}>Sign in</button>
     </form>
+    <p className="newhere">New here? <a href="/signup.html">Create an account</a></p>
   </main>`;
 }
 

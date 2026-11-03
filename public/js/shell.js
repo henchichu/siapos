@@ -60,7 +60,6 @@ function PageTitle({ place, children }) {
 const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join("").toUpperCase();
 
 async function signOut() {
-  if (DEMO) return; // the tour's sample pages have nobody to sign out
   try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
   try { const navPick = localStorage.getItem(NAV_KEY); sessionStorage.clear(); localStorage.clear(); if (navPick) localStorage.setItem(NAV_KEY, navPick); } catch (err) { /* storage can be blocked */ }
   window.location.replace("/login.html"); // the menu's collapsed or open choice outlives the sign-out
@@ -222,7 +221,7 @@ function noteActivity() {
   try { localStorage.setItem("idle.touched", String(now)); } catch (err) { /* storage can be blocked */ }
   api("/session/touch", {}).catch(() => {});
 }
-if (!DEMO) ["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
+["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
 
 function IdleWarning() {
   const [level, setLevel] = useState(0);
@@ -240,7 +239,7 @@ function IdleWarning() {
 }
 document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/css/idle.css" }));
 const idleRoot = document.body.appendChild(document.createElement("div"));
-if (!DEMO) { ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity
+{ ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity
 
 // Card layout (shift.css, ".rowcards"): below 760px each row becomes a card and every cell shows its column header from data-label.
 // Set here from the header row, so no table has to repeat its headings, and again whenever a table's rows change.

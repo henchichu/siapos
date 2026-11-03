@@ -29,7 +29,6 @@ a Simple Industry Agnostic Point Of Sale System
    | `COOKIE_SECURE` | `0` | the apps are served over HTTPS (`1`) |
    | `TRUST_PROXY` | `0` | the staff side sits behind a reverse proxy (`1`) |
    | `KIOSK_SHARED_DEVICE` | off | the order screen is one shared iPad (`1`: customers are signed out quickly) |
-   | `DEMO_MODE` | off | a demo of the dev-seeded shop (`1`): the front page shows the tour, and leaving it shows the demo sign-ins before the sign-in page. Never where real accounts exist: it hands out working PINs |
    | `MOCK_PAY` | off | never in `.env`: the dev compose file sets it (`1`: the public page also offers Card, Apple Pay and Google Pay through the mock processor, which takes no money). Production offers Cash only |
    | `KIOSK_PHONE_SIGNIN` | off | a demo with made-up customers (`1`: phone-number sign-in on the public address; the dev compose file sets it) |
 
@@ -53,8 +52,7 @@ The app has no screens for creating a business, cafés, roles, employees, tax ra
 
 ## Signing in and approvals
 
-Staff sign in with an email and a password of 8 characters or more. The email is the sign-in name and is unique across the app (one person, one account, one business); it is not case-sensitive. Five wrong passwords lock the account for 15 minutes, and a wrong email and a wrong password get the same answer. A new password, or a cleared lock, is a statement in `sql/provision/maintenance.sql`; the app sends no email, so there is no "forgot password" link.
+Staff sign in with an email and a password of 8 characters or more. The email is the sign-in name and is unique across the app (one person, one account, one business); it is not case-sensitive. Five wrong passwords lock the account for 15 minutes, and a wrong email and a wrong password get the same answer. A new password, or a cleared lock, is a statement in `sql/provision/maintenance.sql`
 
-The **employee number** (8 digits) is not a secret: it names a colleague (for a staff discount) and, with the **approval PIN** (6 digits), lets a manager sign off a discount or refund at the till without signing in there. Wrong approval PINs count against the person asking, not the manager. Someone with no PIN simply cannot approve.
 
 The dev shop (`sql/dev/`) signs in with each person's email and the password `<first name>-dev-pass`, for example `maya@brewbean.example.com` / `maya-dev-pass` (general manager Maya, manager Leo, servers Sam and Priya, barista Jordan, assistant manager Ana). Their employee numbers are `10420001` to `10420006` and their approval PINs `111111` to `666666`, in that order.

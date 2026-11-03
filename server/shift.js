@@ -277,7 +277,7 @@ router.post("/team/pay-periods/:id/close", requirePermission(PERM_APPROVE), asyn
   const finalized = await pool.tx(async (conn) => {
     const [[p]] = await conn.query(
       `SELECT pp.Closed AS closed, pp.EndDate < DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', l.TimeZone)) AS ended
-         FROM PayPeriod pp JOIN Location l ON l.LocationID = ? WHERE pp.PayPeriodID = ? AND pp.BusinessID = ? FOR UPDATE`,
+         FROM PayPeriod pp JOIN Location l ON l.LocationID = ? WHERE pp.PayPeriodID = ? AND pp.BusinessID = ? FOR UPDATE OF pp`,
       [locationId, req.params.id, businessId]
     );
     if (!p) throw new HttpError(404, "Pay period not found.");

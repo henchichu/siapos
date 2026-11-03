@@ -1,7 +1,7 @@
 // Needs the dev database. Clocks Jordan in and out today and builds its own old pay period for the manager tests.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, creds } = require("./env");
+const { start, client, pool, admin, creds } = require("./env");
 
 let env;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
@@ -13,12 +13,12 @@ const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie()
 const made = [];
 const tidy = async () => {
   if (!made.length) return;
-  await pool.query("UPDATE PayPeriod SET Closed = FALSE WHERE PayPeriodID IN (?)", [made]);
-  await pool.query("DELETE FROM TimeEntry WHERE PayPeriodID IN (?)", [made]);
-  await pool.query("DELETE FROM PayPeriod WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("UPDATE PayPeriod SET Closed = FALSE WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("DELETE FROM TimeEntry WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("DELETE FROM PayPeriod WHERE PayPeriodID IN (?)", [made]);
 };
 test.before(async () => { env = await start(); });
-test.after(async () => { await tidy(); env.server.close(); await pool.end(); });
+test.after(async () => { await tidy(); env.server.close(); await pool.end(); await admin.end(); });
 
 test("the menu and the pages a role may open follow its role, fixed at sign-in", async () => {
   const menus = {
@@ -78,7 +78,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const priya = await signIn("10420004", "444444");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-t-${start}`;
-  await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
   const shift = (who, place, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
@@ -133,7 +133,7 @@ test("a manager may approve or edit their own timecard", async () => {
   const maya = await signIn("10420001", "111111");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-own-${start}`;
-  await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
   const card = (who, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)

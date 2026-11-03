@@ -26,7 +26,7 @@ services:
       interval: 5s
       retries: 20
 
-  # The staff side: registers, kitchen, timecards, reports, Settings. Published to this machine only; reach it from elsewhere over a
+  # The staff side: registers, kitchen, timecards, reports. Published to this machine only; reach it from elsewhere over a
   # private network (see README). Also runs the jobs that cancel unpaid kiosk orders and tell kitchen screens about new ones.
   pos-api:
     build: .
@@ -52,7 +52,7 @@ services:
       DEMO_MODE: ${DEMO_MODE:-}                     # 1: the front page always shows the tour, then the demo sign-ins (needs the dev-seeded shop)
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
       TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
-      KIOSK_HOST: ${KIOSK_HOST:-localhost} # the public hostname (same default as caddy), so Settings shows each café's full order link
+      KIOSK_HOST: ${KIOSK_HOST:-localhost} # the public hostname (same default as caddy), so each café's full order link is built on it
     volumes:
       - uploads:/app/uploads
     secrets:

@@ -24,28 +24,15 @@ BEGIN
     CALL CheckLocationTimeZone(NEW.TimeZone);
 END$$
 
--- Roles: the owner role can't lose its owner status or be deactivated, so a business keeps its owner
-CREATE TRIGGER TR_Role_BeforeUpdate BEFORE UPDATE ON Role FOR EACH ROW
-BEGIN
-    IF NEW.IsOwner <> OLD.IsOwner THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A role''s owner status is fixed when it is created';
-    END IF;
-
-    IF OLD.IsOwner AND NOT NEW.Active THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'The owner role cannot be deactivated';
-    END IF;
-END$$
-
--- True when the employee and their role are active and the role is the owner's or holds the permission
+-- True when the employee and their role are active and the role holds the permission
 CREATE FUNCTION HasPermission(pEmployeeID CHAR(36), pPermissionCode TINYINT UNSIGNED) RETURNS BOOLEAN
 READS SQL DATA
 BEGIN
     RETURN EXISTS (SELECT 1
                      FROM Employee e JOIN Role r ON r.RoleID = e.RoleID
                     WHERE e.EmployeeID = pEmployeeID AND e.Active AND r.Active
-                      AND (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp
-                                                 WHERE rp.RoleID = r.RoleID
-                                                   AND rp.PermissionCode = pPermissionCode)));
+                      AND EXISTS (SELECT 1 FROM RolePermission rp
+                                   WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = pPermissionCode));
 END$$
 
 -- Inventory is driven by its ledger: Quantity and AverageUnitCost change only

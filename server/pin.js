@@ -8,7 +8,7 @@ const findEmployee = (db, employeeNumber, lock = "") =>
   db
     .query(
       `SELECT e.EmployeeID, e.BusinessID, e.FirstName, e.LastName, b.Name AS BusinessName,
-              r.Name AS RoleName, r.OpensTo, r.IsOwner,
+              r.Name AS RoleName, r.OpensTo,
               c.PinHash, c.FailedPinAttempts, c.LockedUntil,
               c.LockedUntil > NOW() AS IsLocked
          FROM Employee e
@@ -50,7 +50,7 @@ async function recordFailure(conn, employeeId) {
   return { status: "bad", retriesLeft: MAX_ATTEMPTS - failed };
 }
 
-// A correct PIN, a new PIN or an owner's Unlock all start the count again
+// A correct PIN, a new PIN or a cleared lock all start the count again
 const clearLockout = (db, employeeId) =>
   db.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
 
@@ -77,36 +77,29 @@ const authenticate = (employeeNumber, pin, payerId) =>
     return recordFailure(conn, emp.EmployeeID);
   });
 
-// Same rule as the DB's HasPermission() (app_user can't execute routines): the owner role holds everything,
-// other roles what RolePermission grants
+// Same rule as the DB's HasPermission() (app_user can't execute routines): a role may do what RolePermission grants
 const hasPermission = (db, employeeId, code) =>
   db
     .query(
       `SELECT EXISTS (SELECT 1 FROM Employee e JOIN Role r ON r.RoleID = e.RoleID
                        WHERE e.EmployeeID = ? AND e.Active AND r.Active
-                         AND (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp
-                                                    WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = ?))) AS ok`,
+                         AND EXISTS (SELECT 1 FROM RolePermission rp
+                                                    WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = ?)) AS ok`,
       [employeeId, code]
     )
     .then(([[r]]) => !!r.ok);
 
-// Every code 1-22 the person holds, in one query: what sign-in needs to build the menu
+// Every code 1-20 the person holds, in one query: what sign-in needs to build the menu
 const grantedCodes = (db, employeeId) =>
   db
     .query(
       `SELECT p.PermissionCode AS code FROM Permission p
-        WHERE p.PermissionCode BETWEEN 1 AND 22
+        WHERE p.PermissionCode BETWEEN 1 AND 20
           AND EXISTS (SELECT 1 FROM Employee e JOIN Role r ON r.RoleID = e.RoleID
                        WHERE e.EmployeeID = ? AND e.Active AND r.Active
-                         AND (r.IsOwner OR EXISTS (SELECT 1 FROM RolePermission rp WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = p.PermissionCode)))`,
+                         AND EXISTS (SELECT 1 FROM RolePermission rp WHERE rp.RoleID = r.RoleID AND rp.PermissionCode = p.PermissionCode))`,
       [employeeId]
     )
     .then(([rows]) => rows.map((r) => r.code));
 
-// Read from the database each time, like hasPermission, so a demoted owner loses it at once
-const isOwner = async (employeeId) => {
-  const [[row]] = await pool.query("SELECT r.IsOwner AS owner FROM Employee e JOIN Role r ON r.RoleID = e.RoleID WHERE e.EmployeeID = ?", [employeeId]);
-  return !!row?.owner;
-};
-
-module.exports = { findEmployee, workplace, authenticate, hasPermission, grantedCodes, isOwner, clearLockout };
+module.exports = { findEmployee, workplace, authenticate, hasPermission, grantedCodes };

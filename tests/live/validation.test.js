@@ -21,35 +21,6 @@ test("login: an employee number that isn't 8 digits is refused before any lookup
   }
 });
 
-test("Settings: business and location phone, email, tax percentage, invisible characters", async () => {
-  const g = (await maya.call("/settings/general")).body;
-  const biz = { name: g.business.name, email: "", phone: "", includesTax: !!g.business.includesTax };
-  refused(await maya.call("/settings/business", { ...biz, phone: "abc" }), /US phone number/);
-  refused(await maya.call("/settings/business", { ...biz, phone: "000-000-0000" }), /US phone number/);
-  refused(await maya.call("/settings/business", { ...biz, email: "a@b.c" }), /valid email/);
-  refused(await maya.call("/settings/business", { ...biz, name: "Caf​e" }), /can't be shown/);
-  const l = g.locations[0];
-  const loc = { ...l, active: !!l.active, online: !!l.online, registers: l.registers.map((r) => ({ id: r.id, name: r.name })) };
-  refused(await maya.call("/settings/locations", { ...loc, phone: "12345" }), /US phone number/);
-  refused(await maya.call("/settings/locations", { ...loc, address: "1 Main\u0007St" }), /can't be shown/);
-  const taxId = Object.keys(l.rates)[0];
-  for (const rate of ["8.12345", "-1", "101", "abc", ""])
-    refused(await maya.call("/settings/locations", { ...loc, rates: { ...l.rates, [taxId]: rate } }), /tax percentage/);
-  const after = (await maya.call("/settings/general")).body;
-  assert.deepEqual([after.business.name, after.locations[0].phone, after.locations[0].rates], [g.business.name, l.phone, l.rates], "nothing was saved");
-});
-
-test("a business phone may be international or have an extension, and is saved as typed", async () => {
-  const g = (await maya.call("/settings/general")).body;
-  const biz = { name: g.business.name, email: g.business.email || "", phone: g.business.phone || "", includesTax: !!g.business.includesTax };
-  try {
-    for (const [typed, saved] of [["+44  20 7946 0958", "+44 20 7946 0958"], ["(312) 555-0142 ext 12", "312-555-0142 x12"]]) {
-      assert.equal((await maya.call("/settings/business", { ...biz, phone: typed })).status, 200, typed);
-      assert.equal((await maya.call("/settings/general")).body.business.phone, saved);
-    }
-  } finally { await maya.call("/settings/business", biz); }
-});
-
 test("a supplier's name, email and phone are checked", async () => {
   const s = { name: "Test Supplier Co", email: "", phone: "" };
   refused(await maya.call("/inventory/supplier", { ...s, phone: "call us" }), /US phone number/);
@@ -58,10 +29,7 @@ test("a supplier's name, email and phone are checked", async () => {
   refused(await maya.call("/inventory/supplier", { ...s, name: "x".repeat(101) }), /too long/);
 });
 
-test("employee and member names are letters only, with every problem listed together", async () => {
-  const hire = { firstName: "123", lastName: "<b>x</b>", number: "99990001", email: "a@b.c", roleId: "role-server", locationIds: ["loc-campus"], rate: "15.00", startsOn: "2026-01-01", pin: "246810" };
-  const r = await maya.call("/employees", hire);
-  refused(r, /first name/); refused(r, /last name/); refused(r, /valid email/);
+test("member names are letters only, with every problem listed together", async () => {
   const m = await maya.call("/rewards/members", { firstName: "Pat 🙂", lastName: "", email: "pat@@example.com", phone: "x" });
   refused(m, /first name/); refused(m, /valid email/); refused(m, /US phone number/);
 });

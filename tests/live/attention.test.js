@@ -149,28 +149,6 @@ test("stock goes back when a refund is approved, not when it is asked for", asyn
   assert.equal(await bags(), afterSale + 1, "approving puts the bag back");
 });
 
-test("only an owner can switch location, among their own locations", async () => {
-  const me = async () => (await maya.call("/session")).body;
-  for (const who of [leo, sam]) {
-    assert.equal((await who.call("/locations")).status, 403);
-    assert.equal((await who.call("/locations/switch", { locationId: "loc-downtown" })).status, 403);
-  }
-  assert.equal((await leo.call("/session")).body.canSwitch, false, "the switch is offered from the session (81ef1f8 moved it there)");
-  const places = (await maya.call("/locations")).body;
-  assert.deepEqual(places.locations.map((l) => l.id), ["loc-campus", "loc-downtown"]);
-  assert.equal((await maya.call("/session")).body.canSwitch, true);
-  assert.equal((await maya.call("/locations/switch", { locationId: "nope" })).status, 403);
-  try {
-    assert.equal((await maya.call("/locations/switch", { locationId: "loc-downtown" })).status, 200);
-    assert.equal((await me()).locationName, "Brewbean Downtown");
-    assert.equal((await maya.call("/attention")).body.location, "Brewbean Downtown");
-    assert.equal((await maya.call("/locations")).body.current, "loc-downtown");
-  } finally {
-    await maya.call("/locations/switch", { locationId: "loc-campus" });
-  }
-  assert.equal((await maya.call("/attention")).body.location, "Brewbean Campus");
-});
-
 test("nothing is left waiting", async () => {
   assert.deepEqual((await waiting()).filter((r) => r.askedBy === "Sam"), []);
 });

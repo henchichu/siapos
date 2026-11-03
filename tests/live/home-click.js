@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
-const ALL = "Inventory|Rewards|Employees|Needs attention|Products|Settings|Kitchen|Orders|Sign out|Reports|Register|My shift";
+const ALL = "Inventory|Rewards|Needs attention|Products|Kitchen|Orders|Sign out|Reports|Register|My shift";
 
 async function home(base, number, pin) {
   const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
@@ -32,19 +32,18 @@ async function home(base, number, pin) {
 
   const owner = await home(base, "10420001", "111111");
   check("sign-in lands on Home", owner.redirect === "/home.html");
-  check("owner sees every tile, in the wireframe's order", owner.names === ALL, owner.names);
+  check("general manager sees every tile, in the wireframe's order", owner.names === ALL, owner.names);
   const manager = await home(base, "10420002", "222222");
-  check("manager sees permitted tiles without Settings", manager.names === ALL.replace("Settings|", ""), manager.names);
+  check("manager sees the same tiles", manager.names === ALL, manager.names);
   const waiter = await home(base, "10420003", "333333");
   check("server sees only Register, Kitchen, Rewards, Products, My shift and Sign out", waiter.names === "Rewards|Products|Kitchen|Sign out|Register|My shift", waiter.names);
   const barista = await home(base, "10420005", "555555");
   check("barista sees only Kitchen, My shift and Sign out", barista.names === "Kitchen|Sign out|My shift", barista.names);
-  check("hidden tiles aren't in the page at all", !/Inventory|Settings|Employees|Reports/.test(barista.w.document.body.textContent));
+  check("hidden tiles aren't in the page at all", !/Inventory|Reports/.test(barista.w.document.body.textContent));
 
   check("header shows Home and the register and location", /^Home/.test(barista.header) && /Brewbean Campus/.test(barista.header) && /Counter - Brewbean Campus/.test(barista.header), barista.header);
   const link = (h, n) => h.tiles.find((t) => t.textContent.trim() === n)?.getAttribute("href");
-  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Orders") === "/orders.html" && link(owner, "Reports") === "/reports.html" && link(owner, "Employees") === "/employees.html");
-  check("a manager's Employees tile opens Employees too", link(manager, "Employees") === "/employees.html");
+  check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Orders") === "/orders.html" && link(owner, "Reports") === "/reports.html");
   check("every tile has its icon and the grid is uniform", owner.tiles.every((t) => t.querySelector("img")?.getAttribute("src")?.startsWith("/img/home/")));
 
   const signOut = owner.tiles.find((t) => t.textContent.trim() === "Sign out");

@@ -46,28 +46,29 @@ VALUES
 -- ---------------------------------------------------------------------------
 -- Staff, pay, shifts
 -- ---------------------------------------------------------------------------
--- The default roles from the blueprint's access levels screen; the owner holds every permission
-INSERT INTO Role (RoleID, BusinessID, Name, OpensTo, IsOwner)
+-- The default roles from the blueprint's access levels screen; the general manager holds every permission
+INSERT INTO Role (RoleID, BusinessID, Name, OpensTo)
 VALUES
-    ('role-owner',   @biz, 'Owner',             'REGISTER', TRUE),
-    ('role-manager', @biz, 'Manager',           'REGISTER', FALSE),
-    ('role-asst',    @biz, 'Assistant manager', 'REGISTER', FALSE),
-    ('role-server',  @biz, 'Server',            'REGISTER', FALSE),
-    ('role-barista', @biz, 'Chef / barista',    'KITCHEN',  FALSE);
+    ('role-gm',      @biz, 'General manager',   'REGISTER'),
+    ('role-manager', @biz, 'Manager',           'REGISTER'),
+    ('role-asst',    @biz, 'Assistant manager', 'REGISTER'),
+    ('role-server',  @biz, 'Server',            'REGISTER'),
+    ('role-barista', @biz, 'Chef / barista',    'KITCHEN');
 
--- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards), 19 (manage staff)
--- and 20 (reports): only owners and managers see Reports and Employees
+-- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards)
+-- and 20 (reports): only the general manager and managers see Reports
 INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
 SELECT r.RoleID, @biz, p.PermissionCode
   FROM Role r JOIN Permission p
     ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
     OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
+    OR (r.RoleID = 'role-gm'      AND p.PermissionCode BETWEEN 1 AND 20)
     OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
-    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20));
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
 
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES
-    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-owner'),
+    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-gm'),
     ('emp-leo',    @biz, 'Leo',    'Brandt', 'leo@brewbean.example.com',    '10420002', 'role-manager'),
     ('emp-sam',    @biz, 'Sam',    'Rivera', 'sam@brewbean.example.com',    '10420003', 'role-server'),
     ('emp-priya',  @biz, 'Priya',  'Shah',   'priya@brewbean.example.com',  '10420004', 'role-server'),
@@ -83,13 +84,13 @@ VALUES
     ('emp-jordan', 'loc-campus', @biz),
     ('emp-ana', 'loc-campus', @biz);
 
--- Sam got a raise when the current pay period started
+-- Priya got a raise when the current pay period started
 INSERT INTO EmployeePayRate (PayRateID, EmployeeID, BusinessID, HourlyRate, EffectiveFrom, EffectiveTo)
 VALUES
     ('rate-leo',    'emp-leo',    @biz, 24.00, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
-    ('rate-sam-1',  'emp-sam',    @biz, 16.50, TIMESTAMP(@D - INTERVAL 180 DAY), TIMESTAMP(@D - INTERVAL 13 DAY)),
-    ('rate-sam-2',  'emp-sam',    @biz, 17.25, TIMESTAMP(@D - INTERVAL 13 DAY), NULL),
-    ('rate-priya',  'emp-priya',  @biz, 16.75, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
+    ('rate-sam',    'emp-sam',    @biz, 16.75, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
+    ('rate-priya-1','emp-priya',  @biz, 16.50, TIMESTAMP(@D - INTERVAL 180 DAY), TIMESTAMP(@D - INTERVAL 13 DAY)),
+    ('rate-priya-2','emp-priya',  @biz, 17.25, TIMESTAMP(@D - INTERVAL 13 DAY), NULL),
     ('rate-ana',    'emp-ana',    @biz, 19.50, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
     ('rate-jordan', 'emp-jordan', @biz, 16.00, TIMESTAMP(@D - INTERVAL 90 DAY), NULL);
 
@@ -116,7 +117,7 @@ VALUES
     ('emp-priya',  'loc-campus',   '07:00', 510, 4),
     ('emp-jordan', 'loc-campus',   '11:00', 450, 1);
 
--- Last pay period: approved. This one: submitted. The manager approves staff; the owner approves the manager.
+-- Last pay period: approved. This one: submitted. The manager approves staff; the general manager approves the manager.
 INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID,
                        ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode, ApprovedByEmployeeID)
 SELECT CONCAT('te-', SUBSTRING(e.EmployeeID, 5), '-', LPAD(d.n, 2, '0')),

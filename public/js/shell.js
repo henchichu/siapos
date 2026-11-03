@@ -3,8 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 // Menu items and Home tiles with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html", Rewards: "/rewards.html" };
-PAGES.Settings = "/settings.html";
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -41,7 +40,7 @@ const ICONS = {
 };
 const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
 const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Needs attention": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
-  Reports: "chart", Employees: "people", Settings: "sliders", "My shift": "clock" };
+  Reports: "chart", "My shift": "clock" };
 
 // The small icon in a summary card's corner, picked from its label
 const CARD_ICONS = [[/hour|today|week|period/i, "clock"], [/%|tax|discount/i, "percent"], [/refund|lost|loss|differ/i, "alert"],
@@ -67,23 +66,6 @@ async function signOut() {
   window.location.replace("/login.html"); // the menu's collapsed or open choice outlives the sign-out
 }
 
-// The overlay menu: an owner picks another of their locations and the whole page follows it
-function PickLocation({ onClose, onPicked }) {
-  const [data, setData] = useState(null);
-  const [msg, setMsg] = useState(null);
-  useEffect(() => { api("/locations").then(setData).catch((e) => setMsg({ kind: "error", text: e.message })); }, []);
-  const pick = async (l) => {
-    if (l.id === data.current) return onClose();
-    try { await api("/locations/switch", { locationId: l.id }); onPicked(); } catch (e) { setMsg({ kind: "error", text: e.message }); }
-  };
-  return html`<${Modal} title="Switch location" onClose=${onClose}>
-    <ul className="places">${(data?.locations || []).map((l) => html`<li key=${l.id}>
-      <button className=${`btn block ${l.id === data.current ? "primary" : ""}`} aria-current=${l.id === data.current ? "true" : undefined} onClick=${() => pick(l)}>${l.name}</button></li>`)}</ul>
-    <${Message} msg=${msg} dashed />
-    <div className="btns"><button className="btn" onClick=${onClose}>Cancel</button></div>
-  <//>`;
-}
-
 // Three layouts, from the same breakpoints as the pages' own stylesheets: on a phone or a window taller than it is wide the menu is
 // a drawer opened from a slim top bar; on a tablet it is icons only; on a laptop it is open, and folds to icons with its button.
 // The fold choice is kept in this browser and outlives sign-out. Classes go on <body>, outside React, and nav.css does the rest.
@@ -103,7 +85,6 @@ function Mark() {
 }
 
 function Sidebar({ me, current, onSignOut = signOut }) {
-  const [places, setPlaces] = useState(false);
   const [mode, setMode] = useState(navMode);
   const [collapsed, setCollapsed] = useState(savedCollapsed);
   const [open, setOpen] = useState(false); // the phone drawer
@@ -182,14 +163,11 @@ function Sidebar({ me, current, onSignOut = signOut }) {
         <div className="who">
           <span className="avatar" aria-hidden="true">${initials(me?.employeeName)}</span>
           <span className="name">${me?.employeeName}</span>
-          ${me?.canSwitch
-            ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
-            : html`<span>${me?.roleName} · ${me?.locationName}</span>`}
+          <span>${me?.roleName} · ${me?.locationName}</span>
           <button className="link signout" onClick=${onSignOut} ...${tipFor("Sign out")}><${Icon} name="signout" /><span className="label">Sign out</span></button>
         </div>
       </div>
       ${tip && html`<div className="navtip" aria-hidden="true" style=${{ left: tip.x, top: tip.y }}>${tip.text}</div>`}
-      ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
     </nav>
   <//>`;
 }

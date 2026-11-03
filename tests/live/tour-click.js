@@ -1,11 +1,10 @@
-// The front page (public/tour.html): "/" sends people on once the business exists; the tour kit's spotlight, focus trap and keys work;
-// the page walks the real staff pages (shown on sample data at /tour/<page>.html) and ends at /signup.html; and every step's target
+// The demo front page (public/tour.html): "/" goes to sign-in unless DEMO_MODE=1; the tour kit's spotlight, focus trap and keys work;
+// the page walks the real staff pages (shown on sample data at /tour/<page>.html) and ends at the demo sign-ins; and every step's target
 // is really on its page.
 const fs = require("fs");
 const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
 const { start } = require("./env");
-const setup = require("../../server/setup");
 
 const root = path.resolve(__dirname, "../..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
@@ -16,19 +15,19 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
 
 (async () => {
   const { server, base } = await start();
-  const realClosed = setup.signupClosed;
   try {
     const here = (p) => fetch(base + p, { redirect: "manual" });
-    setup.signupClosed = async () => true; // whatever the database holds
     let r = await here("/");
-    check("closed (a business exists): / goes to sign-in", r.status === 302 && r.headers.get("location") === "/login.html", `${r.status} ${r.headers.get("location")}`);
+    check("not a demo: / goes to sign-in", r.status === 302 && r.headers.get("location") === "/login.html", `${r.status} ${r.headers.get("location")}`);
     r = await here("/tour/register.html");
-    check("closed: the sample pages are gone", r.status === 404, r.status);
-    setup.signupClosed = async () => false;
+    check("not a demo: the sample pages are gone", r.status === 404, r.status);
+    check("not a demo: no demo sign-ins are given out", (await here("/api/demo")).status === 404);
+    process.env.DEMO_MODE = "1";
     r = await here("/");
-    check("open: / serves the front page", r.status === 200 && /id="root"/.test(await r.text()));
+    check("demo: / serves the front page", r.status === 200 && /id="root"/.test(await r.text()));
     r = await here("/tour/register.html");
-    check("open: a sample page is served, an unlisted one is not", r.status === 200 && (await here("/tour/login.html")).status === 404);
+    check("demo: a sample page is served, an unlisted one is not", r.status === 200 && (await here("/tour/login.html")).status === 404);
+    check("demo: the settings and employees sample pages are gone", (await here("/tour/settings.html")).status === 404 && (await here("/tour/employees.html")).status === 404);
 
     // ---- the kit, on a plain page ----
     {
@@ -39,7 +38,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       react(w);
       w.errors = []; w.console.error = (...a) => w.errors.push(a.join(" ").slice(0, 300));
       w.eval(read("public/js/tour-kit.js") + `
-        const steps = [{ title: "One", body: "intro" }, { target: "#a", title: "Two", body: "a" }, { target: "#late", title: "Three", body: "late" }, { title: "Last", body: "end", cta: { label: "Go", href: "/signup.html" } }];
+        const steps = [{ title: "One", body: "intro" }, { target: "#a", title: "Two", body: "a" }, { target: "#late", title: "Three", body: "late" }, { title: "Last", body: "end", cta: { label: "Go", href: "/login.html" } }];
         const Page = () => { const t = useTour(); return html\`<button id="again" onClick=\${t.start}>again</button>\`; };
         ReactDOM.createRoot(document.getElementById("root")).render(html\`<\${TourProvider} steps=\${steps}><\${Page} /><//>\`);`);
       await sleep(300);
@@ -65,7 +64,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       await sleep(500);
       check("kit: ...and then the spotlight finds it", $(".tour-spot:not(.none)") !== null);
       await click(button("Next"));
-      check("kit: the last step carries the call to action", title() === "Last" && $(".tour-card a.primary")?.getAttribute("href") === "/signup.html" && !button("Skip tour"));
+      check("kit: the last step carries the call to action", title() === "Last" && $(".tour-card a.primary")?.getAttribute("href") === "/login.html" && !button("Skip tour"));
       key("Escape"); await sleep(100);
       check("kit: Escape closes it and gives the page back", !$(".tour-layer") && $("#root").inert === false && w.document.documentElement.style.overflow === "");
       await click($("#again"));
@@ -88,25 +87,18 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
     const next = async () => { [...w.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === "Next").click(); await sleep(200); };
     check("page: starts on the Home screen with the welcome step", $("#screen")?.getAttribute("src") === "/tour/home.html" && $("#tour-title").textContent === "Welcome to ClockIt");
     check("page: the sample screen can't be used", $("#screen").hasAttribute("inert"));
-    const nav = () => navigations;
-    [...w.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === "Skip tour").click(); await sleep(100);
-    check("page: Skip tour goes straight to sign-up", nav() === 1, w.errors.join(" | "));
     const visited = [];
     while ([...w.document.querySelectorAll(".tour-card button")].some((b) => b.textContent === "Next")) { await next(); visited.push($("#screen").getAttribute("src")); }
     const order = [...new Set(visited)].map((s) => s.replace("/tour/", "").replace(".html", ""));
-    check("page: it visits every screen once, in the menu's order", order.join(",") === "register,kitchen,attention,orders,rewards,products,inventory,reports,employees,settings,shift,home", order.join(","));
-    check("page: the last step leads to sign-up", $("#tour-title").textContent === "Ready to set up your shop?" && $(".tour-card a.primary")?.getAttribute("href") === "/signup.html");
-    w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(100);
-    check("page: Escape goes straight to sign-up", nav() === 2, w.errors.join(" | "));
+    check("page: it visits every screen once, in the menu's order", order.join(",") === "register,kitchen,attention,orders,rewards,products,inventory,reports,shift,home", order.join(","));
+    check("page: the last step offers the demo sign-ins", $("#tour-title").textContent === "Ready to try it?" && [...w.document.querySelectorAll(".tour-card button")].some((b) => b.textContent === "Show demo sign-ins"));
     check("page: no React warnings", w.errors.length === 0, w.errors.join(" | "));
 
-    // ---- DEMO_MODE ----
-    check("demo off: no demo sign-ins are given out", (await here("/api/demo")).status === 404);
-    process.env.DEMO_MODE = "1";
-    try {
-      setup.signupClosed = async () => true; // the demo shop exists
+    // ---- the demo sign-ins ----
+    {
+      try {
       r = await here("/");
-      check("demo: / shows the tour even though a business exists", r.status === 200 && /id="root"/.test(await r.text()));
+      check("demo: / shows the tour", r.status === 200 && /id="root"/.test(await r.text()));
       check("demo: the sample pages are served", (await here("/tour/kitchen.html")).status === 200);
       const given = await (await here("/api/demo")).json();
       check("demo: the six dev employees, with number and PIN", given.credentials.length === 6 && given.credentials[0].number === "10420001" && given.credentials[0].pin === "111111"
@@ -128,7 +120,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       const shown = (d) => ({ rows: [...d.document.querySelectorAll(".logintable tbody tr")].map((tr) => tr.textContent), keep: d.document.querySelector(".keep"), go: d.document.querySelector("a.tour-btn.primary") });
       const checkLogins = (name, d) => {
         const x = shown(d);
-        check(`demo: ${name} shows the sign-ins with a keep-this warning and a way on`, x.rows.length === 6 && /Maya.*Owner.*10420001.*111111/.test(x.rows[0]) && /Ana.*Assistant Manager.*10420006.*666666/.test(x.rows[5])
+        check(`demo: ${name} shows the sign-ins with a keep-this warning and a way on`, x.rows.length === 6 && /Maya.*General manager.*10420001.*111111/.test(x.rows[0]) && /Ana.*Assistant Manager.*10420006.*666666/.test(x.rows[5])
           && /picture.*write it down/.test(x.keep?.textContent) && x.keep.getAttribute("role") === "alert" && x.go?.getAttribute("href") === "/login.html" && navigations === before, JSON.stringify(x.rows));
       };
       checkLogins("Skip tour", await open(async (d) => { [...d.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === "Skip tour").click(); await sleep(150); }));
@@ -138,7 +130,8 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
         for (let i = 0; i < d.STEPS.length - 1; i++) await click("Next");
         await click("Show demo sign-ins"); await sleep(100);
       }));
-    } finally { delete process.env.DEMO_MODE; setup.signupClosed = async () => false; }
+    } finally { }
+    }
 
     // ---- every step's target is on its page, which runs on sample data ----
     const steps = w.STEPS.filter((s) => s.target);
@@ -157,7 +150,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       p.close();
     }
     check("every step's target is on its sample page, with no gaps in the sample data", missing.length === 0, missing.join(" | "));
-  } finally { setup.signupClosed = realClosed; server.close(); }
+  } finally { delete process.env.DEMO_MODE; server.close(); }
   console.log(fails ? `${fails} FAILED` : "ALL PASSED");
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

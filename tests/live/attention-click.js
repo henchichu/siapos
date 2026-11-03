@@ -42,7 +42,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
 
   check("heading and where and when", /Needs attention/.test($(".heading").textContent) && /Brewbean Campus · today/.test($(".heading").textContent));
   check("four panels, as in the wireframe", $$("section.panel h3").map((h) => h.textContent).join("|") === "Stock losses reported today|Pending deliveries|Timecards waiting for approval|Refunds waiting for an override");
-  check("menu: Needs attention is current, with all ten links for a manager", byText(".nav a.link", "Needs attention")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 10);
+  check("menu: Needs attention is current, with all nine links for a manager", byText(".nav a.link", "Needs attention")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 9);
   check("Open inventory and Receive delivery go to the correct inventory tabs", panel("Stock losses reported today").querySelector("a").getAttribute("href") === "/inventory.html" && panel("Pending deliveries").querySelector("a").getAttribute("href") === "/inventory.html#delivery");
   const review = panel("Timecards waiting for approval").querySelector("a");
   check("Review timecards opens the team page at the waiting card's pay period", count("Timecards waiting for approval") === 0 || /^\/shift\.html\?payPeriodId=.+#team$/.test(review.getAttribute("href")), review.getAttribute("href"));
@@ -72,22 +72,6 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   check("the panel's count went down by two", count("Refunds waiting for an override") === startCount - 2 && !refundRows().some((t) => asked.some((n) => t.includes(String(n)))));
   check("a manager's location is plain text, not a menu", !$(".nav .where") && /Brewbean Campus/.test($(".nav .who").textContent));
 
-  // the owner's page: the location opens a menu of their locations
-  const owner = await call("10420001", "111111");
-  const ow = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/attention.html", pretendToBeVisual: true }).window;
-  ow.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-  ow.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie: owner.cookie() } });
-  ow.eval(lib("react/umd/react.development.js")); ow.eval(lib("react-dom/umd/react-dom.development.js")); ow.eval(lib("htm/dist/htm.umd.js"));
-  ow.eval(app);
-  await sleep(1000);
-  const where = ow.document.querySelector(".nav .where");
-  check("the owner's location in the sidebar is a button", !!where && /Brewbean Campus/.test(where.textContent) && !ow.document.querySelector(".heading .where"));
-  where.click(); await sleep(600);
-  const places = [...ow.document.querySelectorAll("dialog .places button")];
-  check("clicking it opens a menu of their locations, current one marked", places.map((b) => b.textContent).join("|") === "Brewbean Campus|Brewbean Downtown" && places[0].getAttribute("aria-current") === "true");
-  places[1].click(); await sleep(600);
-  check("picking another location switches the session", (await owner.call("/session")).body.locationName === "Brewbean Downtown");
-  await owner.call("/locations/switch", { locationId: "loc-campus" });
   check("page: no React warnings", errors.filter((e) => !/Not implemented/.test(e)).length === 0, errors.join(" | "));
 
   server.close(); await pool.end();

@@ -1,5 +1,5 @@
 // The front page: the real staff pages, run on sample data (api.js demo mode) in an iframe, and the tour of them (tour-kit.js).
-// The last step, Skip tour and Escape all lead to sign-up; with DEMO_MODE (server/demo.js) they show the demo sign-ins instead. Targets are CSS selectors inside the page shown for that step.
+// The last step, Skip tour and Escape show the demo sign-ins (server/demo.js; the tour is only served with DEMO_MODE). Targets are CSS selectors inside the page shown for that step.
 const T = (page, target, title, body, placement) => ({ page, target, title, body, placement });
 const STEPS = [
   { page: "home", title: "Welcome to ClockIt", body: "A quick walk through every screen your team will use, filled with sample data. Nothing here is saved, and at the end you set up your own business." },
@@ -15,15 +15,11 @@ const STEPS = [
   T("products", "section.pview header", "Products: find and add", "Filter by category or search, switch products on and off, and add new ones without touching anyone's register.", "bottom"),
   T("inventory", "div.tabs", "Inventory: stock, suppliers and counts", "Track what is on hand at each location, record deliveries and counts, and set the reorder level that feeds Needs attention.", "bottom"),
   T("inventory", 'section[aria-label="Inventory"]', "Inventory: every stock item", "Quantities, units and reorder levels, with a log of every movement below.", "top"),
-  T("reports", 'div.tabs[aria-label="Reports"]', "Reports: pick a view", "Live sales, sales by day, top sellers, labor cost, stock losses and more, for one location or all of them.", "bottom"),
+  T("reports", 'div.tabs[aria-label="Reports"]', "Reports: pick a view", "Live sales, sales by day, top sellers, labor cost, stock losses and more, for your location.", "bottom"),
   T("reports", ".rcards", "Reports: the numbers at a glance", "Summary cards on top, then a chart and a table underneath. Run it again for any location or date range.", "bottom"),
-  T("employees", "section.pview", "Employees: your team", "Add people, give each a role and a location, and turn access off the day someone leaves. Everyone signs in with their own number and PIN.", "bottom"),
-  T("settings", 'div.tabs[aria-label="Settings"]', "Settings: roles, tax and more", "Roles and permissions, tax rates, refund rules, categories and locations: how your business runs.", "bottom"),
-  T("settings", "form.sform", "Settings: your business", "Business details and refund rules are set once and apply everywhere.", "right"),
   T("shift", 'div.tabs[aria-label="View"]', "My shift: timecards", "Staff clock in and out here. Managers review the whole team's timecards and edit mistakes.", "bottom"),
   T("shift", "section.closing", "My shift: close the pay period", "Approve the hours, then close the pay period so payroll is final.", "top"),
-  { page: "home", title: "Ready to set up your shop?", body: "Tell us your business name, add your first location and registers, and create the owner account. It takes about two minutes. You'll be given an employee number to keep: you sign in with it.",
-    cta: { label: "Set up your business", href: "/signup.html" } },
+  { page: "home", title: "Ready to try it?", body: "The demo shop is already set up. You'll get a list of demo sign-ins to keep: you sign in with one of them." },
 ];
 
 // The sample page behind a step: its own, or the last one a step named
@@ -36,9 +32,6 @@ function Screen() {
     <header className="tbar">
       <a className="logo" href="/"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="120" height="30" /></a>
       <span className="sample">Sample data: nothing here is saved</span>
-      <div className="tbar-cta">
-        <a className="tour-btn primary" href="/signup.html">Set up your business</a>
-      </div>
     </header>
     <iframe id="screen" title=${`Sample ClockIt screen: ${page}`} src=${`/tour/${page}.html`} inert=""></iframe>
   </div>`;
@@ -72,11 +65,10 @@ function App() {
   useEffect(() => {
     fetch("/api/demo").then((r) => (r.ok ? r.json() : null)).then((d) => setCredentials(d?.credentials || null)).catch(() => setCredentials(null));
   }, []);
-  const steps = useMemo(() => !credentials ? STEPS : [...STEPS.slice(0, -1), { ...STEPS[STEPS.length - 1], title: "Ready to try it?",
-    body: "The demo shop is already set up. You'll get a list of demo sign-ins to keep: you sign in with one of them.", cta: { label: "Show demo sign-ins", onClick: () => setLogins(true) } }], [credentials]);
+  const steps = useMemo(() => [...STEPS.slice(0, -1), { ...STEPS[STEPS.length - 1], cta: { label: "Show demo sign-ins", onClick: () => setLogins(true) } }], []);
   if (credentials === undefined) return null;
   if (logins) return html`<${DemoLogins} credentials=${credentials} />`;
-  return html`<${TourProvider} steps=${steps} getRoot=${getRoot} onClose=${() => (credentials ? setLogins(true) : window.location.assign("/signup.html"))}><${Screen} /><//>`;
+  return html`<${TourProvider} steps=${steps} getRoot=${getRoot} onClose=${() => (credentials ? setLogins(true) : window.location.assign("/login.html"))}><${Screen} /><//>`;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

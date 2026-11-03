@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS Location (
     Address VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
-    AcceptsOnlineOrders BOOLEAN NOT NULL DEFAULT FALSE,   -- owner switches it on in Settings
+    AcceptsOnlineOrders BOOLEAN NOT NULL DEFAULT FALSE,   -- switched on by hand in SQL
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -112,13 +112,12 @@ CREATE TABLE IF NOT EXISTS Permission (
     PRIMARY KEY (PermissionCode)
 ) ENGINE=InnoDB;
 
--- Each business defines its own roles; the owner role holds every permission implicitly
+-- Each business defines its own roles; RolePermission says what each may do
 CREATE TABLE IF NOT EXISTS Role (
     RoleID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(50) NOT NULL,
     OpensTo VARCHAR(30) NOT NULL,              -- page shown after sign-in; the backend validates it
-    IsOwner BOOLEAN NOT NULL DEFAULT FALSE,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     PRIMARY KEY (RoleID),
@@ -128,9 +127,6 @@ CREATE TABLE IF NOT EXISTS Role (
 
     CONSTRAINT UQ_Role_Business_Name
         UNIQUE (BusinessID, Name),
-
-    -- at most one owner role per business
-    UNIQUE INDEX UQ_Role_Owner ((IF(IsOwner, BusinessID, NULL))),
 
     CONSTRAINT FK_Role_Business
         FOREIGN KEY (BusinessID)
@@ -1534,7 +1530,7 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
     CHECK (DiscountAmount > 0)
 ) ENGINE=InnoDB;
 
--- A one-off discount outside any promotion; a manager or owner approves it (04-triggers.sql)
+-- A one-off discount outside any promotion; a manager approves it (04-triggers.sql)
 CREATE TABLE IF NOT EXISTS OrderDiscount (
     OrderDiscountID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,

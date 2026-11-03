@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { start, client, pool, unlock, pickUp, topUp, TEST_CARD } = require("./env");
 
-const DENIED = "Unauthorized. Supervisor or Owner credentials required to override.";
+const DENIED = "Unauthorized. Supervisor credentials required to override.";
 let env, sam;
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
 const croissant = { key: "a", variantId: "var-croissant", quantity: 1 };
@@ -67,14 +67,11 @@ test("wrong override PINs lock the cashier, not the manager", async () => {
   await unlock("emp-priya");
 });
 
-test("a manager can't approve their own discount, an owner can", async () => {
+test("a manager may sign for their own discount, or for someone else's", async () => {
   const discount = { applyTo: "order", type: "percent", value: 10, reason: "Complaint" };
   const ask = async (who, managerNumber, managerPin) => (await signIn(who[0], who[1])).call("/register/discount/authorize", { discount, managerNumber, managerPin, items: [croissant] });
-  const leo = await ask(["10420002", "222222"], "10420002", "222222");
-  assert.equal(leo.status, 403);
-  assert.match(leo.body.error, /Another manager has to approve this/);
-  assert.equal((await ask(["10420001", "111111"], "10420001", "111111")).status, 200, "an owner has no one above them");
-  assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and a manager can sign for someone else");
+  assert.equal((await ask(["10420002", "222222"], "10420002", "222222")).status, 200, "self-approval is allowed");
+  assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and so is signing for someone else");
 });
 
 test("a $0 sale can't carry a tip", async () => {

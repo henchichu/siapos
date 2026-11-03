@@ -11,12 +11,6 @@ function Tabs({ tab, onTab }) {
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;
 }
 
-function LocationSelect({ options, value, onChange }) {
-  return html`<select className="select" aria-label="Location" value=${value} disabled=${!options.canPickAll && options.locations.length < 2} onChange=${(e) => onChange(e.target.value)}>
-    ${options.canPickAll && html`<option value="all">All locations</option>`}
-    ${options.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select>`;
-}
-
 const DateField = ({ label, value, onChange }) => html`<label className="pf"><b>${label}</b>
   <input className="field date" type="date" value=${value} onChange=${(e) => onChange(e.target.value)} /></label>`;
 
@@ -70,16 +64,13 @@ function useReport(path, initial) {
   return { filters, set: (patch) => setFilters({ ...filters, ...patch }), report, msg, busy, run, refresh: useCallback(() => go(applied.current), [go]) };
 }
 
-// From, To and Location, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
+// From and To, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
 function Filters({ r, options, dates = true, first, children }) {
   return html`<${React.Fragment}>
     <form className="pfilters rfilters" onSubmit=${(e) => { e.preventDefault(); r.run(); }}>
       ${first}
       ${dates && html`<${React.Fragment}><${DateField} label="From" value=${r.filters.from} onChange=${(v) => r.set({ from: v })} />
       <${DateField} label="To" value=${r.filters.to} onChange=${(v) => r.set({ to: v })} /><//>`}
-      <${ChangeLocation} show=${options.canPickAll || options.locations.length > 1} popup=${{ options: [...(options.canPickAll ? [["all", "All locations"]] : []), ...options.locations.map((l) => [l.id, l.name])], value: r.filters.location, onChange: (v) => r.set({ location: v }) }}>
-        <label className="pf"><b>Location</b><${LocationSelect} options=${options} value=${r.filters.location} onChange=${(v) => r.set({ location: v })} /></label>
-      <//>
       ${children}
       <button className="pbtn" type="submit" disabled=${r.busy}>Run report</button>
     </form>

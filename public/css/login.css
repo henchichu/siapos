@@ -32,3 +32,6 @@ body::after { width: 620px; height: 620px; right: -320px; bottom: -340px; border
 .error { padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--coral); background: rgba(243, 90, 71, 0.16); color: #FFD6D0; font-size: 14px; font-weight: 600; } /* 9:1 */
 .lockout { display: flex; align-items: center; gap: 8px; padding: 8px 15px 8px 13px; border-radius: 10px; background: var(--coral); color: var(--navy-dark); font-size: 14px; font-weight: 600; } /* 4.7:1 */
 .lock { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.newhere { font-size: 14px; color: #E8D9CC; }
+.newhere a { color: #fff; font-weight: 600; }

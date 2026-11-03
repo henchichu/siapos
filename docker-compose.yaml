@@ -48,7 +48,6 @@ services:
       DB_USER: app_user
       DB_PASSWORD_FILE: /run/secrets/app_user_password
       DB_POOL_SIZE: 15
-      GIFTCARD_SECRET_FILE: /run/secrets/giftcard_secret
       UPLOAD_DIR: /app/uploads
       DEMO_MODE: ${DEMO_MODE:-}                     # 1: the front page always shows the tour, then the demo sign-ins (needs the dev-seeded shop)
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
@@ -58,7 +57,6 @@ services:
       - uploads:/app/uploads
     secrets:
       - app_user_password
-      - giftcard_secret
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -125,7 +123,5 @@ secrets:
     file: ./sql/secrets/root_password.txt
   app_user_password:
     file: ./sql/secrets/app_user_password.txt
-  giftcard_secret:
-    file: ./sql/secrets/giftcard_secret.txt
   kiosk_user_password:
     file: ./sql/secrets/kiosk_user_password.txt

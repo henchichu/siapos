@@ -128,11 +128,6 @@ async function recordRefund(conn, { session, orderId, wanted, reason, managerId 
   if (!order) throw new HttpError(404, "No order found.");
   if (![5, 7].includes(order.OrderStatusCode)) throw new HttpError(409, "Only completed orders can be refunded.");
   if (!(await myLocations(employeeId)).includes(order.LocationID)) throw new HttpError(403, "You don't work at that order's location.");
-  if (pending) {
-    const [[gift]] = await conn.query("SELECT COUNT(*) AS n FROM OrderItem oi JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID WHERE oi.OrderID = ? AND p.IsGiftCard", [order.OrderID]);
-    if (gift.n) throw new HttpError(409, "This order sold a gift card. Refund it with a manager present.");
-  }
-
   const [items] = await conn.query(
     `SELECT oi.OrderItemID, oi.Quantity, v.RestockOnReturn,
             COALESCE((SELECT SUM(ri.QuantityReturned) FROM ReturnItem ri WHERE ri.OrderItemID = oi.OrderItemID), 0) AS Returned

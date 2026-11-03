@@ -3,7 +3,7 @@
 const T = (page, target, title, body, placement) => ({ page, target, title, body, placement });
 const STEPS = [
   { page: "home", title: "Welcome to ClockIt", body: "A quick walk through every screen your team will use, filled with sample data. Nothing here is saved, and at the end you set up your own business." },
-  T("register", ".products .grid", "Register: ring up the order", "Tap a product to add it, choose its size and extras, and filter by category or search by name. Then apply a discount (a supervisor approves it on the spot) and take cash, card or a gift card. The order goes straight to the kitchen.", "bottom"),
+  T("register", ".products .grid", "Register: ring up the order", "Tap a product to add it, choose its size and extras, and filter by category or search by name. Then apply a discount (a supervisor approves it on the spot) and take cash, card or a wallet payment. The order goes straight to the kitchen.", "bottom"),
   T("register", ".products > header", "Register: kiosk orders and refunds", "Cash orders placed on customers' phones wait here for you to take the money. Refund looks up an order and sends the request for approval.", "bottom"),
   T("kitchen", ".queues", "Kitchen: a live board", "New orders appear by themselves. The team moves each ticket from New to Preparing to Ready, and customers see the change on their phone.", "bottom"),
   T("kitchen", "button.kbtn", "Kitchen: report a loss", "Spilled or spoiled something? Record it here so the stock count and reports stay honest.", "left"),

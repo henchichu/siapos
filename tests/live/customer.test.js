@@ -276,7 +276,7 @@ test("the menu is kept for 5 seconds, then shows changes", async () => {
   const real = Date.now, base = real();
   customers.resetCaches();
   const seen = async () => (await phone(pub.base).call("/customer/catalog")).body.products.find((p) => p.id === pid)?.name;
-  const [[{ pid, name }]] = await pool.query("SELECT ProductID AS pid, Name AS name FROM Product WHERE BusinessID = 'biz-brewbean' AND Active AND NOT IsGiftCard ORDER BY Name LIMIT 1");
+  const [[{ pid, name }]] = await pool.query("SELECT ProductID AS pid, Name AS name FROM Product WHERE BusinessID = 'biz-brewbean' AND Active ORDER BY Name LIMIT 1");
   try {
     assert.equal(await seen(), name);
     await pool.query("UPDATE Product SET Name = ? WHERE ProductID = ?", [`${name} X`, pid]);

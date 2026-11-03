@@ -19,8 +19,6 @@ const TIPPED = [2, 3, 5]; // authorized, completed, refunded payments: not pendi
 // The stock losses staff report, under the names Needs attention uses. Count corrections and adjustments aren't losses.
 const REASONS = { broken: 5, spoiled: 6, stolen: 7 }; // the same keys the Inventory page sends
 const MAX_DAYS = 366;
-// A gift card sold is money held for later, not a sale; what the card is spent on is the sale
-const NOT_GIFT_CARD = "NOT EXISTS (SELECT 1 FROM ProductVariant v JOIN Product p ON p.ProductID = v.ProductID WHERE v.VariantID = oi.VariantID AND p.IsGiftCard)";
 
 const router = express.Router();
 router.use("/reports", requirePermission(PERM_REPORTS));
@@ -111,18 +109,16 @@ async function salesByDay(businessId, chosen, from, to) {
             COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
             SUM(oi.DiscountAmount) AS discounts, SUM(oi.TaxAmount) AS tax
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?) AND ${NOT_GIFT_CARD}
+      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
       GROUP BY loc, day HAVING day BETWEEN ? AND ?`,
     [businessId, ids, PAID, ...near, from, to]
   );
-  // Refunds of a gift card sale are left out with the sale itself
   const [refunds] = await pool.query(
     `SELECT o.LocationID AS loc, DATE_FORMAT(CONVERT_TZ(r.RefundDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') AS day,
             SUM(r.Amount - r.TaxAmount) AS refunds, SUM(r.TaxAmount) AS tax
        FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID JOIN Location l ON l.LocationID = o.LocationID
       WHERE r.BusinessID = ? AND o.LocationID IN (?) AND r.RefundStatusCode = ?
-        AND EXISTS (SELECT 1 FROM OrderItem oi WHERE oi.OrderID = o.OrderID AND ${NOT_GIFT_CARD})
         AND r.RefundDateTime >= ? AND r.RefundDateTime < ?
       GROUP BY loc, day HAVING day BETWEEN ? AND ?`,
     [businessId, ids, REFUND_DONE, ...near, from, to]
@@ -179,7 +175,7 @@ router.get("/reports/top-sellers", async (req, res) => {
     `SELECT p.ProductID AS id, p.Name AS product, c.Name AS category, SUM(oi.Quantity) AS units,
             SUM(oi.NetAmount) AS revenue, SUM(oi.LineCost) AS cost
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-       JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID AND NOT p.IsGiftCard
+       JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID
        LEFT JOIN Category c ON c.CategoryID = p.CategoryID
       WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
@@ -346,7 +342,7 @@ router.get("/reports/live", async (req, res) => {
     `SELECT ${bucket("o.OrderDateTime")} AS k, COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
             SUM(oi.DiscountAmount) AS discounts, SUM(oi.LineCost) AS cost
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?) AND ${NOT_GIFT_CARD}
+      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
         AND DATE_FORMAT(${local("o.OrderDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
       GROUP BY k`,
@@ -356,7 +352,6 @@ router.get("/reports/live", async (req, res) => {
     `SELECT ${bucket("r.RefundDateTime")} AS k, SUM(r.Amount - r.TaxAmount) AS refunds
        FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID JOIN Location l ON l.LocationID = o.LocationID
       WHERE r.BusinessID = ? AND o.LocationID IN (?) AND r.RefundStatusCode = ?
-        AND EXISTS (SELECT 1 FROM OrderItem oi WHERE oi.OrderID = o.OrderID AND ${NOT_GIFT_CARD})
         AND r.RefundDateTime >= ? AND r.RefundDateTime < ?
         AND DATE_FORMAT(${local("r.RefundDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
       GROUP BY k`,

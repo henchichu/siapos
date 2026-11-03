@@ -77,13 +77,6 @@ test("a manager can't approve their own discount, an owner can", async () => {
   assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and a manager can sign for someone else");
 });
 
-test("five wrong gift card codes stop further guesses", async () => {
-  const jordanLike = await signIn("10420001", "111111");
-  const pay = (code) => jordanLike.call("/register/orders", { items: [croissant], payment: { method: "gift", giftCardCode: code } });
-  for (let i = 0; i < 5; i++) assert.equal((await pay("wrong-code-" + i)).status, 400);
-  assert.equal((await pay("wrong-code-5")).status, 429);
-});
-
 test("a $0 sale can't carry a tip", async () => {
   const discount = { applyTo: "order", type: "percent", value: 100, reason: "Complaint" };
   const auth = await sam.call("/register/discount/authorize", { discount, managerNumber: "10420002", managerPin: "222222", items: [croissant] });
@@ -108,7 +101,7 @@ test("pressing Complete sale again after a lost reply gives the first receipt, n
 });
 
 test("a sale that failed can be tried again with the same id", async () => {
-  const sale = { saleId: `f-${Date.now()}`, items: [croissant], payment: { method: "gift", giftCardCode: "no-such-card" } };
+  const sale = { saleId: `f-${Date.now()}`, items: [croissant], payment: { method: "card", card: { ...TEST_CARD, number: "4242 4242 4242 4241" } } };
   assert.equal((await sam.call("/register/orders", sale)).status, 400);
   assert.equal((await sam.call("/register/orders", sale)).status, 400, "answered again, not remembered as a receipt");
   const paid = await sam.call("/register/orders", { ...sale, payment: { method: "cash" } });

@@ -103,7 +103,7 @@ router.get("/customer/products/:id/photo", async (req, res) => {
   // an <img> can't send the café header: any product on sale at an active business, which is what its menu shows anyway
   const [[p]] = await pool.query(
     `SELECT p.ImageKey FROM Product p JOIN Business b ON b.BusinessID = p.BusinessID AND b.Active
-      WHERE p.ProductID = ? AND p.Active AND NOT p.IsGiftCard AND p.ImageKey IS NOT NULL`, [String(req.params.id)]);
+      WHERE p.ProductID = ? AND p.Active AND p.ImageKey IS NOT NULL`, [String(req.params.id)]);
   if (!p) throw new HttpError(404, "No photo.");
   // kept by the phone for 5 minutes, so a menu of pictures is fetched once; a replaced picture shows within that time
   res.sendFile(path.resolve(UPLOAD_DIR, p.ImageKey), { maxAge: "5m" }, (err) => { if (err && !res.headersSent) res.status(404).json({ error: "No photo." }); });
@@ -117,7 +117,7 @@ const catalogOf = memo(5 * 1000, async (key) => {
   const [rows] = await pool.query(
     `SELECT p.ProductID AS id, p.Name AS name, p.Description AS description, p.ImageKey AS imageKey, c.Name AS category
        FROM Product p LEFT JOIN Category c ON c.CategoryID = p.CategoryID AND c.Active
-      WHERE p.BusinessID = ? AND p.Active AND NOT p.IsGiftCard ORDER BY p.Name`,
+      WHERE p.BusinessID = ? AND p.Active ORDER BY p.Name`,
     [k.BusinessID]);
   const [variants] = await pool.query(
     `SELECT v.VariantID AS id, v.ProductID AS productId, v.Name AS name, v.Price AS price,
@@ -125,7 +125,7 @@ const catalogOf = memo(5 * 1000, async (key) => {
             AND NOT EXISTS (SELECT 1 FROM VariantRecipe vr LEFT JOIN Inventory i ON i.StockItemID = vr.StockItemID AND i.LocationID = ?
                              WHERE vr.VariantID = v.VariantID AND COALESCE(i.Quantity, 0) < vr.QuantityPerUnit) AS available
        FROM ProductVariant v JOIN Product p ON p.ProductID = v.ProductID
-      WHERE v.BusinessID = ? AND v.Active AND p.Active AND NOT p.IsGiftCard ORDER BY v.Price`,
+      WHERE v.BusinessID = ? AND v.Active AND p.Active ORDER BY v.Price`,
     [k.LocationID, k.BusinessID]);
   const [groups] = await pool.query(
     `SELECT pmg.ProductID AS productId, g.ModifierGroupID AS id, g.Name AS name, g.MinSelect AS min, g.MaxSelect AS max,

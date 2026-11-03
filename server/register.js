@@ -4,17 +4,16 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { notify } = require("./watchers");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
-const { codeHash } = require("./giftcard");
 const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
 const kioskOrders = require("./kioskorders");
 const check = require("./validate");
 const { verifyOverride, findStaff, staffRules } = require("./override");
-const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk } = require("./session");
+const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval } = require("./session");
 
 const PERM_USE_REGISTER = 1;
 const PERM_APPROVE_DISCOUNTS = 4;
-const METHODS = { cash: 1, card: 2, gift: 3, apple: 5, google: 6 };
+const METHODS = { cash: 1, card: 2, apple: 5, google: 6 };
 const PROCESSED = { 2: "card", 5: "apple", 6: "google" }; // paid through the (mock) processor, and may carry a tip
 
 const router = express.Router();
@@ -31,7 +30,7 @@ router.get("/register/catalog", async (req, res) => {
        FROM Product p
        LEFT JOIN Category c ON c.CategoryID = p.CategoryID AND c.Active
        JOIN ProductVariant v ON v.ProductID = p.ProductID AND v.Active
-      WHERE p.BusinessID = ? AND p.Active AND NOT p.IsGiftCard
+      WHERE p.BusinessID = ? AND p.Active
       ORDER BY p.Name, v.Price`,
     [locationId, businessId]
   );
@@ -182,19 +181,6 @@ async function completeSale(req) {
       }
       const tipCents = PROCESSED[methodCode] ? check.tipCents(payment.tip) : 0;
       if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
-      let giftCardId = null;
-      if (methodCode === 3) {
-        const code = check.giftCode(payment.giftCardCode); // a mistyped format isn't a guess, so it doesn't count against the limit
-        if (!giftAllowed(req.session)) throw new HttpError(429, "Too many wrong gift card codes. Try again in a few minutes.");
-        const [[g]] = await conn.query("SELECT GiftCardID FROM GiftCard WHERE BusinessID = ? AND CodeHash = ? AND Active",
-          [businessId, codeHash(code)]);
-        if (!g) {
-          giftFailed(req.session);
-          throw new HttpError(400, "Gift card not found.");
-        }
-        giftCardId = g.GiftCardID;
-        giftOk(req.session);
-      }
 
       const orderId = crypto.randomUUID();
       await conn.query(
@@ -223,9 +209,9 @@ async function completeSale(req) {
         [dollars(priced.subtotalCents), dollars(priced.promotionCents + priced.discountCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
       if (priced.totalCents > 0)
         await conn.query(
-          `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode, GiftCardID)
-           VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3, ?)`,
-          [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents), giftCardId]
+          `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode)
+           VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3)`,
+          [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents)]
         );
       // Paid and confirmed: the kitchen makes it, and it is completed when handed over (server/kitchen.js)
       await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);

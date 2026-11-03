@@ -28,6 +28,10 @@ function client(base, headers = {}) {
   return { call, cookie };
 }
 
+// Sign-in is email + password. The dev shop's six people by employee number (the number and PIN still sign off approvals).
+const DEV_LOGINS = { "10420001": "maya", "10420002": "leo", "10420003": "sam", "10420004": "priya", "10420005": "jordan", "10420006": "ana" };
+const creds = (number) => { const n = DEV_LOGINS[number]; if (!n) throw new Error(`no dev login for ${number}`); return { email: `${n}@brewbean.example.com`, password: `${n}-dev-pass` }; };
+
 // A wrong-PIN test must not leave an account locked for the next run
 const unlock = (employeeId) => pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
 
@@ -87,4 +91,4 @@ async function removeBusiness(id) {
   for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
 }
 
-module.exports = { start, startKiosk, client, phone, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };
+module.exports = { start, startKiosk, client, phone, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

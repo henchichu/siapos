@@ -49,11 +49,11 @@ function DemoLogins({ credentials }) {
   useEffect(() => title.current?.focus(), []);
   return html`<main className="logins">
     <h1 ref=${title} tabIndex="-1">Your demo sign-ins</h1>
-    <p className="keep" role="alert"><b>Take a picture of this list or write it down now.</b> You sign in with an employee number and its 6-digit PIN on the next page, and nothing there will remind you.</p>
+    <p className="keep" role="alert"><b>Take a picture of this list or write it down now.</b> You sign in with an email and password on the next page, and nothing there will remind you. The employee number and 6-digit PIN are what a manager types to approve a discount or refund.</p>
     <table className="logintable">
       <caption className="sr">Demo employees</caption>
-      <thead><tr><th>Name</th><th>Role</th><th>Employee number</th><th>PIN</th></tr></thead>
-      <tbody>${credentials.map((c) => html`<tr key=${c.number}><td>${c.name}</td><td>${c.role}</td><td className="mono">${c.number}</td><td className="mono">${c.pin}</td></tr>`)}</tbody>
+      <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Password</th><th>Approval number</th><th>Approval PIN</th></tr></thead>
+      <tbody>${credentials.map((c) => html`<tr key=${c.number}><td>${c.name}</td><td>${c.role}</td><td className="mono">${c.email}</td><td className="mono">${c.password}</td><td className="mono">${c.number}</td><td className="mono">${c.pin}</td></tr>`)}</tbody>
     </table>
     <a className="tour-btn primary" href="/login.html">Continue to sign-in</a>
   </main>`;

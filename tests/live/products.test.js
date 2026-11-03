@@ -3,11 +3,11 @@ const fs = require("fs");
 const path = require("path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, removeCatalog } = require("./env");
+const { start, client, pool, removeCatalog, creds } = require("./env");
 
 let env, leo, sam, jordan, stamp;
 const created = { products: [], groups: [], promotions: [] }; // removed again at the end
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 // smallest valid PNG: the 8-byte signature plus a header, enough for the magic-byte check
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cfc0f01f0005000201a9d6b7f50000000049454e44ae426082", "hex");

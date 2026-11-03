@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool } = require("./env");
+const { start, client, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -15,7 +15,7 @@ let cleanup = async () => restore(); // runs on success and on a crash, so a fai
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/inventory.html", pretendToBeVisual: true }).window;
   w.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } });
@@ -36,11 +36,11 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 (async () => {
   const { server, base } = await start();
   // The demo stock changes as people use the app, so make one item low on purpose: its reorder level goes just above what is on hand
-  const sc = client(base); await sc.call("/login/pin", { employeeNumber: "10420002", pin: "222222" });
+  const sc = client(base); await sc.call("/login", creds("10420002"));
   const muffin = (await sc.call("/inventory")).body.rows.find((r) => r.id === "stk-muffin");
   await sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.onHand + 5) });
   restore = () => sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.reorderAt) });
-  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420002", pin: "222222" }) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
+  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420002")) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
   const m = await open(base, "10420002", "222222");
   const rows = (sel = "section.pview[aria-label=Inventory]") => m.$$(`${sel} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1);
   const row = (name) => rows().find((r) => cells(r)[0].startsWith(name)); // a deactivated row adds a tag after the name

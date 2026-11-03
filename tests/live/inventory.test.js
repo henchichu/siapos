@@ -2,13 +2,13 @@
 // The ledger can't be edited, so each run leaves its movements, one delivery and one count behind.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, removeCatalog } = require("./env");
+const { start, client, pool, removeCatalog, creds } = require("./env");
 const madeSuppliers = [];
 const madeProducts = []; // switched-off products that use a test ingredient; removed before the ingredient
 const madeItems = []; // stock items created here, removed again (never stocked, so they have no ledger rows and can go)
 
 let env, leo, sam, jordan, stamp;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const ITEM = "stk-cup-12"; // 12 oz cup: counted in whole units ("each")
 const row = async (id = ITEM, where = "") => (await leo.call(`/inventory${where}`)).body.rows.find((r) => r.id === id);

@@ -52,7 +52,7 @@ async function phone(until) {
 
 async function register(n, until) {
   const call = session(STAFF);
-  const login = await call("/login/pin", { employeeNumber: "10420003", pin: "333333" });
+  const login = await call("/login", { email: "sam@brewbean.example.com", password: "sam-dev-pass" });
   if (login.status !== 200) { console.error(`register ${n} could not sign in: ${login.status}`); return; }
   while (Date.now() < until) {
     await timed("register: sale (cash)", () => call("/register/orders", { saleId: crypto.randomUUID(), items: [{ key: "a", variantId: "var-croissant", quantity: 1 }], payment: { method: "cash" } }));

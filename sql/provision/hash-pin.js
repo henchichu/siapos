@@ -1,4 +1,5 @@
-// Prints the hash of a 6-digit PIN, for the @pin_hash line in provision.sql or an UPDATE EmployeeCredential.
+// Prints the hash of a 6-digit approval PIN (typed with the employee number to sign off a discount or refund),
+// for provision.sql's @pin_hash or an UPDATE EmployeeCredential.
 //   node sql/provision/hash-pin.js 246810
 const { hashSecret } = require("../../server/auth");
 const pin = process.argv[2] || "";

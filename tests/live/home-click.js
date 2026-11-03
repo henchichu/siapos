@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool } = require("./env");
+const { start, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -14,7 +14,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
 const ALL = "Inventory|Rewards|Needs attention|Products|Kitchen|Orders|Sign out|Reports|Register|My shift";
 
 async function home(base, number, pin) {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const redirect = (await login.json()).redirect;
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/home.html", pretendToBeVisual: true }).window;

@@ -21,12 +21,15 @@ SET @online_orders   = FALSE;                    -- TRUE: the café's QR order p
 SET @rate_standard   = 0.082500;
 SET @rate_exempt     = 0.000000;
 
--- The first employee gets every permission (the "General manager" role). Number: 8 digits. PIN hash:
---   node sql/provision/hash-pin.js 246810
+-- The first employee gets every permission (the "General manager" role). They sign in with the email and password.
+-- Password hash:  node sql/provision/hash-password.js 'a long password'      (8 characters or more)
+-- The employee number is a non-secret ID; with the approval PIN it signs off discounts and refunds.
+-- PIN hash:       node sql/provision/hash-pin.js 246810
 SET @first_name      = 'Alex';
 SET @last_name       = 'Morgan';
 SET @first_email     = 'alex@example.com';
 SET @first_number    = '10000001';
+SET @password_hash   = 'PASTE-THE-OUTPUT-OF-hash-password.js-HERE';
 SET @pin_hash        = 'PASTE-THE-OUTPUT-OF-hash-pin.js-HERE';
 
 SET @first_period_start = '2026-01-05';          -- the first day of the first two-week pay period
@@ -73,7 +76,7 @@ SELECT r.RoleID, @biz, p.PermissionCode
 
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES (@emp, @biz, @first_name, @last_name, @first_email, @first_number, @r_gm);
-INSERT INTO EmployeeCredential (EmployeeID, PinHash) VALUES (@emp, @pin_hash);
+INSERT INTO EmployeeCredential (EmployeeID, PasswordHash, PinHash) VALUES (@emp, @password_hash, @pin_hash);
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID) VALUES (@emp, @loc, @biz);
 
 INSERT INTO MembershipTier (TierID, BusinessID, Name, MinimumPoints) VALUES (UUID(), @biz, 'Bean', 0);
@@ -83,4 +86,4 @@ INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate)
 WITH RECURSIVE n (i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 25)
 SELECT UUID(), @biz, @first_period_start + INTERVAL i * 14 DAY, @first_period_start + INTERVAL i * 14 + 13 DAY FROM n;
 
-SELECT 'Done. Sign in at /login.html with employee number' AS note, @first_number AS employee_number;
+SELECT 'Done. Sign in at /login.html with this email and the password you hashed' AS note, @first_email AS email;

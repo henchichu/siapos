@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool, pickUp } = require("./env");
+const { start, client, pool, pickUp, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -13,7 +13,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
 
 (async () => {
   const { server, base } = await start();
-  const call = async (number, pin) => { const c = client(base); await c.call("/login/pin", { employeeNumber: number, pin }); return c; };
+  const call = async (number, pin) => { const c = client(base); await c.call("/login", creds(number)); return c; };
   const sam = await call("10420003", "333333");
   // two croissant sales, each with a refund asked for
   const asked = [];

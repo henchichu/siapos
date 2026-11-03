@@ -1,11 +1,11 @@
 // Needs the dev database. Adds one real test sale and refunds it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, pickUp, TEST_CARD } = require("./env");
+const { start, client, pool, pickUp, TEST_CARD, creds } = require("./env");
 const { mondayOf, shiftPay } = require("../../server/overtime");
 
 let env, maya, leo, sam, priya;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const report = async (c, q) => { const r = await c.call(`/reports/sales-by-day?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };
 const rowFor = (body, day, location) => body.rows.find((r) => r.day === day && r.location === location) || { orders: 0, gross: 0, discounts: 0, refunds: 0, net: 0 };

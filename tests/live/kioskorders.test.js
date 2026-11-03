@@ -2,13 +2,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
-const { start, startKiosk, client, phone, pool, topUp } = require("./env");
+const { start, startKiosk, client, phone, pool, topUp, creds } = require("./env");
 const { expireStale } = require("../../server/kioskorders");
 
 let env, pub, wasOpen; // env: the staff server, pub: the public order page
 const LINE = { key: "a", variantId: "var-amer-s", quantity: 2, modifierIds: ["mod-caramel"] };
 const kiosk = (c, extra = {}) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Pat", items: [LINE], ...extra });
-const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login/pin", { employeeNumber: number, pin })).status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login", creds(number))).status, 200); return c; };
 const status = async (id) => (await pool.query("SELECT OrderStatusCode AS s FROM Orders WHERE OrderID = ?", [id]))[0][0].s;
 const caramel = async () => Number((await pool.query("SELECT Quantity AS q FROM Inventory WHERE LocationID = 'loc-campus' AND StockItemID = 'stk-caramel'"))[0][0].q);
 // A register user who signs in at Campus (the kiosk's café), or with elsewhere = true, at another café

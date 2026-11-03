@@ -1,9 +1,9 @@
 USE miniworld;
 
--- DEV ONLY. One script for sign-in secrets; add passwords here too.
+-- DEV ONLY. One script for sign-in secrets. Sign-in is email + password; the PIN is the approval PIN a manager types with their employee number.
 -- Hash format: scrypt$<salt hex>$<hash hex> (N=16384, r=8, p=1, 64-byte key), same as server/auth.js.
--- Dev PINs (6 digits):   Maya 111111, Leo 222222, Sam 333333, Priya 444444, Jordan 555555, Ana 666666
--- Dev passwords:         <first name lowercase>-dev-pass
+-- Dev approval PINs (6 digits): Maya 111111, Leo 222222, Sam 333333, Priya 444444, Jordan 555555, Ana 666666
+-- Dev passwords (sign in with the employee's email): <first name lowercase>-dev-pass
 INSERT INTO EmployeeCredential (EmployeeID, PasswordHash, PinHash)
 VALUES
     ('emp-maya', 'scrypt$96dbbda139e6a4fb10b55fe8592f1f76$a1d9005c90c21486fa291004c0a9c08defd52db6522f83ce674c72c65ecb938f8ff93444473230e0e96fee11fe94af5092ae9883159ed39787e18bc899bedbb4', 'scrypt$e21c07e979f2c44a4a4db68a409096be$536d52544c5a3318264553c6ed84681a361ef323ef8c152bb77c04eccc18c0345d3a58ebe598220491a2c135fef3fae31245083f073feada304a9fa6b3412dac'),

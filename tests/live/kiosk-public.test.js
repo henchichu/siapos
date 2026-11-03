@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
 delete process.env.KIOSK_PHONE_SIGNIN; // off unless a test turns it on
-const { start, pool } = require("./env");
+const { start, pool, creds } = require("./env");
 const kioskApp = require("../../server/kiosk");
 
 let staff, pub, base;
@@ -36,7 +36,7 @@ test("nothing from the staff side is there", async () => {
     "/api/session", "/api/employees", "/api/reports/live", "/api/orders", "/api/register/catalog", "/health", "/package.json",
     "/img/customer/%2e%2e/%2e%2e/server/server.js", "/%2e%2e/server/server.js", "/vendor/../server/server.js"];
   for (const path of paths) assert.equal((await get(path)).status, 404, path);
-  assert.equal((await post("/api/login/pin", { employeeNumber: "10420001", pin: "111111" })).status, 404, "no staff sign-in");
+  assert.equal((await post("/api/login", creds("10420001"))).status, 404, "no staff sign-in");
 });
 
 test("phone sign-in is off here, and the page is told so", async () => {

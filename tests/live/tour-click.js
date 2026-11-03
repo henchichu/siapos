@@ -101,8 +101,8 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       check("demo: / shows the tour", r.status === 200 && /id="root"/.test(await r.text()));
       check("demo: the sample pages are served", (await here("/tour/kitchen.html")).status === 200);
       const given = await (await here("/api/demo")).json();
-      check("demo: the six dev employees, with number and PIN", given.credentials.length === 6 && given.credentials[0].number === "10420001" && given.credentials[0].pin === "111111"
-        && given.credentials.every((c) => c.name && c.role && /^\d{8}$/.test(c.number) && /^\d{6}$/.test(c.pin)));
+      check("demo: the six dev employees, with number and PIN", given.credentials.length === 6 && given.credentials[0].number === "10420001" && given.credentials[0].pin === "111111" && given.credentials[0].email === "maya@brewbean.example.com" && given.credentials[0].password === "maya-dev-pass"
+        && given.credentials.every((c) => c.name && c.role && /@/.test(c.email) && c.password.length >= 8 && /^\d{8}$/.test(c.number) && /^\d{6}$/.test(c.pin)));
 
       const open = async (after) => {
         const d = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/", pretendToBeVisual: true, virtualConsole: vc }).window;
@@ -120,7 +120,7 @@ const react = (w) => { w.eval(read("node_modules/react/umd/react.development.js"
       const shown = (d) => ({ rows: [...d.document.querySelectorAll(".logintable tbody tr")].map((tr) => tr.textContent), keep: d.document.querySelector(".keep"), go: d.document.querySelector("a.tour-btn.primary") });
       const checkLogins = (name, d) => {
         const x = shown(d);
-        check(`demo: ${name} shows the sign-ins with a keep-this warning and a way on`, x.rows.length === 6 && /Maya.*General manager.*10420001.*111111/.test(x.rows[0]) && /Ana.*Assistant Manager.*10420006.*666666/.test(x.rows[5])
+        check(`demo: ${name} shows the sign-ins with a keep-this warning and a way on`, x.rows.length === 6 && /Maya.*General manager.*maya@brewbean\.example\.com.*maya-dev-pass.*10420001.*111111/.test(x.rows[0]) && /Ana.*Assistant Manager.*ana@brewbean\.example\.com.*ana-dev-pass.*10420006.*666666/.test(x.rows[5])
           && /picture.*write it down/.test(x.keep?.textContent) && x.keep.getAttribute("role") === "alert" && x.go?.getAttribute("href") === "/login.html" && navigations === before, JSON.stringify(x.rows));
       };
       checkLogins("Skip tour", await open(async (d) => { [...d.document.querySelectorAll(".tour-card button")].find((b) => b.textContent === "Skip tour").click(); await sleep(150); }));

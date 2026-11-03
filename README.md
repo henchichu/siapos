@@ -6,6 +6,8 @@ a Simple Industry Agnostic Point Of Sale System
 
 ## Setup
 
+Prerequisite: Install Docker Engine (not to be confused with Docker Desktop, they aren't the same, and the subsequent steps in this guide assume you are using the engine): https://docs.docker.com/engine/install/
+
 1. Create the secret files (the database passwords). Never commit them: `.gitignore` isn't tracked, so check `git status` before every commit.
    ```sh
    mkdir -p sql/secrets

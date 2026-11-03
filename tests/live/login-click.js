@@ -42,11 +42,11 @@ const PRIYA = { id: "emp-priya", email: "priya@brewbean.example.com", password: 
     };
     const submit = async (email, password) => { await fill("email", email); await fill("password", password); $(".signbtn").click(); await sleep(500); };
 
-    check("Staff sign-in, an email field, a password field and a Sign in button", $(".eyebrow")?.textContent === "Staff sign-in" && $("input[name=email]")?.type === "email"
+    check("Sign in, an email field, a password field and a Sign in button", $(".eyebrow")?.textContent === "Sign in" && $("input[name=email]")?.type === "email"
       && $("input[name=password]")?.type === "password" && $(".signbtn")?.textContent === "Sign in");
     check("the fields are labelled and the browser may offer saved logins", $$("label").map((l) => l.firstChild.textContent.trim()).join("|") === "Email|Password"
       && $("input[name=email]").autocomplete === "username" && $("input[name=password]").autocomplete === "current-password");
-    check("the logo is the light ClockIt image", $(".brand img")?.getAttribute("src") === "/img/clockit-logo-light.png" && $(".brand img").getAttribute("alt") === "ClockIt");
+    check("the page is branded with the business's name from the database", $(".brand")?.textContent === "Brewbean Coffee" && w.document.title === "Brewbean Coffee · Sign in", `${$(".brand")?.textContent} | ${w.document.title}`);
     check("no keypad, no employee number", !$(".numpad") && !/employee number/i.test(w.document.body.textContent));
     check("messages sit in an aria-live region", $(".messages")?.getAttribute("aria-live") === "assertive");
 

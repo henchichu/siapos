@@ -22,6 +22,13 @@ function App() {
   const [lockedUntil, setLockedUntil] = useState(null);
   const [busy, setBusy] = useState(false);
   const [, setTick] = useState(0);
+  const [brand, setBrand] = useState(null); // the business's name; the page shows nothing until it arrives, so no other name flashes
+  useEffect(() => {
+    fetch("/api/brand").then((r) => r.json()).then((d) => {
+      setBrand(d.name || "");
+      if (d.name) document.title = `${d.name} · Sign in`;
+    }).catch(() => setBrand(""));
+  }, []);
 
   const locked = !!lockedUntil && lockedUntil > new Date();
   // re-render when the lock runs out, so the form comes back on its own
@@ -56,8 +63,8 @@ function App() {
   </div>`;
 
   return html`<main className="signin">
-    <h1 className="brand"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="144" height="36" /></h1>
-    <p className="eyebrow">Staff sign-in</p>
+    <h1 className="brand">${brand}</h1>
+    <p className="eyebrow">Sign in</p>
     <form className="signform" onSubmit=${submit} noValidate>
       <label>Email
         <input type="email" name="email" autoComplete="username" autoCapitalize="none" spellCheck="false" autoFocus

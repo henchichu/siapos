@@ -76,12 +76,8 @@ function savedCollapsed() {
   try { return localStorage.getItem(NAV_KEY) === "1"; } catch (err) { return false; }
 }
 
-// The clock icon on its own; until that image exists, the full logo cropped to its mark
-function Mark() {
-  const [ok, setOk] = useState(true);
-  return ok ? html`<img className="mark" src="/img/clockit-mark-light.png" alt="ClockIt" width="40" height="40" onError=${() => setOk(false)} />`
-    : html`<span className="mark crop"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /></span>`;
-}
+// The business's first letter in a square, where the menu has no room for its name
+const Mark = ({ name }) => html`<span className="mark" aria-hidden="true">${(name || "").trim().charAt(0).toUpperCase()}</span>`;
 
 function Sidebar({ me, current, onSignOut = signOut }) {
   const [mode, setMode] = useState(navMode);
@@ -143,7 +139,7 @@ function Sidebar({ me, current, onSignOut = signOut }) {
   return html`<${React.Fragment}>
     <header className="navbar">
       <button className="burger" ref=${burger} aria-expanded=${open} aria-controls="main-nav" aria-label="Open navigation" onClick=${() => setOpen(true)}><${Icon} name="menu" /></button>
-      <a href="/home.html" className="navhome"><${Mark} /></a>
+      <a href="/home.html" className="navhome" aria-label=${me?.businessName || "Home"}><${Mark} name=${me?.businessName} /></a>
       <span className="navtitle">${current}</span>
     </header>
     ${open && html`<div className="navshade" onClick=${() => setOpen(false)}></div>`}
@@ -151,7 +147,7 @@ function Sidebar({ me, current, onSignOut = signOut }) {
       <div>
         <button className="navclose" ref=${closer} aria-expanded=${open} aria-controls="main-nav" aria-label="Close navigation" onClick=${() => setOpen(false)}><${Icon} name="close" /></button>
         <h1><a href="/home.html" onClick=${closeAfter} ...${tipFor("Home")}>
-          <img className="full" src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /><${Mark} />
+          <span className="full">${me?.businessName || "Home"}</span><${Mark} name=${me?.businessName} />
         </a></h1>
         <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
           <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span></a></li>`)}</ul>

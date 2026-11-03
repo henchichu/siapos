@@ -22,6 +22,13 @@ test("a customer signs in with their email and lands on the kiosk; email case do
   assert.equal((await c.call("/customer/me")).status, 401, "signed out");
 });
 
+test("the sign-in page's branding is the business's name, public; a staff session carries it too", async () => {
+  assert.deepEqual((await client(env.base).call("/brand")).body, { name: "Brewbean Coffee" });
+  const staff = client(env.base);
+  await login(staff, creds("10420001"));
+  assert.equal((await staff.call("/session")).body.businessName, "Brewbean Coffee");
+});
+
 test("a wrong password, an unknown email and a customer without a password all get the same answer", async () => {
   const answers = [];
   for (const body of [{ ...AVA, password: "not-her-password" }, { email: "nobody@example.com", password: "whatever-1" }, { email: "ben@example.com", password: "whatever-1" }])

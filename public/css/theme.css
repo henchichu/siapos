@@ -1,17 +1,18 @@
-/* ClockIt navy theme (docs/design/ClockIt-navy-menu.pdf). Every staff page loads this last: the other stylesheets use these tokens,
-   and the shared card, summary-card and status looks below win over the pages' own older rules */
+/* The staff theme, in the kiosk's palette (public/css/kiosk.css). Every staff page loads this last: the other stylesheets use these tokens,
+   and the shared card, summary-card and status looks below win over the pages' own older rules.
+   The token names are older than the colors: --navy is the brand brown now, --cyan the caramel highlight. */
 :root {
-  --navy: #13209A;        /* sidebar, primary buttons, headings, table headers */
-  --navy-dark: #0D1670;   /* text on cyan, primary hover */
-  --cyan: #12C6F4;        /* selected menu item, highlights, avatars, best-day bar */
+  --navy: #6F4934;        /* sidebar, primary buttons, headings, table headers */
+  --navy-dark: #4A2F20;   /* text on the highlight, primary hover */
+  --cyan: #CFA77F;        /* selected menu item, highlights, avatars, best-day bar */
   --coral: #F35A47;       /* warnings only: borders and dots. Too light for text (3.3:1), so warning text uses --red */
-  --red: #C42E1C;         /* warning and error text: 5.6:1 on white */
-  --page: #F3F5FB;
+  --red: #C62828;         /* warning and error text */
+  --page: #FAF9F7;
   --card: #fff;
-  --border: #D5DAEC;
-  --text: #141B4D;
-  --text-2: #4A5178;      /* secondary text: 7.7:1 on white */
-  --hover: #EAEDF8;       /* behind hovered rows and white buttons */
+  --border: #D6D6D6;
+  --text: #171717;
+  --text-2: #575757;      /* secondary text: 7.4:1 on white */
+  --hover: #F4F4F4;       /* behind hovered rows and white buttons */
   --ok: #17703A;
   --radius: 10px;         /* buttons, inputs */
   --radius-card: 14px;    /* cards and panels */

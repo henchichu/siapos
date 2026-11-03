@@ -19,6 +19,7 @@ async function signInAs(res, emp) {
     locationId: place.LocationID,
     registerId: place.RegisterID,
     info: {
+      businessName: emp.BusinessName,
       employeeName: `${emp.FirstName} ${emp.LastName}`,
       roleName: emp.RoleName,
       nav,

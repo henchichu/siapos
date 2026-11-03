@@ -2,7 +2,7 @@
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
-// Menu items and Home tiles with a page of their own; every other one opens the generic section page
+// Menu items with a page of their own; every other one opens the generic section page
 const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
@@ -14,6 +14,21 @@ function useMe() {
   useEffect(() => { (mePromise ||= api("/session")).then(setMe).catch(() => {}); }, []);
   return me;
 }
+
+// The numbers on the menu's badges (server/counts.js), polled every 10 seconds. The sidebar and any page showing one share the poll.
+const COUNT_KEY = { "Needs attention": "attention", Register: "register", Kitchen: "kitchen" };
+const countsStore = { value: {}, subs: new Set(), timer: null };
+const loadCounts = () => api("/nav-counts").then((v) => { countsStore.value = v; countsStore.subs.forEach((f) => f(v)); }).catch(() => {});
+function useCounts() {
+  const [counts, setCounts] = useState(countsStore.value);
+  useEffect(() => {
+    countsStore.subs.add(setCounts);
+    if (countsStore.subs.size === 1) { loadCounts(); countsStore.timer = setInterval(loadCounts, 10000); }
+    return () => { countsStore.subs.delete(setCounts); if (!countsStore.subs.size) { clearInterval(countsStore.timer); countsStore.timer = null; } };
+  }, []);
+  return counts;
+}
+const Count = ({ n }) => n > 0 ? html`<span className="count" aria-label=${`${n} waiting`}>${n}</span>` : null;
 
 // Small outline icons, 24x24 and stroked in the text's color (theme.css .icon)
 const ICONS = {
@@ -80,6 +95,7 @@ function savedCollapsed() {
 const Mark = ({ name }) => html`<span className="mark" aria-hidden="true">${(name || "").trim().charAt(0).toUpperCase()}</span>`;
 
 function Sidebar({ me, current, onSignOut = signOut }) {
+  const counts = useCounts();
   const [mode, setMode] = useState(navMode);
   const [collapsed, setCollapsed] = useState(savedCollapsed);
   const [open, setOpen] = useState(false); // the phone drawer
@@ -139,18 +155,18 @@ function Sidebar({ me, current, onSignOut = signOut }) {
   return html`<${React.Fragment}>
     <header className="navbar">
       <button className="burger" ref=${burger} aria-expanded=${open} aria-controls="main-nav" aria-label="Open navigation" onClick=${() => setOpen(true)}><${Icon} name="menu" /></button>
-      <a href="/home.html" className="navhome" aria-label=${me?.businessName || "Home"}><${Mark} name=${me?.businessName} /></a>
+      <a href=${me?.home || "/"} className="navhome" aria-label=${me?.businessName || "Home"}><${Mark} name=${me?.businessName} /></a>
       <span className="navtitle">${current}</span>
     </header>
     ${open && html`<div className="navshade" onClick=${() => setOpen(false)}></div>`}
     <nav className="nav" id="main-nav" aria-label="Main" ref=${navRef}>
       <div>
         <button className="navclose" ref=${closer} aria-expanded=${open} aria-controls="main-nav" aria-label="Close navigation" onClick=${() => setOpen(false)}><${Icon} name="close" /></button>
-        <h1><a href="/home.html" onClick=${closeAfter} ...${tipFor("Home")}>
+        <h1><a href=${me?.home || "/"} onClick=${closeAfter} ...${tipFor("Home")}>
           <span className="full">${me?.businessName || "Home"}</span><${Mark} name=${me?.businessName} />
         </a></h1>
         <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
-          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span></a></li>`)}</ul>
+          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span><${Count} n=${counts[COUNT_KEY[n]]} /></a></li>`)}</ul>
       </div>
       <div className="foot">
         ${mode === "full" && html`<button className="navtoggle" aria-expanded=${!collapsed} aria-controls="main-nav" aria-label=${collapsed ? "Expand navigation" : "Collapse navigation"}

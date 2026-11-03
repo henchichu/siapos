@@ -83,7 +83,7 @@ const PRIYA = { id: "emp-priya", email: "priya@brewbean.example.com", password: 
     await set("email", `  ${PRIYA.email.toUpperCase()} `); await set("password", PRIYA.password);
     w2.document.querySelector("form").dispatchEvent(new w2.Event("submit", { bubbles: true, cancelable: true })); await sleep(600);
     const ok = answers2.filter((a) => a.url === "/api/login").at(-1);
-    check("the right email and password sign in and head Home", ok?.status === 200 && ok.body.redirect === "/home.html", JSON.stringify(ok));
+    check("the right email and password sign in and head to the role's page", ok?.status === 200 && ok.body.redirect === "/register.html", JSON.stringify(ok));
     check("no React warnings (second page)", w2.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w2.errors));
     check("no React warnings", w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w.errors));
   } finally {

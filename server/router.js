@@ -48,9 +48,9 @@ router.post("/login", async (req, res) => {
   if (result.status !== "ok") return res.status(401).json({ error: "Incorrect email or password." });
 
   customer.destroy(req, res);
-  const refused = await signInAs(res, result.emp);
-  if (refused) return res.status(403).json({ error: refused });
-  res.json({ redirect: "/home.html" }); // everyone lands on Home; its tiles come from the role
+  const signedIn = await signInAs(res, result.emp);
+  if (signedIn.error) return res.status(403).json({ error: signedIn.error });
+  res.json({ redirect: signedIn.home });
 });
 
 router.post("/logout", (req, res) => {
@@ -81,6 +81,7 @@ router.use(require("./shift"));
 router.use(require("./products"));
 router.use(require("./inventory"));
 router.use(require("./attention"));
+router.use(require("./counts"));
 router.use(require("./reports"));
 router.use(require("./orders"));
 router.use(require("./rewards"));

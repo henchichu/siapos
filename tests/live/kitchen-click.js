@@ -48,7 +48,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const css = fs.readFileSync(path.join(root, "public/css/kitchen.css"), "utf8");
   check("each queue scrolls on its own", /\.queue \{[^}]*overflow-y: auto/.test(css) && /\.queues \{[^}]*min-height: 0/.test(css));
 
-  const links = $$(".nav a.link").map((a) => a.textContent);
+  const links = $$(".nav a.link").map((a) => a.querySelector(".label").textContent);
   check("a barista's menu lists only Kitchen and My shift", links.join("|") === "Kitchen|My shift", links.join("|"));
 
   await click(byText("button", "Report a loss"), 500);

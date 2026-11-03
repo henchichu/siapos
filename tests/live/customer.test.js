@@ -55,7 +55,7 @@ test("a customer session opens nothing on the staff side, and a staff session no
   for (const path of ["/session", "/orders", "/inventory", "/attention", "/rewards/members"]) assert.equal((await customer.call(path)).status, 401, path);
   assert.equal((await customer.call("/session/touch", {})).status, 401);
 
-  assert.equal((await login(staff, creds("10420001"))).body.redirect, "/home.html");
+  assert.equal((await login(staff, creds("10420001"))).body.redirect, "/attention.html");
   assert.equal((await staff.call("/customer/me")).status, 401);
 });
 
@@ -78,7 +78,7 @@ test("an email is unique across customers, and an employee's email always signs 
   await admin.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, 'biz-brewbean', 'Imposter', 'maya@brewbean.example.com')", [id]);
   await admin.query("INSERT INTO CustomerCredential (CustomerID, PasswordHash) VALUES (?, ?)", [id, hashSecret("customer-pass-1")]);
   try {
-    assert.equal((await login(client(env.base), creds("10420001"))).body.redirect, "/home.html");
+    assert.equal((await login(client(env.base), creds("10420001"))).body.redirect, "/attention.html");
     assert.equal((await login(client(env.base), { email: "maya@brewbean.example.com", password: "customer-pass-1" })).status, 401, "her customer password doesn't work");
   } finally {
     await admin.query("DELETE FROM CustomerCredential WHERE CustomerID = ?", [id]);

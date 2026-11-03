@@ -32,24 +32,24 @@ test.after(async () => { await reject(); env.server.close(); await pool.end(); }
 test("Ana signs in as an assistant manager with the manager menu", async () => {
   const me = (await ana.call("/session")).body;
   assert.deepEqual([me.employeeName, me.roleName, me.locationName], ["Ana Torres", "Assistant manager", "Brewbean Downtown"]);
-  assert.deepEqual(me.nav, ["Register", "Kitchen", "Needs attention", "Orders", "Rewards", "Products", "Inventory", "My shift"], "the manager menu without Reports and Employees");
+  assert.deepEqual(me.nav, ["Needs attention", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "My shift"], "the manager menu without Reports and Employees");
 });
 
-test("her Home has the Orders tile, a server's doesn't", async () => {
-  assert.ok((await ana.call("/session")).body.tiles.includes("Orders"));
-  assert.ok(!(await sam.call("/session")).body.tiles.includes("Orders"));
+test("her menu has Orders, a server's doesn't", async () => {
+  assert.ok((await ana.call("/session")).body.nav.includes("Orders"));
+  assert.ok(!(await sam.call("/session")).body.nav.includes("Orders"));
 });
 
-test("Reports are closed to her: no menu item or tile, the page goes home, the API says 403", async () => {
+test("Reports are closed to her: no menu item, the page goes home, the API says 403", async () => {
   const me = (await ana.call("/session")).body;
-  assert.ok(!me.nav.includes("Reports") && !me.tiles.includes("Reports"));
-  assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/register.html");
+  assert.ok(!me.nav.includes("Reports"));
+  assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/attention.html", "she opens to Needs attention");
   assert.equal((await ana.call("/reports/options")).status, 403);
   assert.equal((await ana.call("/reports/sales-by-day")).status, 403);
 });
 
 test("every page on her menu opens", async () => {
-  for (const p of ["/home.html", "/register.html", "/kitchen.html", "/attention.html", "/orders.html", "/order.html", "/products.html", "/inventory.html", "/shift.html"])
+  for (const p of ["/register.html", "/kitchen.html", "/attention.html", "/orders.html", "/order.html", "/products.html", "/inventory.html", "/shift.html"])
     assert.equal((await page(ana, p)).status, 200, p);
 });
 

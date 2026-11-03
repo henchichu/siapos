@@ -6,7 +6,7 @@ const { start, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
-const app = ["api", "shell", "home"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n");
+const app = ["api", "shell", "shift"].map((f) => fs.readFileSync(path.join(root, `public/js/${f}.js`), "utf8")).join("\n");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
@@ -15,7 +15,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const { server, base } = await start();
   const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420003")) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
-  const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/home.html", pretendToBeVisual: true }).window;
+  const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/shift.html", pretendToBeVisual: true }).window;
   const calls = [];
   w.fetch = (url, opts = {}) => { calls.push(url); return fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } }); };
   w.eval(lib("react/umd/react.development.js")); w.eval(lib("react-dom/umd/react-dom.development.js")); w.eval(lib("htm/dist/htm.umd.js"));

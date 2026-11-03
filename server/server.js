@@ -17,7 +17,7 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
 // "/" is the staff sign-in, or the home screen for anyone signed in.
-app.get("/", (req, res) => res.redirect(session.fromRequest(req) ? "/home.html" : customer.fromRequest(req) ? "/kiosk.html" : "/login.html"));
+app.get("/", (req, res) => res.redirect(session.fromRequest(req)?.info.home || (customer.fromRequest(req) ? "/kiosk.html" : "/login.html")));
 // The kiosk is for a signed-in customer; anyone else signs in first
 app.get("/kiosk.html", (req, res, next) => (customer.fromRequest(req) ? next() : res.redirect("/login.html")));
 
@@ -35,7 +35,7 @@ app.get(Object.keys(LIVE), async (req, res, next) => {
 });
 
 // Each page opens only for a role that has it in its menu; anyone else goes back to their own home
-const PAGE_NAV = { "/home.html": "", "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention", "/orders.html": "Orders", "/order.html": "Orders" };
+const PAGE_NAV = { "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Needs attention", "/orders.html": "Orders", "/order.html": "Orders" };
 app.use((req, res, next) => {
   const need = PAGE_NAV[req.path];
   if (need === undefined) return next();

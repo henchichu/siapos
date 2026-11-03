@@ -60,6 +60,11 @@ svg.icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentCol
 .stat .cicon { top: 10px; right: 10px; width: 24px; height: 24px; } .stat .cicon .icon { width: 14px; height: 14px; }
 .stats > .stat:first-child .cicon { background: var(--cyan); color: var(--navy-dark); }
 
+/* A count on a menu item or button: orders or tasks waiting. Folded into a corner of the icon when the menu is folded (nav.css) */
+.count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 7px; margin-left: auto; border-radius: 11px;
+  background: var(--red); color: #fff; font: 700 12px/1 "IBM Plex Sans", sans-serif; }
+.btn .count { margin-left: 8px; }
+
 /* Status: a dot before the word. The dot is drawn here so the cell's text stays the word alone */
 .dot { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--navy); white-space: nowrap; }
 .dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); flex: none; }

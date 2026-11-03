@@ -53,6 +53,7 @@ router.post("/logout", (req, res) => {
 });
 
 router.use(customer.router); // before the staff check: customers have their own session
+router.use(require("./kiosk"));
 
 router.use(session.requireSession);
 

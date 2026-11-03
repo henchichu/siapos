@@ -51,7 +51,8 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO OrderChannel (ChannelCode, Description, Active) 
 VALUES 
     (1, 'POS', TRUE),
-    (2, 'ONLINE', TRUE)   -- kept for orders with no register (the app only makes POS orders)
+    (2, 'ONLINE', TRUE),  -- kept for orders with no register
+    (3, 'KIOSK', TRUE)   -- a signed-in customer ordering for pickup: no register, no employee
 ON DUPLICATE KEY UPDATE 
     Description = VALUES(Description),
     Active = VALUES(Active);

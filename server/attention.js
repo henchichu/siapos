@@ -14,10 +14,10 @@ const LOSS_REASONS = { 5: "Broken or spilled", 6: "Spoiled or expired", 7: "Stol
 const router = express.Router();
 
 // What needs a manager today. Each panel is there only for a role that can act on it; a role with none of them gets a 403.
-router.get("/attention", async (req, res) => {
-  const { businessId, locationId, employeeId } = req.session;
+async function attentionFor(session) {
+  const { businessId, locationId, employeeId } = session;
   const [inventory, team, signer] = await Promise.all([PERM_SEE_INVENTORY, PERM_SEE_TEAM, PERM_SIGN_REFUNDS].map((p) => hasPermission(pool, employeeId, p)));
-  if (!inventory && !team && !signer) throw new HttpError(403, "Your role can't do this.");
+  if (!inventory && !team && !signer) return null;
   const [[place]] = await pool.query("SELECT Name AS name, TimeZone AS timeZone FROM Location WHERE LocationID = ?", [locationId]);
   const out = { location: place.name, timeZone: place.timeZone, losses: null, reorder: null, timecards: null, refunds: null };
 
@@ -62,11 +62,18 @@ router.get("/attention", async (req, res) => {
   }
 
   if (signer) {
-    const refunds = await waitingRefunds(req.session);
+    const refunds = await waitingRefunds(session);
     out.refunds = { count: refunds.length, rows: refunds.slice(0, SHOWN).map((r) => ({ orderNumber: r.orderNumber, amount: r.amount, askedBy: r.askedBy, why: r.why })) };
   }
+  return out;
+}
+
+router.get("/attention", async (req, res) => {
+  const out = await attentionFor(req.session);
+  if (!out) throw new HttpError(403, "Your role can't do this.");
   res.json(out);
 });
 
 module.exports = router;
+module.exports.attentionFor = attentionFor;
 module.exports.LOSS_REASONS = LOSS_REASONS;

@@ -52,22 +52,22 @@ test.after(async () => {
   }
 });
 
-test("Rewards follows permission 9 in the menu, on Home, on the page and in the API; Edit and Deactivate follow 10", async () => {
+test("Rewards follows permission 9 in the menu, on the page and in the API; Edit and Deactivate follow 10", async () => {
   for (const [c, canEdit] of [[maya, true], [leo, true], [ana, true], [sam, false]]) {
     const s = (await c.call("/session")).body;
-    assert.ok(s.nav.includes("Rewards") && s.tiles.includes("Rewards"), s.nav.join());
+    assert.ok(s.nav.includes("Rewards"), s.nav.join());
     assert.equal((await page(c, "/rewards.html")).status, 200);
     const list = await c.call("/rewards/members");
     assert.equal(list.status, 200);
     assert.equal(list.body.canEdit, canEdit);
   }
   const s = (await jordan.call("/session")).body;
-  assert.ok(!s.nav.includes("Rewards") && !s.tiles.includes("Rewards"));
+  assert.ok(!s.nav.includes("Rewards"));
   assert.equal((await jordan.call("/rewards/members")).status, 403);
   assert.equal((await page(jordan, "/rewards.html")).headers.get("location"), "/kitchen.html");
   // the assistant manager sees neither Reports nor Employees
   const n = (await ana.call("/session")).body;
-  assert.ok(!["Reports", "Employees"].some((x) => n.nav.includes(x) || n.tiles.includes(x)), n.nav.join());
+  assert.ok(!["Reports", "Employees"].some((x) => n.nav.includes(x)), n.nav.join());
   assert.equal(n.roleName, "Assistant manager");
 });
 

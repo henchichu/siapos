@@ -1,5 +1,5 @@
 // Starts a staff session for an employee whose PIN has been checked (or who has just created their business): the same café
-// check and the same menu for every way in. Gives back an error message, or null once signed in.
+// check and the same menu for every way in. Gives back { error } with a message, or { home }, the page the role opens to.
 const pool = require("./database/connection");
 const { workplace, grantedCodes } = require("./pin");
 const session = require("./session");
@@ -10,9 +10,9 @@ const NO_CAFE = "You aren't assigned to a café. Ask a manager to add you to one
 
 async function signInAs(res, emp) {
   const place = await workplace(emp.EmployeeID);
-  if (!place) return NO_CAFE;
+  if (!place) return { error: NO_CAFE };
   const granted = await grantedCodes(pool, emp.EmployeeID);
-  const { nav, tiles, home } = access(emp, DESTINATIONS, granted);
+  const { nav, home } = access(emp, DESTINATIONS, granted);
   session.create(res, {
     employeeId: emp.EmployeeID,
     businessId: emp.BusinessID,
@@ -23,13 +23,12 @@ async function signInAs(res, emp) {
       employeeName: `${emp.FirstName} ${emp.LastName}`,
       roleName: emp.RoleName,
       nav,
-      tiles,
       home,
       locationName: place.LocationName,
       registerName: place.RegisterName,
     },
   });
-  return null;
+  return { home };
 }
 
 module.exports = { signInAs, DESTINATIONS };

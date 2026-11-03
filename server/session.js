@@ -19,7 +19,6 @@ const tokenOf = (req) => /(?:^|;\s*)session=([a-f0-9]+)/.exec(req.headers.cookie
 
 function create(res, data) {
   Object.freeze(data.info.nav);
-  Object.freeze(data.info.tiles);
   Object.freeze(data.info); // the role and what it may open can't change until the next sign-in
   const token = crypto.randomBytes(32).toString("hex");
   sessions.set(token, { ...data, approvals: new Map(), sales: new Map(), expires: Date.now() + SESSION_MS, active: Date.now() });

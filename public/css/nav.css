@@ -50,6 +50,8 @@ a.link { color: inherit; text-decoration: none; }
 .nav-collapsed .nav h1 .mark { display: flex; width: 40px; height: 40px; margin: 2px auto; }
 .nav-collapsed .nav a.link { padding: 13px 15px; }
 .nav-collapsed .nav .label { opacity: 0; }
+.nav a.link { position: relative; }
+.nav-collapsed .nav .count { position: absolute; top: 3px; right: 3px; margin: 0; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; }
 .nav-collapsed .navtoggle .icon { transform: rotate(180deg); }
 .nav-collapsed .who { grid-template-columns: 36px 0; column-gap: 0; padding: 0 6px; }
 .nav-collapsed .who > .name, .nav-collapsed .who > span:not(.avatar), .nav-collapsed .who > .where { opacity: 0; max-height: 0; }

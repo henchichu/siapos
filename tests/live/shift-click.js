@@ -34,7 +34,7 @@ async function open(base, number, pin, hash = "") {
   // Barista: straight to My shift, no tabs
   const b = await open(base, "10420005", "555555");
   check("barista opens My shift with no tabs", /Time clock/.test(b.text()) && !b.$(".tabs") && !/Team timecards/.test(b.text()));
-  check("barista menu: Kitchen and My shift only, My shift current", b.$$(".nav a.link").map((a) => a.textContent).join("|") === "Kitchen|My shift" && b.byText(".nav a.link", "My shift").getAttribute("aria-current") === "page");
+  check("barista menu: Kitchen and My shift only, My shift current", b.$$(".nav a.link .label").map((a) => a.textContent).join("|") === "Kitchen|My shift" && b.byText(".nav a.link", "My shift").getAttribute("aria-current") === "page");
   check("labels filled: employee, location, rate", /Jordan Lee/.test(b.text()) && /Brewbean Downtown/.test(b.text()) && /Hourly rate: \$16\.00/.test(b.text()));
   const btn = (t) => b.byText(".tbtn", t);
   check("clocked out: only Clock in is enabled", !btn("Clock in").disabled && btn("Clock out").disabled && btn("Break Start").disabled && btn("Break End").disabled && /Not clocked in/.test(b.text()));

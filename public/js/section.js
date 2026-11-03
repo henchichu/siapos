@@ -10,8 +10,8 @@ function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // a role may only open what its menu or its Home tiles list
-  const allowed = me && (me.nav.includes(name) || me.tiles.includes(name)) && !(name in PAGES) && name !== "Sign out";
+  // a role may only open what its menu lists
+  const allowed = me && me.nav.includes(name) && !(name in PAGES);
   useEffect(() => {
     if (me && !allowed) api("/access-violation", { page: name }).catch(() => {}).finally(() => window.location.replace(me.home));
   }, [me, allowed, name]);

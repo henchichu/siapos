@@ -19,6 +19,7 @@ const NO_TOTALS = { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCe
 const sizeLabel = (product, variant) => (product.variants.length > 1 ? `, ${variant.name}` : "");
 
 function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch, category, setCategory, onRefund, showRefund, onKiosk }) {
+  const counts = useCounts();
   const q = search.trim().toLowerCase();
   const shown = catalog.products.filter((p) =>
     (!category || p.category === category) &&
@@ -29,7 +30,7 @@ function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch,
     <header>
       <${PageTitle}>Products<//>
       <div className="search">
-        ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders</button>`}
+        ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders<${Count} n=${counts.register} /></button>`}
         ${showRefund && html`<button className="btn danger slim" onClick=${onRefund}>Refund</button>`}
         <label htmlFor="search">Search</label>
         <input id="search" className="field" placeholder="Name or SKU" value=${search}
@@ -300,6 +301,7 @@ function KioskOrdersModal({ onClose }) {
       setMsg({ kind: "ok", text: what === "pay" ? `Order ${o.orderNumber} paid and sent to the kitchen.` : `Order ${o.orderNumber} cancelled.` });
     } catch (err) { setMsg({ kind: "error", text: err.message }); }
     load();
+    loadCounts();
   };
   return html`<${Modal} title="Kiosk orders to pay" onClose=${onClose} wide>
     <p className="hint">Customers who chose cash on the kiosk pay here. An order nobody pays within ${holdMinutes} minutes is cancelled.</p>

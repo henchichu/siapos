@@ -36,12 +36,12 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 (async () => {
   const { server, base } = await start();
   // The demo stock changes as people use the app, so make one item low on purpose: its reorder level goes just above what is on hand
-  const sc = client(base); await sc.call("/login", creds("10420002"));
+  const sc = client(base); await sc.call("/login", creds("10420001"));
   const muffin = (await sc.call("/inventory")).body.rows.find((r) => r.id === "stk-muffin");
   await sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.onHand + 5) });
   restore = () => sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.reorderAt) });
-  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420002")) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
-  const m = await open(base, "10420002", "222222");
+  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420001")) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
+  const m = await open(base, "10420001", "111111");
   const rows = (sel = "section.pview[aria-label=Inventory]") => m.$$(`${sel} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1);
   const row = (name) => rows().find((r) => cells(r)[0].startsWith(name)); // a deactivated row adds a tag after the name
 
@@ -50,7 +50,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("a row shows on hand with its unit, reorder level, average cost and status", /^\d+ ml$/.test(cells(row("Whole milk"))[1]) && /^\$0\.00\d+$/.test(cells(row("Whole milk"))[3]) && cells(row("Whole milk"))[4] === "OK");
   check("at or below the reorder level is LOW", cells(row("Blueberry muffin"))[4] === "LOW" && row("Blueberry muffin").querySelector("td.low"));
   check("the form column isn't there until a row action", !m.$(".pform"));
-  check("footer shows employee, role and location", /Leo Brandt/.test(m.text()) && /Manager · Brewbean Campus/.test(m.text()));
+  check("footer shows employee, role and location", /Maya Okafor/.test(m.text()) && /General manager · Brewbean Campus/.test(m.text()));
 
   await m.click(m.$("input[type=checkbox]"), 200);
   check("Low stock only keeps just the LOW rows", rows().length >= 1 && rows().every((r) => cells(r)[4] === "LOW"));
@@ -120,14 +120,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   // Receive delivery
   await m.click(m.byText(".tab", "Receive delivery"), 500);
   check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Campus/.test(m.text()));
-  const pendingSection = m.$('section[aria-label="Pending deliveries"]');
-  check("pending dashboard appears below recent deliveries", !!pendingSection && !!(m.$('section[aria-label="Recent deliveries"]').compareDocumentPosition(pendingSection) & m.w.Node.DOCUMENT_POSITION_FOLLOWING));
-  const expandPending = pendingSection.querySelector('[aria-label="Expand pending deliveries"]');
-  if (expandPending) await m.click(expandPending, 200);
-  const pendingMuffin = [...pendingSection.querySelectorAll("tbody tr")].find((r) => /Blueberry muffin/.test(r.textContent));
-  check("low stock automatically places a numbered purchase order", !!pendingMuffin && /PO-\d+/.test(pendingMuffin.textContent) && /Ordered/.test(pendingMuffin.textContent));
-  await m.click(pendingMuffin.querySelector("button"), 300);
-  check("pending Receive fills supplier, item and quantity", m.$('section[aria-label="Receive delivery"] select').value === "sup-bakery" && !!m.$('input[aria-label="Quantity of Blueberry muffin"]') && Number(m.$('input[aria-label="Quantity of Blueberry muffin"]').value) > 0);
+  check("recent deliveries are there, and no pending deliveries panel", !!m.$('section[aria-label="Recent deliveries"]') && !m.$('section[aria-label="Pending deliveries"]') && !/Pending/.test(m.$$(".tabs .tab").map((t) => t.textContent).join("|")));
   await m.click(m.byText('section[aria-label="Receive delivery"] button', "Clear"), 200);
   await m.choose(m.byText(".pform select, section[aria-label='Receive delivery'] select", "").closest("section").querySelectorAll("select")[0], "sup-supply");
   const addLine = async (id) => { await m.choose(m.$("select[aria-label='Stock item']"), id); await m.click(m.byText("button", "Add line"), 200); };

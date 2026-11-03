@@ -77,7 +77,7 @@ VALUES
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID)
 VALUES
     ('emp-maya', 'loc-downtown', @biz), ('emp-maya', 'loc-campus', @biz),
-    ('emp-leo',  'loc-downtown', @biz), ('emp-leo',  'loc-campus', @biz),
+    ('emp-leo',  'loc-downtown', @biz),
     ('emp-sam',  'loc-downtown', @biz),
     ('emp-priya', 'loc-campus', @biz),
     ('emp-jordan', 'loc-campus', @biz),
@@ -107,11 +107,11 @@ SELECT a.n * 10 + b.n
        (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
         UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b;
 
--- Five shifts a week each; Leo alternates between the two cafés (LocationID NULL)
+-- Five shifts a week each
 CREATE TABLE _seed_shift (EmployeeID CHAR(36), LocationID CHAR(36), StartTime TIME, Minutes INT, DayOffset INT);
 INSERT INTO _seed_shift
 VALUES
-    ('emp-leo',    NULL,           '08:00', 510, 0),
+    ('emp-leo',    'loc-downtown', '08:00', 510, 0),
     ('emp-sam',    'loc-downtown', '06:30', 510, 2),
     ('emp-priya',  'loc-campus',   '07:00', 510, 4),
     ('emp-jordan', 'loc-campus',   '11:00', 450, 1);
@@ -121,7 +121,7 @@ INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPerio
                        ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode, ApprovedByEmployeeID)
 SELECT CONCAT('te-', SUBSTRING(e.EmployeeID, 5), '-', LPAD(d.n, 2, '0')),
        e.EmployeeID,
-       COALESCE(e.LocationID, IF(MOD(d.n, 2) = 0, 'loc-downtown', 'loc-campus')),
+       e.LocationID,
        @biz,
        IF(d.n >= 14, 'pp-prev', 'pp-curr'),
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL d.n DAY, e.StartTime), @tz, '+00:00'),
@@ -264,7 +264,7 @@ INSERT INTO Delivery (DeliveryID, BusinessID, LocationID, SupplierID, InvoiceNum
 SELECT CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(u.SupplierID, 5)),
        @biz, l.LocationID, u.SupplierID,
        CONCAT('INV-', UPPER(SUBSTRING(u.SupplierID, 5, 3)), '-', r.n, IF(l.LocationID = 'loc-downtown', '1', '2')),
-       @D - INTERVAL IF(r.n = 1, 20, 6) DAY, 'emp-leo'
+       @D - INTERVAL IF(r.n = 1, 20, 6) DAY, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana')
   FROM Location l CROSS JOIN (SELECT DISTINCT SupplierID FROM _seed_stock) u
   JOIN _seed_seq r ON r.n IN (1, 2)
  WHERE l.BusinessID = @biz;
@@ -272,7 +272,7 @@ SELECT CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
                                   QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, DeliveryID)
 SELECT CONCAT('itx-rs', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(s.StockItemID, 5)),
-       @biz, s.StockItemID, l.LocationID, 'emp-leo',
+       @biz, s.StockItemID, l.LocationID, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana'),
        IF(r.n = 1, s.Qty1, s.Qty2), IF(r.n = 1, s.Cost1, s.Cost2),
        1,                                                       -- 1 = RESTOCK
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL IF(r.n = 1, 20, 6) DAY, '06:00'), @tz, '+00:00'),
@@ -529,13 +529,13 @@ VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
     ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30', NULL),
     ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
     ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00', 'Soured before its date'),
-    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-leo',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
+    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-ana',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
     ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00', NULL),
-    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00', NULL);
+    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-ana',        6, 8,  1, '18:00', NULL);
 
 -- Yesterday's closing count at each café: every stock item counted, one difference each
 INSERT INTO StockCount (StockCountID, BusinessID, LocationID, CountedByEmployeeID, CountedAt, ItemsCounted, Note)
-SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, 'emp-leo',
+SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana'),
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL 1 DAY, '18:00'), @tz, '+00:00'),
        (SELECT COUNT(*) FROM StockItem WHERE BusinessID = @biz),
        IF(l.LocationID = 'loc-downtown', 'Sleeve of 16 oz cups crushed in the back', 'Found a spare sleeve of 12 oz cups')

@@ -57,7 +57,7 @@ async function open(base, number, pin, hash = "") {
   check("barista page: no React warnings", b.w.errors.length === 0, b.w.errors.join(" | "));
 
   // Manager: Team timecards first, with the toggle
-  const m = await open(base, "10420002", "222222");
+  const m = await open(base, "10420001", "111111"); // the general manager, who works at Campus where the seeded cards are
   check("manager opens Team timecards", /Timecards/.test(m.text()) && !!m.$(".filters") && m.byText(".tab", "Team timecards").getAttribute("aria-pressed") === "true");
   check("manager sees all nine menu links", m.$$(".nav a.link").length === 9);
   check("counter text", /\d+ waiting for approval/.test(m.text()));

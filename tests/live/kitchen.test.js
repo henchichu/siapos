@@ -13,7 +13,7 @@ test.after(async () => { env.server.close(); await pool.end(); });
 test("a sale reaches the kitchen, moves New -> Preparing -> Ready -> picked up, and only then can be refunded", async () => {
   const priya = await signIn("10420004", "444444");
   const jordan = await signIn("10420005", "555555");
-  const leo = await signIn("10420002", "222222");
+  const manager = await signIn("10420001", "111111");
 
   const sale = await priya.call("/register/orders", { items: [{ key: "a", variantId: "var-latte-s", quantity: 1, modifierIds: ["mod-oat"] }], payment: { method: "cash" } });
   assert.equal(sale.status, 200);
@@ -36,7 +36,7 @@ test("a sale reaches the kitchen, moves New -> Preparing -> Ready -> picked up, 
   assert.equal((await jordan.call(`/kitchen/orders/${ticket.id}/ready`, {})).status, 200);
   assert.ok(find(await jordan.call("/kitchen/tickets"), "ready", n));
 
-  assert.equal((await leo.call(`/kitchen/orders/${ticket.id}/pickup`, {})).status, 200);
+  assert.equal((await manager.call(`/kitchen/orders/${ticket.id}/pickup`, {})).status, 200);
   assert.ok(!find(await jordan.call("/kitchen/tickets"), "ready", n), "picked-up tickets leave the screen");
   assert.equal((await priya.call("/refunds/order?q=" + n)).status, 200);
 });

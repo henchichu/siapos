@@ -145,10 +145,8 @@ function StockTab({ data, reload, showInactive, setShowInactive }) {
 }
 
 function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
-  const [pendingId, setPendingId] = useState("");
   const [sub, setSub] = useState("receive"); // the panel a phone shows
   const [recentExpanded, setRecentExpanded] = useState(false);
-  const [pendingExpanded, setPendingExpanded] = useState(false);
   const [supplierId, setSupplierId] = useState("");
   const [date, setDate] = useState(data.location.today);
   const [invoice, setInvoice] = useState("");
@@ -160,7 +158,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
   const item = (id) => data.items.find((i) => i.id === id);
   const unitCost = (l) => (num(l.quantity) > 0 && num(l.total) != null ? num(l.total) / num(l.quantity) : null);
   const total = lines.reduce((a, l) => a + (num(l.total) || 0), 0);
-  const clear = () => { setPendingId(""); setSupplierId(""); setDate(data.location.today); setInvoice(""); setLines([]); setAdd(""); };
+  const clear = () => { setSupplierId(""); setDate(data.location.today); setInvoice(""); setLines([]); setAdd(""); };
   // the supplier's quoted price times the quantity, as a hint for what the total should be
   const quoteHint = (l) => { const q = data.quotes.find((x) => x.stockItemId === l.stockItemId && x.supplierId === supplierId)?.unitCost; return q != null && num(l.quantity) > 0 ? `≈ ${(q * num(l.quantity)).toFixed(2)}` : ""; };
   const setLine = (id, patch) => setLines(lines.map((l) => (l.stockItemId === id ? { ...l, ...patch } : l)));
@@ -169,23 +167,6 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
     if (!add) return setMsg({ kind: "error", text: "Choose a stock item to add." });
     if (lines.some((l) => l.stockItemId === add)) return setMsg({ kind: "error", text: "That item is already on the delivery." });
     setLines([...lines, { stockItemId: add, quantity: "", total: "" }]); setAdd(""); setMsg(null);
-  };
-  const pending = data.pendingDeliveries || [];
-  const selectedOrder = pending.find((p) => p.id === pendingId);
-  const placeOrder = async () => {
-    setBusy(true);
-    try {
-      await api(`/inventory/purchase-order/${pendingId}/supplier`, { locationId: data.location.id, supplierId });
-      clear(); await reload(); setMsg({ kind: "ok", text: "Simulated purchase order placed. It is now awaiting delivery." });
-    } catch (e) { setMsg({ kind: "error", text: e.message }); }
-    setBusy(false);
-  };
-  const prepare = (p) => {
-    setSub("receive");
-    setPendingId(p.id); setSupplierId(p.supplierId || ""); setDate(data.location.today); setInvoice("");
-    setLines([{ stockItemId: p.stockItemId, quantity: qty(p.quantity), total: p.unitCost == null ? "" : (p.quantity * p.unitCost).toFixed(2) }]);
-    setMsg({ kind: "ok", text: p.status === "Needs supplier" ? `Choose a supplier to place ${p.orderNumber}.` : `Receive ${p.orderNumber}: ${p.item}. Check the quantity and actual cost.` });
-    document.querySelector('[aria-label="Receive delivery"]')?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
   const chosen = data.suppliers.find((x) => x.id === supplierId);
   const setSupplierActive = async (active) => {
@@ -206,7 +187,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
   const receive = async () => {
     setBusy(true);
     try {
-      const r = await api("/inventory/delivery", { locationId: data.location.id, supplierId, deliveredOn: date, invoice, lines, purchaseOrderId: pendingId });
+      const r = await api("/inventory/delivery", { locationId: data.location.id, supplierId, deliveredOn: date, invoice, lines });
       clear();
       setMsg({ kind: "ok", text: `Delivery received: ${r.lines} ${r.lines === 1 ? "line" : "lines"}, ${fromDollars(r.total)}.` });
       await reload();
@@ -215,16 +196,15 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
   };
 
   return html`<${React.Fragment}>
-  <${SubTabs} tabs=${[["receive", "Receive"], ["recent", "Recent"], ["pending", "Pending", pending.length]]} value=${sub} onChange=${setSub} label="Delivery sections" />
+  <${SubTabs} tabs=${[["receive", "Receive"], ["recent", "Recent"]]} value=${sub} onChange=${setSub} label="Delivery sections" />
   <div className="split inv-split">
     <section className=${`pview wide-form ${panelOf("receive", sub)}`} aria-label="Receive delivery">
       <h2>Receive delivery</h2>
       <p className="sub">Receiving at ${data.location.name}</p>
-      ${pendingId && html`<p className="status" role="status">${selectedOrder ? `${selectedOrder.orderNumber}: ${selectedOrder.status}. Stock updates when the delivery is received.` : "This order is no longer pending. Clear this form and select another delivery."}</p>`}
-      <div className="row2"><label className="pf grow"><b>Supplier</b><span className="inline"><select className="select" disabled=${busy || selectedOrder?.status === "Ordered"} value=${supplierId} onChange=${(e) => setSupplierId(e.target.value)}>
+      <div className="row2"><label className="pf grow"><b>Supplier</b><span className="inline"><select className="select" disabled=${busy} value=${supplierId} onChange=${(e) => setSupplierId(e.target.value)}>
           <option value="">Choose a supplier</option>${visibleSuppliers(data, showInactive).map((s) => html`<option key=${s.id} value=${s.id}>${s.name}${s.active ? "" : " (deactivated)"}</option>`)}</select>
-          <button className="pbtn outline" disabled=${busy || selectedOrder?.status === "Ordered"} onClick=${() => { setNewSupplier({ name: "", email: "", phone: "" }); setMsg(null); }}>New supplier</button>
-          ${chosen && html`<button className=${chosen.active ? "pbtn outline danger" : "pbtn outline"} disabled=${busy || selectedOrder?.status === "Ordered"} onClick=${() => setSupplierActive(!chosen.active)}>${chosen.active ? "Deactivate" : "Reactivate"}</button>`}</span>
+          <button className="pbtn outline" disabled=${busy} onClick=${() => { setNewSupplier({ name: "", email: "", phone: "" }); setMsg(null); }}>New supplier</button>
+          ${chosen && html`<button className=${chosen.active ? "pbtn outline danger" : "pbtn outline"} disabled=${busy} onClick=${() => setSupplierActive(!chosen.active)}>${chosen.active ? "Deactivate" : "Reactivate"}</button>`}</span>
           <${ShowInactive} checked=${showInactive} onChange=${setShowInactive} /></label>
         <label className="pf w210"><b>Delivery date</b><input className="field date" type="date" value=${date} onChange=${(e) => setDate(e.target.value)} /></label></div>
       ${newSupplier && html`<div className="newsupplier" role="group" aria-label="New supplier">
@@ -251,9 +231,7 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       </div>
       <div className="costline"><span>Delivery total</span><span>${fromDollars(total)}</span></div>
       <${Message} msg=${msg} dashed />
-      <div className="pactions left">${selectedOrder?.status === "Needs supplier"
-        ? html`<button className="pbtn" disabled=${busy || !chosen?.active} onClick=${placeOrder}>Place simulated order</button>`
-        : html`<button className="pbtn" disabled=${busy || (pendingId && !selectedOrder) || (chosen && !chosen.active)} onClick=${receive}>Receive into stock</button>`}<button className="pbtn outline" onClick=${() => { clear(); setMsg(null); }}>Clear</button></div>
+      <div className="pactions left"><button className="pbtn" disabled=${busy || (chosen && !chosen.active)} onClick=${receive}>Receive into stock</button><button className="pbtn outline" onClick=${() => { clear(); setMsg(null); }}>Clear</button></div>
     </section>
     <div className="stack grow delivery-dashboard">
     <section className=${`pview delivery-panel ${panelOf("recent", sub)}`} aria-label="Recent deliveries">
@@ -265,29 +243,9 @@ function DeliveryTab({ data, reload, showInactive, setShowInactive }) {
       </header>
       <div id="recent-deliveries-list" className=${recentExpanded ? "delivery-list expanded" : "delivery-list"}>
       <table className="table mg fit rowcards t-recent">
-<thead><tr><th>Date</th><th>Supplier / purchase order</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
-        <tbody>${(recentExpanded ? data.deliveries : data.deliveries.slice(0, 3)).map((d) => html`<tr key=${d.id}><td className="nw">${dayOf(d.date)}</td><td>${d.supplier}${d.orderNumber && html`<div className="sub">${d.orderNumber} · ${d.status}</div>`}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
+<thead><tr><th>Date</th><th>Supplier</th><th className="r">Lines</th><th className="r">Total</th></tr></thead>
+        <tbody>${(recentExpanded ? data.deliveries : data.deliveries.slice(0, 3)).map((d) => html`<tr key=${d.id}><td className="nw">${dayOf(d.date)}</td><td>${d.supplier}</td><td className="r">${d.lines}</td><td className="r">${fromDollars(d.total)}</td></tr>`)}
           ${!data.deliveries.length && html`<tr><td colSpan="4">No deliveries yet.</td></tr>`}</tbody>
-      </table>
-      </div>
-    </section>
-    <section className=${`pview delivery-panel ${panelOf("pending", sub)}`} aria-label="Pending deliveries">
-      <header className="phead"><h3>Pending deliveries</h3>
-        <div className="delivery-heading-actions"><span className="tag">${pending.length} pending</span>
-          ${pending.length > 3 && html`<button className="act delivery-expand" aria-label=${pendingExpanded ? "Collapse pending deliveries" : "Expand pending deliveries"} aria-expanded=${pendingExpanded} aria-controls="pending-deliveries-list" onClick=${() => setPendingExpanded((v) => !v)}>
-            <span>${pendingExpanded ? "Show less" : `Show all (${pending.length})`}</span>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style=${{ transform: pendingExpanded ? "rotate(180deg)" : undefined }}><path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>`}
-        </div>
-      </header>
-      <div id="pending-deliveries-list" className=${pendingExpanded ? "delivery-list expanded" : "delivery-list"}>
-      <table className="table mg fit rowcards pending-deliveries t-pending">
-<thead><tr><th>Order / stock item / supplier</th><th>On hand / threshold</th><th>To receive</th><th>Action</th></tr></thead>
-        <tbody>${(pendingExpanded ? pending : pending.slice(0, 3)).map((p) => html`<tr key=${p.id} className=${pendingId === p.id ? "sel" : ""}>
-          <td><b>${p.orderNumber}</b><div>${p.item}</div><div className="sub">${p.supplier || "Choose a supplier to place this order"}</div><span className="tag">${p.status}</span>${!p.active && html`<span className="tag">deactivated</span>`}</td>
-          <td>${qty(p.onHand)} / ${qty(p.reorderAt)} ${p.unit}</td><td>${qty(p.quantity)} ${p.unit}</td>
-          <td>${data.canChange && html`<button className="act" disabled=${busy || !p.active || (p.supplierId && !p.supplierActive)} onClick=${() => prepare(p)}>${p.status === "Needs supplier" ? "Assign supplier" : "Receive"}</button>`}</td>
-        </tr>`)}${!pending.length && html`<tr><td colSpan="4">No pending deliveries. Purchase orders appear here automatically when stock is low.</td></tr>`}</tbody>
       </table>
       </div>
     </section>

@@ -199,8 +199,10 @@ test("hours past 40 in a Monday to Sunday week are overtime at 1.5x, counting ev
        FROM TimeEntry te JOIN Location l USING (LocationID)
       WHERE te.EmployeeID = 'emp-leo' AND te.TimeEntryStatusCode IN (2, 3) ${where}
         AND DATE(CONVERT_TZ(te.ClockInAt, '+00:00', l.TimeZone)) BETWEEN ? AND ?`, [monday, sunday]))[0][0].m);
+  // Leo works at Downtown only, so lend him to Campus for this test: his 40 hours are all at Downtown
+  await pool.query("INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID) VALUES ('emp-leo', 'loc-campus', 'biz-brewbean') ON DUPLICATE KEY UPDATE Active = TRUE");
   const everywhere = await week(""), campus = await week("AND te.LocationID = 'loc-campus'");
-  assert.ok(everywhere >= 2400 && campus < 2400, "Leo's 40 hours are split between the two cafés");
+  assert.ok(everywhere >= 2400 && campus < 2400, "Leo's 40 hours are at Downtown, none at Campus");
 
   const q = { period: "pp-curr", location: "loc-campus" };
   const before = person(await labor(maya, q), "Leo Brandt");
@@ -212,11 +214,12 @@ test("hours past 40 in a Monday to Sunday week are overtime at 1.5x, counting ev
   try {
     const after = person(await labor(maya, q), "Leo Brandt");
     assert.equal(after.shifts - before.shifts, 1);
-    assert.equal(after.overtimeHours - before.overtimeHours, 2, "all of it past 40, though his Campus hours alone are under 40");
+    assert.equal(after.overtimeHours - before.overtimeHours, 2, "all of it past 40: the hours at his other café count too");
     assert.equal(after.regularHours - before.regularHours, 0);
     assert.equal(after.pay - before.pay, shiftPay({ regular: 0, overtime: 120 }, 2400), "2 hours at $36");
   } finally {
     await pool.query("DELETE FROM TimeEntry WHERE TimeEntryID = ?", [id]);
+    await pool.query("DELETE FROM EmployeeLocation WHERE EmployeeID = 'emp-leo' AND LocationID = 'loc-campus'");
   }
 });
 

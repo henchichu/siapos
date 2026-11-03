@@ -2,6 +2,7 @@ const path = require("path");
 const express = require("express");
 const router = require("./router");
 const session = require("./session");
+const customer = require("./customer");
 const pool = require("./database/connection");
 const { hasPermission } = require("./pin");
 const { handleErrors } = require("./errors");
@@ -16,7 +17,9 @@ if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.get("/health", (req, res) => res.json({ status: "ok", application: "SIAPOS" }));
 
 // "/" is the staff sign-in, or the home screen for anyone signed in.
-app.get("/", (req, res) => res.redirect(session.fromRequest(req) ? "/home.html" : "/login.html"));
+app.get("/", (req, res) => res.redirect(session.fromRequest(req) ? "/home.html" : customer.fromRequest(req) ? "/kiosk.html" : "/login.html"));
+// The kiosk is for a signed-in customer; anyone else signs in first
+app.get("/kiosk.html", (req, res, next) => (customer.fromRequest(req) ? next() : res.redirect("/login.html")));
 
 app.use(require("./vendor"));
 
@@ -50,6 +53,7 @@ app.use(handleErrors);
 
 if (require.main === module) {
   app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
+  require("./kioskorders").startExpiry(); // cancels kiosk orders nobody paid for, which puts their stock back
 }
 
 module.exports = app;

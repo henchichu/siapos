@@ -929,6 +929,7 @@ CREATE TABLE IF NOT EXISTS Orders (
 
     OrderNumber INT UNSIGNED NOT NULL DEFAULT 0,  -- set by TR_Orders_BeforeInsert
     ChannelCode TINYINT UNSIGNED NOT NULL,
+    CustomerNote VARCHAR(255) NULL,                      -- kiosk orders: the customer's note to the kitchen
     OrderDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,

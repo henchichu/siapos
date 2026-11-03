@@ -42,6 +42,7 @@ function Info({ data, sub }) {
         <li>Register: ${w.register || "none"}</li>
         <li>Rung up by: ${w.rungUpBy || "—"}</li>
         <li>Customer: ${w.customer}</li>
+        <li>Note: ${w.note || "none"}</li>
       </ul>
     </section>
     <section className=${`osec ${panelOf("history", sub)}`} aria-label="Status history">

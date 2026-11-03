@@ -16,7 +16,7 @@ test("a customer signs in with their email and lands on the kiosk; email case do
   const c = client(env.base);
   const r = await login(c, AVA);
   assert.deepEqual([r.status, r.body.redirect], [200, "/kiosk.html"]);
-  assert.deepEqual((await c.call("/customer/me")).body, { firstName: "Ava" });
+  assert.equal((await c.call("/customer/me")).body.firstName, "Ava");
   assert.equal((await login(client(env.base), { ...AVA, email: "AVA@Example.COM" })).status, 200);
   assert.equal((await c.call("/customer/logout", {})).status, 200);
   assert.equal((await c.call("/customer/me")).status, 401, "signed out");

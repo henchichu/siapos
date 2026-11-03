@@ -70,11 +70,27 @@ const authenticate = (email, password) =>
 
 const router = express.Router();
 
-router.get("/customer/me", requireCustomer, (req, res) => res.json({ firstName: req.customer.firstName || "there" }));
+// Who is signed in, with points read live from the ledger
+router.get("/customer/me", requireCustomer, async (req, res) => {
+  const [[c]] = await pool.query(
+    `SELECT c.FirstName AS firstName, c.Email AS email, t.Name AS tier, la.LoyaltyAccountID AS account,
+            COALESCE((SELECT SUM(lt.PointsChange) FROM LoyaltyTransaction lt WHERE lt.LoyaltyAccountID = la.LoyaltyAccountID), 0) AS points
+       FROM Customer c
+       LEFT JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
+       LEFT JOIN MembershipTier t ON t.TierID = la.TierID
+      WHERE c.CustomerID = ?`, [req.customer.customerId]);
+  res.json({
+    firstName: c.firstName || "there",
+    maskedEmail: c.email.replace(/^(.).*(@.*)$/, "$1***$2"),
+    member: !!c.account,
+    points: c.account ? Number(c.points) : null,
+    tier: c.tier || null,
+  });
+});
 
 router.post("/customer/logout", (req, res) => {
   destroy(req, res);
   res.json({ ok: true });
 });
 
-module.exports = { router, authenticate, create, destroy, fromRequest };
+module.exports = { router, authenticate, create, destroy, fromRequest, requireCustomer };

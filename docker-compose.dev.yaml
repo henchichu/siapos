@@ -8,3 +8,7 @@ services:
       SIAPOS_DEV: "1"
     volumes:
       - ./sql/dev:/sql-dev:ro
+
+  pos-api:
+    environment:
+      MOCK_PAY: "1"   # the kiosk offers Card, Apple Pay and Google Pay through the mock processor; no money moves

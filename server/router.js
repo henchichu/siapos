@@ -21,6 +21,12 @@ router.use("/login", loginLimit);
 // The sign-in name is the email; the password is checked for length when it is set (sql/provision), not here, so an old short one still works
 const sane = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
 
+// The sign-in page's branding: the name of the business in this database (there is only one)
+router.get("/brand", async (req, res) => {
+  const [[b]] = await pool.query("SELECT Name AS name FROM Business WHERE Active LIMIT 1");
+  res.json({ name: b?.name || null });
+});
+
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   if (!sane(email, 255) || !sane(password, 200)) return res.status(400).json({ error: "Enter your email and password." });

@@ -9,9 +9,11 @@ body > * { --nav-w: var(--sidebar-width); }
   padding: 24px 14px 20px; background: var(--navy); color: #fff; overflow: hidden auto; isolation: isolate; }
 /* the faint ring behind the lower menu */
 .nav::after { content: ""; position: absolute; z-index: -1; left: -60px; bottom: 70px; width: 280px; height: 280px; border-radius: 50%; border: 12px solid rgba(255, 255, 255, 0.06); pointer-events: none; }
-.nav h1 { margin: 0 0 24px 6px; line-height: 0; }
-.nav h1 a { display: inline-block; border-radius: 6px; }
-.nav h1 img { display: block; width: 176px; max-width: 100%; height: auto; color: #fff; font: 600 22px/1.2 "IBM Plex Sans", sans-serif; } /* the alt text, if the image is missing */
+.nav h1 { margin: 0 0 24px 6px; }
+.nav h1 a { display: inline-block; border-radius: 6px; color: #fff; text-decoration: none; }
+.nav h1 .full { display: block; font: 700 22px/1.2 "IBM Plex Sans", sans-serif; overflow-wrap: anywhere; }
+/* the business's first letter in a square: shown where the name has no room (folded menu, phone bar) */
+.mark { display: flex; align-items: center; justify-content: center; border-radius: var(--radius); background: var(--cyan); color: var(--navy-dark); font: 700 20px "IBM Plex Sans", sans-serif; }
 .nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nav a.link { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--radius); color: #fff; font-size: 15px; text-decoration: none;
   overflow: hidden; white-space: nowrap; transition: padding 0.2s ease; }
@@ -45,9 +47,7 @@ a.link { color: inherit; text-decoration: none; }
 .nav-collapsed .nav h1 { margin-left: 0; text-align: center; }
 .nav-collapsed .nav h1 a { display: block; }
 .nav-collapsed .nav h1 .full { display: none; }
-.nav-collapsed .nav h1 .mark { display: block; width: 40px; height: 40px; margin: 2px auto; object-fit: contain; }
-.nav-collapsed .nav h1 .mark.crop { width: 48px; height: 35px; overflow: hidden; margin: 4px auto 5px; }
-.nav h1 .mark.crop img { width: 140px; max-width: none; height: 35px; }
+.nav-collapsed .nav h1 .mark { display: flex; width: 40px; height: 40px; margin: 2px auto; }
 .nav-collapsed .nav a.link { padding: 13px 15px; }
 .nav-collapsed .nav .label { opacity: 0; }
 .nav-collapsed .navtoggle .icon { transform: rotate(180deg); }
@@ -62,7 +62,7 @@ a.link { color: inherit; text-decoration: none; }
 
 /* A folded item's name beside it on hover and keyboard focus, fixed to the window so the menu's scroll area can't clip it */
 .navtip { position: fixed; z-index: 60; transform: translateY(-50%); background: #fff; color: var(--navy); font-size: 13px; font-weight: 600; line-height: 1.2;
-  padding: 6px 10px; border-radius: 8px; box-shadow: 0 4px 14px rgba(13, 22, 112, 0.18); white-space: nowrap; pointer-events: none; }
+  padding: 6px 10px; border-radius: 8px; box-shadow: 0 4px 14px rgba(40, 24, 15, 0.18); white-space: nowrap; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .app, .nav, .nav a.link, .nav .label, .who > *, .navtoggle .icon { transition: none; } }
 
 .places { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -79,16 +79,14 @@ a.link { color: inherit; text-decoration: none; }
   .navbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 4; margin: -16px -16px 0; padding: 6px 16px 6px 8px; min-height: 56px;
     background: var(--navy); color: #fff; }
   .navhome { display: block; border-radius: 6px; line-height: 0; }
-  .navbar .mark { display: block; width: 36px; height: 36px; object-fit: contain; }
-  .navbar .mark.crop { width: 44px; height: 32px; overflow: hidden; }
-  .navbar .mark.crop img { width: 128px; max-width: none; height: 32px; }
+  .navbar .mark { width: 36px; height: 36px; font-size: 18px; }
   .navtitle { min-width: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .nav { width: min(300px, 86vw); z-index: 50; transform: translateX(-100%); visibility: hidden; box-shadow: 0 0 32px rgba(13, 22, 112, 0.35);
+  .nav { width: min(300px, 86vw); z-index: 50; transform: translateX(-100%); visibility: hidden; box-shadow: 0 0 32px rgba(40, 24, 15, 0.35);
     transition: transform 0.2s ease, visibility 0s linear 0.2s; }
   .nav-open .nav { transform: none; visibility: visible; transition: transform 0.2s ease; }
   .navclose { display: flex; position: absolute; top: 18px; right: 10px; }
-  .navshade { display: block; position: fixed; inset: 0; z-index: 49; background: rgba(13, 22, 112, 0.45); }
+  .navshade { display: block; position: fixed; inset: 0; z-index: 49; background: rgba(40, 24, 15, 0.45); }
   body.nav-open { overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { .nav, .nav-open .nav { transition: none; } }

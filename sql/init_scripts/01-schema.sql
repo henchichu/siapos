@@ -15,8 +15,12 @@ CREATE TABLE IF NOT EXISTS Business (
     RefundOverrideDays SMALLINT UNSIGNED NULL,
     StaffDiscountsNeedApproval BOOLEAN NOT NULL DEFAULT FALSE,   -- FALSE: staff discounts need no manager
     StaffDiscountMaxPercent DECIMAL(5,2) NOT NULL DEFAULT 20.00, -- a bigger staff discount needs a manager's signature
-    
+    OnlyOne TINYINT GENERATED ALWAYS AS (1) STORED,              -- the same value on every row, so UQ_Business_OnlyOne allows one business per database
+
     PRIMARY KEY (BusinessID),
+
+    CONSTRAINT UQ_Business_OnlyOne
+        UNIQUE (OnlyOne),
 
     CONSTRAINT CK_Business_RefundOverrideAmount
         CHECK (RefundOverrideAmount IS NULL OR RefundOverrideAmount >= 0),

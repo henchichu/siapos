@@ -56,6 +56,29 @@ const periodAt = async (businessId, locationId) => {
   return p;
 };
 
+// The rules a shift must keep (they were database triggers): its pay period is open, its clock-in falls in that period by the
+// café's local date, and it overlaps none of the person's other shifts. Locking the employee's row first makes two requests for the
+// same person run one after the other, so neither can slip past the other's check. Call it inside pool.tx, before the write.
+// clockIn and clockOut are UTC (a Date, or null for a shift still running). Clocking out, taking a break and approving change
+// nothing these rules look at, so they don't call it.
+async function checkShift(conn, { id = "", employeeId, locationId, payPeriodId, clockIn, clockOut }) {
+  await conn.query("SELECT EmployeeID FROM Employee WHERE EmployeeID = ? FOR UPDATE", [employeeId]);
+  const [[p]] = await conn.query(
+    `SELECT pp.Closed AS closed, DATE(CONVERT_TZ(?, '+00:00', l.TimeZone)) BETWEEN pp.StartDate AND pp.EndDate AS inside
+       FROM PayPeriod pp JOIN Location l ON l.LocationID = ? WHERE pp.PayPeriodID = ?`,
+    [clockIn, locationId, payPeriodId]
+  );
+  if (!p) throw new HttpError(404, "Pay period not found.");
+  if (p.closed) throw new HttpError(409, "That pay period is closed.");
+  if (!p.inside) throw new HttpError(409, "The clock-in falls outside the pay period.");
+  const [[o]] = await conn.query(
+    `SELECT EXISTS (SELECT 1 FROM TimeEntry WHERE EmployeeID = ? AND TimeEntryID <> ?
+                       AND ClockInAt < COALESCE(?, '9999-12-31') AND ? < COALESCE(ClockOutAt, '9999-12-31')) AS overlap`,
+    [employeeId, id, clockOut, clockIn]
+  );
+  if (o.overlap) throw new HttpError(409, "That shift overlaps another shift for this person.");
+}
+
 // ---- My shift (everyone) --------------------------------------------------------------------------------------
 
 router.get("/shift", async (req, res) => {
@@ -124,15 +147,20 @@ const changed = (r, message) => { if (!r.affectedRows) throw new HttpError(409, 
 
 router.post("/shift/clock-in", async (req, res) => {
   const { businessId, locationId, employeeId } = req.session;
-  const [[already]] = await pool.query("SELECT 1 AS yes FROM TimeEntry WHERE EmployeeID = ? AND TimeEntryStatusCode = ?", [employeeId, OPEN]);
-  if (already) throw new HttpError(409, "You are already clocked in.");
   const period = await periodAt(businessId, locationId);
   if (!period) throw new HttpError(409, "No pay period covers today. Ask a manager to set one up.");
-  await pool.query(
-    `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, TimeEntryStatusCode)
-     VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?)`,
-    [crypto.randomUUID(), employeeId, locationId, businessId, period.id, OPEN]
-  );
+  await pool.tx(async (conn) => {
+    const [[{ now }]] = await conn.query("SELECT UTC_TIMESTAMP() AS now");
+    // checkShift locks the employee first, then the open-shift check below is safe from a second click or screen
+    await checkShift(conn, { employeeId, locationId, payPeriodId: period.id, clockIn: now, clockOut: null });
+    const [[already]] = await conn.query("SELECT 1 AS yes FROM TimeEntry WHERE EmployeeID = ? AND TimeEntryStatusCode = ?", [employeeId, OPEN]);
+    if (already) throw new HttpError(409, "You are already clocked in.");
+    await conn.query(
+      `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, TimeEntryStatusCode)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), employeeId, locationId, businessId, period.id, now, OPEN]
+    );
+  });
   res.json({ ok: true });
 });
 
@@ -248,30 +276,35 @@ router.post("/team/timecards/:id/edit", requirePermission(PERM_APPROVE), async (
   if (!Number.isInteger(brk) || brk < 0) throw new HttpError(400, "Break must be a whole number of minutes.");
 
   const [[entry]] = await pool.query(
-    `SELECT l.TimeZone AS tz FROM TimeEntry te JOIN Location l ON l.LocationID = te.LocationID
+    `SELECT l.TimeZone AS tz, te.EmployeeID AS employeeId, te.LocationID AS locationId, te.PayPeriodID AS payPeriodId
+       FROM TimeEntry te JOIN Location l ON l.LocationID = te.LocationID
       WHERE te.TimeEntryID = ? AND te.BusinessID = ? AND te.LocationID IN (?) AND te.TimeEntryStatusCode IN (?, ?)`,
     [req.params.id, businessId, await myLocations(employeeId), SUBMITTED, REJECTED]
   );
   if (!entry) throw new HttpError(409, "That timecard can't be edited.");
   const [[span]] = await pool.query(
     `SELECT TIMESTAMPDIFF(MINUTE, CONVERT_TZ(?, ?, '+00:00'), CONVERT_TZ(?, ?, '+00:00')) AS minutes,
-            CONVERT_TZ(?, ?, '+00:00') > UTC_TIMESTAMP() AS future`,
-    [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz]
+            CONVERT_TZ(?, ?, '+00:00') > UTC_TIMESTAMP() AS future,
+            CONVERT_TZ(?, ?, '+00:00') AS inUtc, CONVERT_TZ(?, ?, '+00:00') AS outUtc`,
+    [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz,
+     clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz]
   );
   if (!(span.minutes > 0)) throw new HttpError(400, "Clock out must be after clock in.");
   if (span.future) throw new HttpError(400, "A shift can't end in the future."); // clock in is earlier still
   if (brk > span.minutes) throw new HttpError(400, "Break can't be longer than the shift.");
 
-  await pool.query(
-    `UPDATE TimeEntry SET ClockInAt = CONVERT_TZ(?, ?, '+00:00'), ClockOutAt = CONVERT_TZ(?, ?, '+00:00'),
-            UnpaidBreakMinutes = ?, BreakStartedAt = NULL, TimeEntryStatusCode = ?, ApprovedByEmployeeID = NULL
-      WHERE TimeEntryID = ?`,
-    [clockIn.replace("T", " "), entry.tz, clockOut.replace("T", " "), entry.tz, brk, SUBMITTED, req.params.id]
-  );
+  await pool.tx(async (conn) => {
+    await checkShift(conn, { id: req.params.id, employeeId: entry.employeeId, locationId: entry.locationId, payPeriodId: entry.payPeriodId, clockIn: span.inUtc, clockOut: span.outUtc });
+    await conn.query(
+      `UPDATE TimeEntry SET ClockInAt = ?, ClockOutAt = ?, UnpaidBreakMinutes = ?, BreakStartedAt = NULL, TimeEntryStatusCode = ?, ApprovedByEmployeeID = NULL
+        WHERE TimeEntryID = ?`,
+      [span.inUtc, span.outUtc, brk, SUBMITTED, req.params.id]
+    );
+  });
   res.json({ ok: true });
 });
 
-// Closing freezes the whole period (the database refuses any later change to its shifts), so nothing may still be waiting
+// Closing freezes the whole period (an edit to one of its shifts is refused, see checkShift), so nothing may still be waiting
 router.post("/team/pay-periods/:id/close", requirePermission(PERM_APPROVE), async (req, res) => {
   const { businessId, locationId } = req.session;
   const finalized = await pool.tx(async (conn) => {

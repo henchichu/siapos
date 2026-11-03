@@ -10,6 +10,9 @@ GRANT SELECT ON miniworld.* TO 'app_user'@'%';
 --     ledger, whose trigger writes with its definer's rights
 --   OrderItemModifier, OrderItemComponent, OrderDiscount, PromotionRedemption  insert only
 --   OrderItem, Payment, TimeEntry  never deleted
+--   Payment  insert, and change its status (a refund marks it refunded): its amount, order, method and tip never change
+--   Refund  insert, and settle one (status, date, who approved): its amount never changes
+--   ReturnItem  insert and delete (a rejected refund releases its items): never edited
 DELIMITER $$
 CREATE PROCEDURE GrantAppUser()
 BEGIN
@@ -36,7 +39,9 @@ BEGIN
             WHEN 'OrderDiscount' THEN 'INSERT'
             WHEN 'PromotionRedemption' THEN 'INSERT'
             WHEN 'OrderItem' THEN 'INSERT, UPDATE'
-            WHEN 'Payment' THEN 'INSERT, UPDATE'
+            WHEN 'Payment' THEN 'INSERT, UPDATE (PaymentStatusCode)'
+            WHEN 'Refund' THEN 'INSERT, UPDATE (RefundStatusCode, RefundDateTime, ApprovedByEmployeeID, UpdatedBy)'
+            WHEN 'ReturnItem' THEN 'INSERT, DELETE'
             WHEN 'TimeEntry' THEN 'INSERT, UPDATE'
             ELSE 'INSERT, UPDATE, DELETE' END;
 

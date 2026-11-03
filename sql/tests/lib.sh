@@ -31,7 +31,10 @@ for tb in $(R "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHE
     PayPeriod) g="UPDATE (Closed)" ;;
     Inventory) g="INSERT (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold), UPDATE (ReorderThreshold)" ;;
     OrderItemModifier|OrderItemComponent|OrderDiscount|PromotionRedemption) g="INSERT" ;;
-    OrderItem|Payment|TimeEntry) g="INSERT, UPDATE" ;;
+    OrderItem|TimeEntry) g="INSERT, UPDATE" ;;
+    Payment) g="INSERT, UPDATE (PaymentStatusCode)" ;;
+    Refund) g="INSERT, UPDATE (RefundStatusCode, RefundDateTime, ApprovedByEmployeeID, UpdatedBy)" ;;
+    ReturnItem) g="INSERT, DELETE" ;;
     *) g="INSERT, UPDATE, DELETE" ;;
   esac
   R "GRANT $g ON @DB@.\`$tb\` TO 'app_user'@'%';" >/dev/null

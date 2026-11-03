@@ -87,7 +87,7 @@ const authenticate = (employeeNumber, pin, payerId) =>
     return recordFailure(conn, payerId);
   });
 
-// Same rule as the DB's HasPermission() (app_user can't execute routines): a role may do what RolePermission grants
+// A role may do what RolePermission grants, and only while the employee and the role are active
 const hasPermission = (db, employeeId, code) =>
   db
     .query(

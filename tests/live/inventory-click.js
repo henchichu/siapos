@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool, creds } = require("./env");
+const { start, client, pool, admin, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -50,7 +50,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("a row shows on hand with its unit, reorder level, average cost and status", /^\d+ ml$/.test(cells(row("Whole milk"))[1]) && /^\$0\.00\d+$/.test(cells(row("Whole milk"))[3]) && cells(row("Whole milk"))[4] === "OK");
   check("at or below the reorder level is LOW", cells(row("Blueberry muffin"))[4] === "LOW" && row("Blueberry muffin").querySelector("td.low"));
   check("the form column isn't there until a row action", !m.$(".pform"));
-  check("footer shows employee, role and location", /Maya Okafor/.test(m.text()) && /General manager · Brewbean Campus/.test(m.text()));
+  check("footer shows employee, role and location", /Maya Okafor/.test(m.text()) && /General manager · Brewbean Downtown/.test(m.text()));
 
   await m.click(m.$("input[type=checkbox]"), 200);
   check("Low stock only keeps just the LOW rows", rows().length >= 1 && rows().every((r) => cells(r)[4] === "LOW"));
@@ -91,7 +91,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
     await restore();
     await pool.query("DELETE FROM Supplier WHERE Name LIKE ?", [`UI supplier ${stamp}%`]); // never delivered to
     await pool.query("DELETE FROM StockItemSupplier WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
-    await pool.query("DELETE FROM Inventory WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
+    await admin.query("DELETE FROM Inventory WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
     await pool.query("DELETE FROM StockItem WHERE Name LIKE ?", [`UI stock ${stamp}%`]); // no ledger rows, so it can go
   };
   await m.click(m.byText(".phead .pbtn", "Add stock item"));
@@ -119,7 +119,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 
   // Receive delivery
   await m.click(m.byText(".tab", "Receive delivery"), 500);
-  check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Campus/.test(m.text()));
+  check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Downtown/.test(m.text()));
   check("recent deliveries are there, and no pending deliveries panel", !!m.$('section[aria-label="Recent deliveries"]') && !m.$('section[aria-label="Pending deliveries"]') && !/Pending/.test(m.$$(".tabs .tab").map((t) => t.textContent).join("|")));
   await m.click(m.byText('section[aria-label="Receive delivery"] button', "Clear"), 200);
   await m.choose(m.byText(".pform select, section[aria-label='Receive delivery'] select", "").closest("section").querySelectorAll("select")[0], "sup-supply");
@@ -183,7 +183,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   await cleanup();
-  server.close(); await pool.end();
+  server.close(); await pool.end(); await admin.end();
   console.log(fails ? `${fails} FAILED` : "ALL PASSED");
   process.exit(fails ? 1 : 0);
 })().catch(async (e) => { console.error(e); await cleanup().catch(() => {}); process.exit(1); });

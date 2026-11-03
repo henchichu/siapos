@@ -31,7 +31,7 @@ test("only roles with something to act on see Needs attention", async () => {
   assert.equal((await page(manager, "/attention.html")).status, 200);
 
   const data = await attention();
-  assert.equal(data.location, "Brewbean Campus");
+  assert.equal(data.location, "Brewbean Downtown");
   for (const k of ["losses", "reorder", "timecards", "refunds"]) assert.ok(data[k] && Number.isInteger(data[k].count) && Array.isArray(data[k].rows) && data[k].rows.length <= 8, k);
   assert.equal(data.pendingDeliveries, undefined);
   const inventory = (await manager.call("/inventory")).body;

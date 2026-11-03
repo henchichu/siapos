@@ -49,7 +49,7 @@ const pct = (a, p) => a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length 
 (async () => {
   const [[{ first }]] = await pool.query("SELECT COALESCE(MAX(OrderNumber), 0) AS first FROM Orders WHERE BusinessID = 'biz-brewbean'");
   const [recipe] = await pool.query("SELECT StockItemID AS id FROM VariantRecipe WHERE VariantID = 'var-croissant'");
-  for (const r of recipe) for (const place of ["loc-campus", "loc-downtown"]) await topUp(r.id, 100000, place).catch(() => {}); // the registers' café may be either
+  for (const r of recipe) for (const place of ["loc-downtown"]) await topUp(r.id, 100000, place).catch(() => {});
   console.log(`${REGISTERS} registers for ${SECONDS}s (staff ${STAFF})`);
   const start = Date.now(), until = start + SECONDS * 1000;
   await Promise.all(Array.from({ length: REGISTERS }, (_, i) => register(i + 1, until)));

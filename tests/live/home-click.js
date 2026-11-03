@@ -41,7 +41,7 @@ async function home(base, number, pin) {
   check("barista sees only Kitchen, My shift and Sign out", barista.names === "Kitchen|Sign out|My shift", barista.names);
   check("hidden tiles aren't in the page at all", !/Inventory|Reports/.test(barista.w.document.body.textContent));
 
-  check("header shows Home and the register and location", /^Home/.test(barista.header) && /Brewbean Campus/.test(barista.header) && /Counter - Brewbean Campus/.test(barista.header), barista.header);
+  check("header shows Home and the register and location", /^Home/.test(barista.header) && /Brewbean Downtown/.test(barista.header) && /Counter - Brewbean Downtown/.test(barista.header), barista.header);
   const link = (h, n) => h.tiles.find((t) => t.textContent.trim() === n)?.getAttribute("href");
   check("tiles open their pages", link(owner, "Register") === "/register.html" && link(owner, "Kitchen") === "/kitchen.html" && link(owner, "My shift") === "/shift.html" && link(owner, "Inventory") === "/inventory.html" && link(owner, "Needs attention") === "/attention.html" && link(owner, "Orders") === "/orders.html" && link(owner, "Reports") === "/reports.html");
   check("every tile has its icon and the grid is uniform", owner.tiles.every((t) => t.querySelector("img")?.getAttribute("src")?.startsWith("/img/home/")));

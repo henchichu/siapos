@@ -1,6 +1,6 @@
 USE miniworld;
 
--- Development seed: "Brewbean Coffee", two Chicago cafés with two weeks of trading.
+-- Development seed: "Brewbean Coffee", one Chicago café with two weeks of trading.
 -- Dev only: leave this file out of a production build.
 -- It runs after 04-triggers.sql, so every row passes the same rules the backend will.
 -- IDs are readable on purpose (the backend will generate UUIDs). Dates are relative to
@@ -20,8 +20,7 @@ VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 2
 
 INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
 VALUES
-    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz),
-    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz);
+    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz);
 
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
@@ -40,7 +39,7 @@ INSERT INTO Register (RegisterID, LocationID, Name, RegStatusCode)
 VALUES
     ('reg-dt-1', 'loc-downtown', 'Front counter', 1),
     ('reg-dt-2', 'loc-downtown', 'Pickup window', 3),    -- 3 = MAINTENANCE
-    ('reg-cp-1', 'loc-campus',   'Counter',       1);
+    ('reg-cp-1', 'loc-downtown', 'Counter',       1);
 
 -- ---------------------------------------------------------------------------
 -- Staff, pay, shifts
@@ -76,12 +75,12 @@ VALUES
 
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID)
 VALUES
-    ('emp-maya', 'loc-downtown', @biz), ('emp-maya', 'loc-campus', @biz),
+    ('emp-maya', 'loc-downtown', @biz),
     ('emp-leo',  'loc-downtown', @biz),
     ('emp-sam',  'loc-downtown', @biz),
-    ('emp-priya', 'loc-campus', @biz),
-    ('emp-jordan', 'loc-campus', @biz),
-    ('emp-ana', 'loc-campus', @biz);
+    ('emp-priya', 'loc-downtown', @biz),
+    ('emp-jordan', 'loc-downtown', @biz),
+    ('emp-ana', 'loc-downtown', @biz);
 
 -- Priya got a raise when the current pay period started
 INSERT INTO EmployeePayRate (PayRateID, EmployeeID, BusinessID, HourlyRate, EffectiveFrom, EffectiveTo)
@@ -113,8 +112,8 @@ INSERT INTO _seed_shift
 VALUES
     ('emp-leo',    'loc-downtown', '08:00', 510, 0),
     ('emp-sam',    'loc-downtown', '06:30', 510, 2),
-    ('emp-priya',  'loc-campus',   '07:00', 510, 4),
-    ('emp-jordan', 'loc-campus',   '11:00', 450, 1);
+    ('emp-priya',  'loc-downtown', '07:00', 510, 4),
+    ('emp-jordan', 'loc-downtown', '11:00', 450, 1);
 
 -- Last pay period: approved. This one: submitted. The manager approves staff; the general manager approves the manager.
 INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID,
@@ -308,7 +307,7 @@ INSERT INTO PromotionProduct (PromotionID, ProductID, BusinessID)
 VALUES ('promo-morning-pastry', 'prd-croissant', @biz), ('promo-morning-pastry', 'prd-muffin', @biz);
 
 -- ---------------------------------------------------------------------------
--- Orders: 6-10 a day per café over the last 13 days, 7am-5pm local
+-- Orders: 6-10 a day over the last 13 days, 7am-5pm local
 -- ---------------------------------------------------------------------------
 CREATE TABLE _seed_order (OrderID CHAR(36) PRIMARY KEY, LocationID CHAR(36), h BIGINT,
                           LocalAt DATETIME, UtcAt DATETIME, ChannelCode TINYINT, RegisterID CHAR(36),
@@ -328,7 +327,7 @@ SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:
                CRC32(CONCAT(l.lc, d.n, '-', s.n)) h,
                TIMESTAMP(@D - INTERVAL d.n DAY,
                          MAKETIME(7 + s.n, MOD(CRC32(CONCAT(l.lc, d.n, '-', s.n, 'm')), 50), 0)) LocalAt
-          FROM (SELECT 'loc-downtown' LocationID, 'dt' lc UNION ALL SELECT 'loc-campus', 'cp') l
+          FROM (SELECT 'loc-downtown' LocationID, 'dt' lc) l
           JOIN _seed_seq d ON d.n BETWEEN 1 AND 13
           JOIN _seed_seq s ON s.n < 6 + MOD(CRC32(CONCAT(l.lc, d.n)), 5)) x;
 
@@ -423,7 +422,7 @@ INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, Cus
 SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt
   FROM _seed_order
  UNION ALL       -- cancelled below; inserted here so order numbers follow time
-SELECT 'ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
+SELECT 'ord-cp-cancelled', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00')
  ORDER BY 8, 1;
 
@@ -523,15 +522,15 @@ CREATE TABLE _seed_loss (ID CHAR(36), LocationID CHAR(36), StockItemID CHAR(36),
 INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime, Note)
 VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
     ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15', 'Dropped jug'),
-    ('itx-loss-02', 'loc-campus',   'stk-beans',     'emp-priya',   -340, 5,  9, '10:40', 'Bag split on the shelf'),
+    ('itx-loss-02', 'loc-downtown', 'stk-beans',     'emp-priya',   -340, 5,  9, '10:40', 'Bag split on the shelf'),
     ('itx-loss-03', 'loc-downtown', 'stk-croissant', 'emp-sam',       -4, 6, 10, '17:30', NULL),
-    ('itx-loss-04', 'loc-campus',   'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30', NULL),
+    ('itx-loss-04', 'loc-downtown', 'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30', NULL),
     ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30', NULL),
-    ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
+    ('itx-loss-06', 'loc-downtown', 'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
     ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00', 'Soured before its date'),
-    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-ana',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
+    ('itx-loss-08', 'loc-downtown', 'stk-bag',       'emp-ana',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
     ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00', NULL),
-    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-ana',        6, 8,  1, '18:00', NULL);
+    ('itx-loss-10', 'loc-downtown', 'stk-cup-12',    'emp-ana',        6, 8,  1, '18:00', NULL);
 
 -- Yesterday's closing count at each café: every stock item counted, one difference each
 INSERT INTO StockCount (StockCountID, BusinessID, LocationID, CountedByEmployeeID, CountedAt, ItemsCounted, Note)
@@ -539,7 +538,7 @@ SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, IF(l.Loca
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL 1 DAY, '18:00'), @tz, '+00:00'),
        (SELECT COUNT(*) FROM StockItem WHERE BusinessID = @biz),
        IF(l.LocationID = 'loc-downtown', 'Sleeve of 16 oz cups crushed in the back', 'Found a spare sleeve of 12 oz cups')
-  FROM Location l WHERE l.LocationID IN ('loc-downtown', 'loc-campus');
+  FROM Location l WHERE l.LocationID = 'loc-downtown';
 UPDATE _seed_loss SET StockCountID = CONCAT('cnt-', SUBSTRING(LocationID, 5)) WHERE TypeCode = 8;
 
 -- Staged: the ledger trigger updates Inventory, so the INSERT can't read Inventory itself.

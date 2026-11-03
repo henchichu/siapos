@@ -85,7 +85,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("the four cards", m.cards().map(([k]) => k).join("|") === "Net sales|Orders|Average order|Tax collected", m.cards().join());
   check("one bar per day, last 7 days", m.bars().length === 7);
   check("table columns", m.heads().join("|") === "Date|Location|Orders|Gross|Discounts|Refunds|Net sales", m.heads().join("|"));
-  check("a row per day, all at their location", m.rows().length >= 6 && m.rows().every((r) => r.textContent.includes("Brewbean Campus")));
+  check("a row per day, all at their location", m.rows().length >= 6 && m.rows().every((r) => r.textContent.includes("Brewbean Downtown")));
   const sumNet = m.rows().reduce((a, r) => a + dollars(r.lastElementChild.textContent), 0);
   check("the Total row adds up and matches Net sales", m.foot()[0] === "Total" && Math.abs(dollars(m.foot()[6]) - sumNet) < 0.005 && m.foot()[6] === m.cards()[0][1], m.foot().join("|"));
 
@@ -97,7 +97,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.type(m.field("From"), from);
   check("the report waits for Run report", m.bars().length === 7);
   await m.click(m.byText("button", "Run report"), 700);
-  check("Run report: 14 days, Campus only", m.bars().length === 14 && m.rows().every((r) => r.children[1].textContent === "Brewbean Campus") && /Brewbean Campus/.test(m.$(".report .sub").textContent));
+  check("Run report: 14 days, Downtown only", m.bars().length === 14 && m.rows().every((r) => r.children[1].textContent === "Brewbean Downtown") && /Brewbean Downtown/.test(m.$(".report .sub").textContent));
 
   await m.type(m.field("From"), "2026-12-01");
   await m.click(m.byText("button", "Run report"), 500);

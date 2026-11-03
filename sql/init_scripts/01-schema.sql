@@ -1075,7 +1075,7 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     TaxCategoryID CHAR(36) NOT NULL,           -- snapshot of the variant's category
     TaxRate DECIMAL(7,6) NOT NULL,             -- snapshot of LocationTaxRate.Rate
     TaxAmount DECIMAL(10,2) NOT NULL,          -- tax on (LineTotal - DiscountAmount)
-    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,  -- copied from the order by TR_OrderItem_BeforeInsert
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,  -- copied from the order by the backend (server/orderlines.js); the key below keeps the two equal
     NetAmount DECIMAL(10,2) AS
         (LineTotal - DiscountAmount - IF(PricesIncludeTax, TaxAmount, 0)) STORED,  -- revenue before tax
 

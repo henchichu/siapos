@@ -32,11 +32,12 @@ async function addOrderLines(conn, { orderId, businessId, locationId, employeeId
   for (const l of priced.lines) {
     const itemId = crypto.randomUUID();
     await conn.query(
+      // the line carries its order's tax convention (a foreign key ties the two), so it is copied from the order
       `INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
-                              DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              DiscountAmount, TaxCategoryID, TaxRate, TaxAmount, PricesIncludeTax)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT PricesIncludeTax FROM Orders WHERE OrderID = ?))`,
       [itemId, orderId, l.variantId, businessId, l.quantity, dollars(l.unitCents), dollars(l.lineCents),
-       dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents)]
+       dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents), orderId]
     );
     for (const m of l.modifiers)
       await conn.query("INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta) VALUES (?, ?, ?, ?)",

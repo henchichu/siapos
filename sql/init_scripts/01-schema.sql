@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS Location (
     Address VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
-    AcceptsOnlineOrders BOOLEAN NOT NULL DEFAULT FALSE,   -- switched on by hand in SQL
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -923,8 +922,6 @@ CREATE TABLE IF NOT EXISTS Orders (
     DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- sum of OrderItem.DiscountAmount
     Total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by TR_Orders_BeforeInsert
-    PickupAt DATETIME NULL,                              -- online only; NULL = as soon as possible
-    CustomerNote VARCHAR(255) NULL,
 
     PRIMARY KEY (OrderID),
 
@@ -943,9 +940,6 @@ CREATE TABLE IF NOT EXISTS Orders (
     CONSTRAINT UQ_Orders_Business_OrderNumber
         UNIQUE (BusinessID, OrderNumber),
 
-    CONSTRAINT CK_Orders_PickupAt
-        CHECK (PickupAt IS NULL OR (ChannelCode = 2 AND PickupAt >= OrderDateTime)),   -- 2 = ONLINE
-    
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)

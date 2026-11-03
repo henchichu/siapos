@@ -4,18 +4,13 @@ USE miniworld;
 -- two New, two Preparing, one Ready, plus one stock loss reported today.
 SET @biz = 'biz-brewbean';
 
--- Campus stopped taking online orders at the end of 05-dev-seed.sql; switch it on just for this insert
-UPDATE Location SET AcceptsOnlineOrders = TRUE WHERE LocationID = 'loc-campus';
-
-INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime, PickupAt, CustomerNote, OrderStatusCode)
+INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime, OrderStatusCode)
 VALUES
-    ('ord-kds-1', 'loc-campus', @biz, NULL,       NULL,        'cus-ava', 2, UTC_TIMESTAMP() - INTERVAL 6 MINUTE,  UTC_TIMESTAMP() + INTERVAL 14 MINUTE, 'Extra hot, please', 2),
-    ('ord-kds-2', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,       1, UTC_TIMESTAMP() - INTERVAL 3 MINUTE,  NULL, NULL, 2),
-    ('ord-kds-3', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-ben',  1, UTC_TIMESTAMP() - INTERVAL 11 MINUTE, NULL, NULL, 3),
-    ('ord-kds-4', 'loc-campus', @biz, NULL,       NULL,        'cus-chloe', 2, UTC_TIMESTAMP() - INTERVAL 15 MINUTE, UTC_TIMESTAMP() + INTERVAL 5 MINUTE, NULL, 3),
-    ('ord-kds-5', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,       1, UTC_TIMESTAMP() - INTERVAL 20 MINUTE, NULL, NULL, 4);
-
-UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus';
+    ('ord-kds-1', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-ava',   1, UTC_TIMESTAMP() - INTERVAL 6 MINUTE,  2),
+    ('ord-kds-2', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 3 MINUTE,  2),
+    ('ord-kds-3', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-ben',   1, UTC_TIMESTAMP() - INTERVAL 11 MINUTE, 3),
+    ('ord-kds-4', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', 'cus-chloe', 1, UTC_TIMESTAMP() - INTERVAL 15 MINUTE, 3),
+    ('ord-kds-5', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL,        1, UTC_TIMESTAMP() - INTERVAL 20 MINUTE, 4);
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal, TaxCategoryID, TaxRate, TaxAmount)
 VALUES

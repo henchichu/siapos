@@ -7,9 +7,6 @@ const fs = require("fs");
 const app = require("../../server/server");
 const pool = require("../../server/database/connection");
 
-const kioskApp = require("../../server/kiosk");
-// The public order page is its own server (server/kiosk.js), separate from the staff one
-const startKiosk = () => new Promise((resolve) => { const s = kioskApp.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 const start = () => new Promise((resolve) => { const s = app.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 
 // Small client that keeps the session cookie
@@ -74,8 +71,6 @@ async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
 // The mock processor (server/mockpay.js) approves this one; its expiry is far enough ahead not to age out
 const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" };
 
-// A phone at the Campus café: the page sends the café it was opened for (its QR code) with every call
-const phone = (base, locationId = "loc-campus") => client(base, { "x-location-id": locationId });
 
 // Everything a sign-up (and these tests) can put in a business, children first
 // A business made by a sign-up test, with everything in it
@@ -91,4 +86,4 @@ async function removeBusiness(id) {
   for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
 }
 
-module.exports = { start, startKiosk, client, phone, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };
+module.exports = { start, client, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

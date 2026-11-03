@@ -44,15 +44,13 @@ INSERT INTO Role (RoleID, BusinessID, Name, OpensTo) VALUES (UUID(), '<business 
 
 -- ---- cafés, registers, tax ---------------------------------------------------------------------------------------
 -- A new café needs its tax rates before it can take a sale; every tax category needs a row.
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone, AcceptsOnlineOrders)
-VALUES (UUID(), '<business id>', 'Name', 'Address', '312-555-0102', 'America/Chicago', FALSE);
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
+VALUES (UUID(), '<business id>', 'Name', 'Address', '312-555-0102', 'America/Chicago');
 INSERT INTO Register (RegisterID, LocationID, Name) VALUES (UUID(), '<location id>', 'Counter');
 INSERT INTO LocationTaxRate (LocationID, TaxCategoryID, BusinessID, Rate)
 SELECT '<location id>', TaxCategoryID, BusinessID, 0.082500 FROM TaxCategory WHERE BusinessID = '<business id>';
 UPDATE LocationTaxRate SET Rate = 0.090000 WHERE LocationID = '<location id>' AND TaxCategoryID = '<tax category id>';   -- 0.09 = 9%
-UPDATE Location SET AcceptsOnlineOrders = TRUE WHERE LocationID = '<location id>';
 UPDATE Location SET Active = FALSE WHERE LocationID = '<location id>';       -- reassign its staff first
--- The café's order link is https://<KIOSK_HOST>/order/<location id>
 
 -- ---- business settings and menu categories -----------------------------------------------------------------------
 -- Refund limits (NULL turns one off): a manager must sign a refund over this amount, or on an order older than this many days

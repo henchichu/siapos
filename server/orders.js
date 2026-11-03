@@ -11,7 +11,6 @@ const PERM_REFUND = 2;
 const PERM_SEARCH_ORDERS = 16;
 const SHOWN = 200; // rows a search lists; the count is the full figure
 const MAX_DAYS = 366;
-const ONLINE = 2;
 
 const router = express.Router();
 router.use("/orders", requirePermission(PERM_SEARCH_ORDERS));
@@ -52,7 +51,7 @@ router.get("/orders", async (req, res) => {
 
   const [[{ n }]] = await pool.query(`SELECT COUNT(*) AS n FROM Orders o JOIN Location l ON l.LocationID = o.LocationID WHERE ${where.join(" AND ")}`, params);
   const [rows] = await pool.query(
-    `SELECT o.OrderID AS id, o.OrderDateTime AS placedAt, l.TimeZone AS timeZone, o.OrderNumber AS orderNumber, o.ChannelCode AS channel,
+    `SELECT o.OrderID AS id, o.OrderDateTime AS placedAt, l.TimeZone AS timeZone, o.OrderNumber AS orderNumber,
             g.Name AS register, ${nameOf("e")} AS employee, ${nameOf("c")} AS member, s.Description AS status, o.Total AS total
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderStatus s ON s.OrderStatusCode = o.OrderStatusCode
        LEFT JOIN Register g ON g.RegisterID = o.RegisterID LEFT JOIN Employee e ON e.EmployeeID = o.EmployeeID LEFT JOIN Customer c ON c.CustomerID = o.CustomerID
@@ -68,7 +67,7 @@ router.get("/orders", async (req, res) => {
     from, to, count: n, shown: SHOWN, filters,
     orders: rows.map((r) => ({
       id: r.id, placedAt: r.placedAt, timeZone: r.timeZone, orderNumber: r.orderNumber,
-      source: r.channel === ONLINE ? "Online" : r.register || "Register", employee: r.employee, member: r.member || "Walk-in",
+      source: r.register || "Register", employee: r.employee, member: r.member || "Walk-in",
       status: label(r.status), total: Number(r.total),
     })),
   });
@@ -78,9 +77,9 @@ router.get("/orders/:id", async (req, res) => {
   const { businessId, employeeId } = req.session;
   const mine = await myLocations(employeeId);
   const [[o]] = mine.length ? await pool.query(
-    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.ChannelCode AS channel, o.OrderStatusCode AS statusCode,
+    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.OrderStatusCode AS statusCode,
             s.Description AS status, o.Subtotal AS subtotal, o.DiscountAmount AS discount, o.Tax AS tax, o.Total AS total, o.PricesIncludeTax AS pricesIncludeTax,
-            o.PickupAt AS pickupAt, o.CustomerNote AS note, l.Name AS location, l.TimeZone AS timeZone, g.Name AS register,
+            l.Name AS location, l.TimeZone AS timeZone, g.Name AS register,
             ${nameOf("e")} AS employee, ${nameOf("c")} AS customer
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderStatus s ON s.OrderStatusCode = o.OrderStatusCode
        LEFT JOIN Register g ON g.RegisterID = o.RegisterID LEFT JOIN Employee e ON e.EmployeeID = o.EmployeeID LEFT JOIN Customer c ON c.CustomerID = o.CustomerID
@@ -112,9 +111,8 @@ router.get("/orders/:id", async (req, res) => {
 
   const tipRows = payments.filter((p) => [3, 5].includes(p.statusCode) && Number(p.tip) > 0);
   const tip = tipRows.reduce((a, p) => a + Number(p.tip), 0);
-  const online = o.channel === ONLINE;
   res.json({
-    id: o.id, orderNumber: o.orderNumber, timeZone: o.timeZone, placedAt: o.placedAt, status: label(o.status), source: online ? "Online" : o.register || "Register",
+    id: o.id, orderNumber: o.orderNumber, timeZone: o.timeZone, placedAt: o.placedAt, status: label(o.status), source: o.register || "Register",
     total: Number(o.total),
     canRefund: [5, 7].includes(o.statusCode) && (await hasPermission(pool, employeeId, PERM_REFUND)),
     items: items.map((i) => ({
@@ -132,8 +130,7 @@ router.get("/orders/:id", async (req, res) => {
       ...(tip ? [{ type: "Tip", method: null, amount: tip, status: null, at: tipRows[tipRows.length - 1].at }] : []),
     ],
     where: {
-      location: o.location, register: online ? null : o.register, rungUpBy: online ? "Online" : o.employee,
-      customer: o.customer || "Walk-in", pickup: online ? { at: o.pickupAt } : null, note: o.note,
+      location: o.location, register: o.register, rungUpBy: o.employee, customer: o.customer || "Walk-in",
     },
     history: history.map((h) => ({ at: h.at, status: label(h.status), by: h.byName })),
   });

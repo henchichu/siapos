@@ -6,7 +6,6 @@ const { notify } = require("./watchers");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
 const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
-const kioskOrders = require("./kioskorders");
 const check = require("./validate");
 const { verifyOverride, findStaff, staffRules } = require("./override");
 const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval } = require("./session");
@@ -92,10 +91,6 @@ router.get("/register/member", async (req, res) => {
   res.json({ id: m.CustomerID, name: [m.FirstName, m.LastName].filter(Boolean).join(" "), tier: m.Tier, points: Number(m.Points) });
 });
 
-// Kiosk orders waiting to be paid at the counter: the cashier takes the cash, or cancels the order and its stock goes back
-router.get("/register/kiosk-orders", async (req, res) => res.json({ orders: await kioskOrders.pendingAt(req.session.locationId), holdMinutes: kioskOrders.HOLD_MINUTES }));
-router.post("/register/kiosk-orders/:id/pay", async (req, res) => { await kioskOrders.pay(req.session, String(req.params.id)); res.json({ ok: true }); });
-router.post("/register/kiosk-orders/:id/cancel", async (req, res) => { await kioskOrders.cancelAt(req.session, String(req.params.id)); res.json({ ok: true }); });
 
 const clientView = (p) => ({
   lines: p.lines.map((l) => ({ key: l.key, unitCents: l.unitCents, lineCents: l.lineCents, discountCents: l.lineDiscountCents })),

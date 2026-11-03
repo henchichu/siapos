@@ -15,7 +15,6 @@ SET @location_name   = 'Example Coffee Downtown';
 SET @location_addr   = '1 Main St, Chicago, IL';
 SET @location_phone  = '312-555-0101';
 SET @time_zone       = 'America/Chicago';        -- an IANA name MySQL knows
-SET @online_orders   = FALSE;                    -- TRUE: the café's QR order page takes orders
 
 -- Percent, as a fraction: 0.0825 = 8.25%. One line per tax category below.
 SET @rate_standard   = 0.082500;
@@ -44,8 +43,8 @@ SET @t_ex  = UUID();
 INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, PricesIncludeTax)
 VALUES (@biz, @business_name, @contact_email, @contact_phone, @prices_include_tax);
 
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone, AcceptsOnlineOrders)
-VALUES (@loc, @biz, @location_name, @location_addr, @location_phone, @time_zone, @online_orders);
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
+VALUES (@loc, @biz, @location_name, @location_addr, @location_phone, @time_zone);
 
 INSERT INTO Register (RegisterID, LocationID, Name) VALUES (UUID(), @loc, 'Counter');   -- add more rows for more registers
 

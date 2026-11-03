@@ -187,7 +187,6 @@ test("history: paid orders, total spent less refunds, points per order, adjustme
   assert.equal(h.spentCents, sale.body.totalCents - refund.body.totalCents);
   const order = h.rows.find((x) => x.kind === "order");
   assert.equal(order.number, sale.body.orderNumber);
-  assert.equal(order.source, "Register");
   assert.equal(order.items, 2);
   assert.equal(order.totalCents, sale.body.totalCents);
   assert.equal(order.refundedCents, refund.body.totalCents);

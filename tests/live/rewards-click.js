@@ -128,10 +128,10 @@ async function open(base, number, pin, at = "/rewards.html") {
   check("cards: name and tier, points, orders, total spent", cards.length === 4 && cards[0] === "Chloe Moreau=Bean" && /^Points balance=\d+$/.test(cards[1])
     && /^Orders=\d+$/.test(cards[2]) && /^Total spent=\$\d+\.\d\d$/.test(cards[3]), cards.join(" | "));
   check("contact · member since", /^chloe@example\.com · 312-555-0177 · member since \w{3} \d+, \d{4}$/.test(m.byText(".phead .sub", "chloe")?.textContent || ""));
-  check("history columns", m.$$("table[aria-label='Orders and points'] thead th").map((t) => t.textContent).join("|") === "Date|Order|Source|Items|Total|Points earned|Points redeemed|");
+  check("history columns", m.$$("table[aria-label='Orders and points'] thead th").map((t) => t.textContent).join("|") === "Date|Order|Items|Total|Points earned|Points redeemed|");
   const first = m.$("table[aria-label='Orders and points'] tbody tr");
-  check("a row: date, order, source, items, total, points, View", /\d{4}, \d+:\d\d/.test(first.cells[0].textContent) && /^(Register|Online)$/.test(first.cells[2].textContent)
-    && /\d+ items?/.test(first.cells[3].textContent) && /^\$/.test(first.cells[4].textContent) && first.cells[7].textContent === "View", [...first.cells].map((c) => c.textContent).join("|"));
+  check("a row: date, order, items, total, points, View", /\d{4}, \d+:\d\d/.test(first.cells[0].textContent)
+    && /\d+ items?/.test(first.cells[2].textContent) && /^\$/.test(first.cells[3].textContent) && first.cells[6].textContent === "View", [...first.cells].map((c) => c.textContent).join("|"));
   await m.click(first.querySelector("button"), 800);
   const dlg = m.$("dialog[open]");
   check("View shows the order's details", new RegExp(`^Order ${first.cells[1].textContent.replace(/\D.*/, "")}`).test(dlg?.querySelector("h2")?.textContent || "")

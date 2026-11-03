@@ -2,16 +2,14 @@
 // message, and saves nothing. The rules themselves are in tests/unit/validate.test.js.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const crypto = require("crypto");
-const { start, startKiosk, client, phone, pool, TEST_CARD, creds, unlock } = require("./env");
+const { start, client, pool, TEST_CARD, creds, unlock } = require("./env");
 
-let env, pub, maya, sam; // env: the staff server, pub: the public order page
+let env, maya, sam;
 const signIn = async (number, pin) => { const c = client(env.base); assert.equal((await c.call("/login", creds(number))).status, 200); return c; };
 const refused = (r, pattern) => { assert.equal(r.status, 400, JSON.stringify(r.body)); assert.match(r.body.error, pattern); };
 
-test.before(async () => { env = await start(); pub = await startKiosk(); maya = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); });
-test.beforeEach(() => require("../../server/customers").resetOrderLimit());
-test.after(async () => { env.server.close(); pub.server.close(); await pool.end(); });
+test.before(async () => { env = await start(); maya = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); });
+test.after(async () => { env.server.close(); await pool.end(); });
 
 test("login: missing or oversize entries are refused, and a wrong email and a wrong password get the same answer", async () => {
   const c = client(env.base);
@@ -42,16 +40,6 @@ test("a supplier's name, email and phone are checked", async () => {
 test("member names are letters only, with every problem listed together", async () => {
   const m = await maya.call("/rewards/members", { firstName: "Pat 🙂", lastName: "", email: "pat@@example.com", phone: "x" });
   refused(m, /first name/); refused(m, /valid email/); refused(m, /US phone number/);
-});
-
-test("kiosk: guest name and note are checked, and too-long is an error rather than a cut", async () => {
-  const c = phone(pub.base);
-  const order = (extra) => c.call("/customer/orders", { idempotencyKey: crypto.randomUUID(), paymentMethod: "Cash", guestName: "Pat", items: [{ key: "a", variantId: "var-croissant", quantity: 1 }], ...extra });
-  refused(await order({ guestName: "Pat 🙂" }), /name for the order/);
-  refused(await order({ guestName: "R2D2" }), /name for the order/);
-  refused(await order({ guestName: "a".repeat(51) }), /name for the order/);
-  refused(await order({ note: "x".repeat(121) }), /too long/);
-  refused(await order({ note: "no\u0000pe" }), /can't be shown/);
 });
 
 test("register: tips, payment methods and card numbers are checked", async () => {

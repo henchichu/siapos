@@ -1,4 +1,4 @@
-// What a counter sale and a kiosk order share: the lines, their options, the stock each takes with its cost, and the ledger.
+// What a counter sale needs: the lines, their options, the stock each takes with its cost, and the ledger.
 // The database checks that a line's cost equals its components' cost, so both are written here, the same way every time.
 const crypto = require("crypto");
 const { HttpError } = require("./errors");
@@ -25,7 +25,7 @@ async function components(conn, line) {
   return [...used].map(([stockItemId, perUnit]) => [stockItemId, perUnit * line.quantity]);
 }
 
-// priced is what priceCart returned. employeeId is null for a kiosk order. unavailable(line) words the error for a line
+// priced is what priceCart returned. unavailable(line) words the error for a line
 // whose stock has no cost recorded here.
 async function addOrderLines(conn, { orderId, businessId, locationId, employeeId, priced, unavailable }) {
   const sale = new Map(); // stock item -> thousandths used across the whole order

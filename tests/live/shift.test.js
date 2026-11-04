@@ -80,7 +80,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   const id = `pp-t-${start}`;
   await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
-  const shift = (who, place, n) => pool.query(
+  const shift = (who, place, n) => admin.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, ?, 'biz-brewbean', ?, CONVERT_TZ(? + INTERVAL 1 DAY + INTERVAL 13 HOUR, '+00:00', '+00:00'), ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 30, 2)`,
     [`te-t-${start}-${n}`, who, place, id, start, start]);
@@ -126,7 +126,7 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   assert.equal(done.body.message, "Success: Pay period successfully finalized and closed");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:00`, breakMinutes: 0 })).status, 409, "closed periods are locked");
   assert.equal((await close()).status, 409);
-  assert.equal((await maya.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
+  assert.equal((await maya.call("/team/pay-periods/pp-curr/close", {})).status, 409, "the running period can't be closed");
 });
 
 test("a manager may approve or edit their own timecard", async () => {
@@ -135,7 +135,7 @@ test("a manager may approve or edit their own timecard", async () => {
   const id = `pp-own-${start}`;
   await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
-  const card = (who, n) => pool.query(
+  const card = (who, n) => admin.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, 'loc-downtown', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
     [`te-own-${start}-${n}`, who, id, start, start]);

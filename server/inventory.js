@@ -174,6 +174,10 @@ router.post("/inventory/item", change, async (req, res) => {
       await conn.query("INSERT INTO StockItem (StockItemID, BusinessID, Name, StockUnitCode) VALUES (?, ?, ?, ?)", [itemId, businessId, name, unit.code]);
       if (supplierId) await conn.query("INSERT INTO StockItemSupplier (StockItemID, SupplierID, BusinessID, IsPreferred) VALUES (?, ?, ?, TRUE)", [itemId, supplierId, businessId]);
       await conn.query("INSERT INTO Inventory (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold) VALUES (?, ?, ?, ?, ?)", [uuid(), locationId, itemId, businessId, threshold]);
+      if (threshold > 0) await conn.query(
+        "INSERT INTO LowStockAlert (InventoryID) SELECT InventoryID FROM Inventory WHERE LocationID = ? AND StockItemID = ?",
+        [locationId, itemId]
+      );
       return itemId;
     });
     res.json({ id });

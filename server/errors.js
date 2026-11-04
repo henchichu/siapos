@@ -8,8 +8,8 @@ class HttpError extends Error {
 // The last stop for every route: a status the code set, a rule the database enforces, or an unexpected failure
 function handleErrors(err, req, res, next) {
   if (err.status) return res.status(err.status).json({ error: err.message });
-  // a rule the database enforces itself (SQLSTATE 45000): its message is written for people
-  if (err.sqlState === "45000") return res.status(409).json({ error: err.sqlMessage });
+  // SQL rules provide user-facing messages; reserved error numbers preserve validation and missing-record statuses.
+  if (err.sqlState === "45000") return res.status(({ 30001: 400, 30004: 404 })[err.errno] || 409).json({ error: err.sqlMessage });
   // stock can't go below zero: CK_Inventory_Quantity rejects the ledger row's update to Inventory
   if (err.code === "ER_CHECK_CONSTRAINT_VIOLATED" && /CK_Inventory_Quantity/.test(err.sqlMessage))
     return res.status(409).json({ error: "Insufficient stock for this movement" });

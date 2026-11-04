@@ -97,6 +97,9 @@ router.post("/signup", rateLimit(5, 60 * 60 * 1000, { ban: true }), async (req, 
       if (e.taken) throw new HttpError(409, TAKEN);
       await conn.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, ?, ?, ?)", [customerId, b.id, firstName, email]);
       await conn.query("INSERT INTO CustomerCredential (CustomerID, PasswordHash) VALUES (?, ?)", [customerId, hash]);
+      // Auto-enroll: every new sign-up joins rewards at the lowest tier, the same way staff enroll a member (server/rewards.js)
+      const [[tier]] = await conn.query("SELECT TierID AS id FROM MembershipTier WHERE BusinessID = ? ORDER BY MinimumPoints, Name LIMIT 1", [b.id]);
+      if (tier) await conn.query("INSERT INTO LoyaltyAccount (LoyaltyAccountID, CustomerID, TierID, BusinessID) VALUES (UUID(), ?, ?, ?)", [customerId, tier.id, b.id]);
     });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") throw new HttpError(409, TAKEN);

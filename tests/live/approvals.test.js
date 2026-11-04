@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const { pool, admin, start, client, creds } = require("./env");
 let env;
-const { applyApproval } = require("../../server/approvals");
+const { approve: applyApproval, sweep } = require("../../server/approvals");
 const period = "pp-approval-" + Date.now().toString(36);
 const cards = [];
 const manager = { businessId: "biz-brewbean", employeeId: "emp-leo", locationId: "loc-downtown" };
@@ -23,6 +23,7 @@ test.before(async () => {
 });
 test.after(async () => {
   if (cards.length) {
+    await admin.query("DELETE FROM NotificationQueue WHERE EntityName = 'ApprovalAction' AND EntityID IN (SELECT ApprovalActionID FROM ApprovalAction WHERE TargetID IN (?))", [cards]);
     await admin.query("DELETE FROM ApprovalAction WHERE TargetID IN (?)", [cards]);
     await admin.query("DELETE FROM TimeEntry WHERE TimeEntryID IN (?)", [cards]);
   }
@@ -30,23 +31,43 @@ test.after(async () => {
   env.server.close(); await pool.end(); await admin.end();
 });
 
-test("approval-only writes cannot bypass the action trigger", async () => {
+test("a recorded decision is queued by the trigger and marked done once carried out; the record can't be edited", async () => {
   const id = await card();
+  await pool.tx((conn) => applyApproval(conn, manager, "TIMECARD_APPROVE", id));
+  const [[q]] = await pool.query("SELECT EntityName, ActionType, Status, Error, ProcessedAt, NewData FROM NotificationQueue WHERE EntityID IN (SELECT ApprovalActionID FROM ApprovalAction WHERE TargetID = ?)", [id]);
+  assert.deepEqual([q.EntityName, q.ActionType, q.Status, q.Error], ["ApprovalAction", "TIMECARD_APPROVE", "Done", null]);
+  assert.ok(q.ProcessedAt);
+  assert.deepEqual([q.NewData.actorId, q.NewData.approverId, q.NewData.targetId, q.NewData.locationId], ["emp-leo", "emp-leo", id, "loc-downtown"]);
   for (const sql of [
-    "UPDATE TimeEntry SET TimeEntryStatusCode = 3, ApprovedByEmployeeID = 'emp-leo' WHERE TimeEntryID = ?",
-    "UPDATE TimeEntry SET UnpaidBreakMinutes = 100 WHERE TimeEntryID = ?",
-    "UPDATE PayPeriod SET Closed = TRUE WHERE PayPeriodID = ?",
-    "UPDATE Refund SET RefundStatusCode = 2 WHERE RefundID = ?",
-    "DELETE FROM ReturnItem WHERE ReturnID = ?",
-    "INSERT INTO OrderDiscount (OrderDiscountID) VALUES (?)",
-  ]) await assert.rejects(pool.query(sql, [id]), error => ["ER_COLUMNACCESS_DENIED_ERROR", "ER_TABLEACCESS_DENIED_ERROR"].includes(error.code));
-  assert.equal(await state(id), 2);
+    "UPDATE ApprovalAction SET ActionType = 'TIMECARD_REJECT' WHERE TargetID = ?",
+    "DELETE FROM ApprovalAction WHERE TargetID = ?",
+    "UPDATE NotificationQueue SET NewData = '{}' WHERE EntityID IN (SELECT ApprovalActionID FROM ApprovalAction WHERE TargetID = ?)",
+    "DELETE FROM NotificationQueue WHERE EntityName = 'ApprovalAction' AND EntityID = ?",
+    "INSERT INTO NotificationQueue (EntityName, EntityID, ActionType, NewData) VALUES ('ApprovalAction', ?, 'TIMECARD_APPROVE', '{}')",
+  ]) await assert.rejects(pool.query(sql, [id]), (error) => ["ER_COLUMNACCESS_DENIED_ERROR", "ER_TABLEACCESS_DENIED_ERROR"].includes(error.code), sql);
+});
+
+test("the worker carries out a decision still Pending, and marks one it can't carry out Failed with the reason", async () => {
+  const good = await card(), gone = await card();
+  await admin.query("UPDATE TimeEntry SET TimeEntryStatusCode = 4 WHERE TimeEntryID = ?", [gone]); // already decided, so a second decision can't apply
+  const record = (target) => admin.query(
+    `INSERT INTO ApprovalAction (ApprovalActionID, BusinessID, ActorEmployeeID, ApproverEmployeeID, LocationID, ActionType, TargetID, Payload)
+     VALUES (UUID(), 'biz-brewbean', 'emp-leo', 'emp-leo', 'loc-downtown', 'TIMECARD_APPROVE', ?, '{}')`, [target]);
+  await record(good); await record(gone);
+  const status = async (target) => (await pool.query("SELECT Status, Error FROM NotificationQueue WHERE EntityID IN (SELECT ApprovalActionID FROM ApprovalAction WHERE TargetID = ?)", [target]))[0][0];
+  assert.equal((await status(good)).Status, "Pending", "queued by the trigger, not yet carried out");
+  assert.equal(await state(good), 2);
+  await sweep();
+  assert.equal(await state(good), 3);
+  assert.equal((await status(good)).Status, "Done");
+  const failed = await status(gone);
+  assert.deepEqual([failed.Status, failed.Error], ["Failed", "That timecard is not waiting for approval."]);
 });
 
 test("unauthorized and rolled-back decisions leave neither effects nor audit rows", async () => {
   const id = await card();
   await assert.rejects(pool.tx(conn => applyApproval(conn, manager, "TIMECARD_APPROVE", "x".repeat(37))), error => error.status === 409);
-  await assert.rejects(pool.tx(conn => applyApproval(conn, cashier, "TIMECARD_APPROVE", id)), error => error.sqlState === "45000");
+  await assert.rejects(pool.tx(conn => applyApproval(conn, cashier, "TIMECARD_APPROVE", id)), error => error.status === 403);
   assert.equal(await state(id), 2); assert.equal(await count(id), 0);
   await assert.rejects(pool.tx(async conn => {
     await applyApproval(conn, manager, "TIMECARD_APPROVE", id);
@@ -77,7 +98,7 @@ test("discount execution rechecks permission, rolls back a refused sale, and rec
   await admin.query("DELETE FROM RolePermission WHERE RoleID = 'role-manager' AND PermissionCode = 4");
   try {
     const denied = await cashierPage.call("/register/orders", body);
-    assert.equal(denied.status, 409, JSON.stringify(denied.body));
+    assert.equal(denied.status, 403, JSON.stringify(denied.body));
     assert.equal((await pool.query("SELECT COUNT(*) AS n FROM Orders"))[0][0].n, before.n);
   } finally {
     await admin.query("INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode) VALUES ('role-manager', 'biz-brewbean', 4)");

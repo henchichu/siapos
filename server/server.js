@@ -53,6 +53,7 @@ app.use(handleErrors);
 
 if (require.main === module) {
   app.listen(PORT, HOST, () => console.log(`SIAPOS is running at http://localhost:${PORT}`));
+  require("./approvals").startWorker(); // carries out any approval still Pending, such as one recorded by hand in SQL
   require("./kioskorders").startExpiry(); // cancels kiosk orders nobody paid for, which puts their stock back
 }
 

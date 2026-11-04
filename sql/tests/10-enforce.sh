@@ -1,4 +1,3 @@
-# Historical approved records are root fixtures; approval transitions are tested through ApprovalAction.
 echo "--- setup ---"
 t "businesses"                 ok   "INSERT INTO Business (BusinessID,Name) VALUES ('B1','Cafe'),('B2','Shop');"
 s "locations"                  ok   "INSERT INTO Location (LocationID,BusinessID,Name,TimeZone) VALUES ('L1','B1','Main','America/Chicago'),('L2','B2','Shop','Europe/London'),('L3','B1','Kiosk','America/Chicago');"
@@ -81,9 +80,9 @@ t "return 0.25 kg cheddar"     ok   "INSERT INTO ReturnItem (ReturnItemID,Return
 t "restock return at sale cost" ok  "INSERT INTO InventoryTransaction (InventoryTransactionID,BusinessID,StockItemID,LocationID,QuantityChange,UnitCost,TransactionTypeCode,OrderID) VALUES ('R-1','B1','S5','L1',250,0.013,3,'O1');"
 
 echo "--- B3: refunds ---"
-s "refund 15.00"               ok   "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy) VALUES ('RF1','PA1','O1','B1',15.00,'return','E1');"
-s "failed refund doesn't count" ok  "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy,RefundStatusCode) VALUES ('RF3','PA1','O1','B1',100.00,'x','E1',3);"
-s "refund 5.00 (exactly 20)"   ok   "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy) VALUES ('RF4','PA1','O1','B1',5.00,'x','E1');"
+t "refund 15.00"               ok   "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy) VALUES ('RF1','PA1','O1','B1',15.00,'return','E1');"
+t "failed refund doesn't count" ok  "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy,RefundStatusCode) VALUES ('RF3','PA1','O1','B1',100.00,'x','E1',3);"
+t "refund 5.00 (exactly 20)"   ok   "INSERT INTO Refund (RefundID,PaymentID,OrderID,BusinessID,Amount,Reason,CreatedBy) VALUES ('RF4','PA1','O1','B1',5.00,'x','E1');"
 
 echo "--- B6: labor ---"
 s "pay rate (open-ended)"      ok   "INSERT INTO EmployeePayRate (PayRateID,EmployeeID,BusinessID,HourlyRate,EffectiveFrom) VALUES ('PR1','E1','B1',18.00,'2026-01-01');"
@@ -91,8 +90,8 @@ s "close old, add new rate"    ok   "UPDATE EmployeePayRate SET EffectiveTo='202
 s "pay period Oct 1-14"        ok   "INSERT INTO PayPeriod (PayPeriodID,BusinessID,StartDate,EndDate) VALUES ('PP1','B1','2026-10-01','2026-10-14');"
 s "pay period Oct 15-28"       ok   "INSERT INTO PayPeriod (PayPeriodID,BusinessID,StartDate,EndDate) VALUES ('PP3','B1','2026-10-15','2026-10-28');"
 s "other business, same dates" ok   "INSERT INTO PayPeriod (PayPeriodID,BusinessID,StartDate,EndDate) VALUES ('PP9','B2','2026-10-01','2026-10-14');"
-s "shift"                      ok   "INSERT INTO TimeEntry (TimeEntryID,EmployeeID,LocationID,BusinessID,PayPeriodID,ClockInAt,ClockOutAt) VALUES ('TE1','E1','L1','B1','PP1','2026-10-02 14:00','2026-10-02 22:00');"
-s "close pay period PP1"       ok   "UPDATE PayPeriod SET Closed=1 WHERE PayPeriodID='PP1';"
+t "shift"                      ok   "INSERT INTO TimeEntry (TimeEntryID,EmployeeID,LocationID,BusinessID,PayPeriodID,ClockInAt,ClockOutAt) VALUES ('TE1','E1','L1','B1','PP1','2026-10-02 14:00','2026-10-02 22:00');"
+t "close pay period PP1"       ok   "UPDATE PayPeriod SET Closed=1 WHERE PayPeriodID='PP1';"
 t "app can't add a location"   fail "INSERT INTO Location (LocationID,BusinessID,Name,TimeZone) VALUES ('LX','B1','New','America/Chicago');"
 t "app can't change a location" fail "UPDATE Location SET Name='Renamed' WHERE LocationID='L1';"
 t "app can't change a pay rate" fail "UPDATE EmployeePayRate SET HourlyRate=99 WHERE PayRateID='PR1';"

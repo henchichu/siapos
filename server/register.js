@@ -8,9 +8,11 @@ const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
 const kioskOrders = require("./kioskorders");
 const check = require("./validate");
-const { applyApproval } = require("./approvals");
 const { verifyOverride, findStaff, staffRules } = require("./override");
 const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval } = require("./session");
+const { hasPermission } = require("./pin");
+const approvals = require("./approvals");
+const { approve } = approvals;
 
 const PERM_USE_REGISTER = 1;
 const PERM_APPROVE_DISCOUNTS = 4;
@@ -156,6 +158,15 @@ router.post("/register/orders", async (req, res) => {
   res.json(await sale);
 });
 
+// A discount a manager signed (or a staff discount that needs no signature): recorded as an approval, then written to the order
+approvals.handlers.DISCOUNT_APPLY = async (conn, a) => {
+  if (a.approverId && !(await hasPermission(conn, a.approverId, PERM_APPROVE_DISCOUNTS))) throw new HttpError(403, "The approver can't approve discounts.");
+  await conn.query(
+    "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
+    [a.targetId, a.businessId, a.payload.amount, a.payload.reason, a.approverId, a.payload.staffId || null]
+  );
+};
+
 async function completeSale(req) {
   const { employeeId, businessId, locationId, registerId } = req.session;
   const { payment = {}, customerId } = req.body;
@@ -201,7 +212,7 @@ async function completeSale(req) {
         );
       if (priced.discountCents > 0) {
         const d = priced.discount;
-        await applyApproval(conn, req.session, "DISCOUNT_APPLY", orderId, {
+        await approve(conn, req.session, "DISCOUNT_APPLY", orderId, {
           amount: dollars(priced.discountCents),
           reason: d.note ? `${d.reason}: ${d.note}` : d.reason,
           staffId: approval.staffId,

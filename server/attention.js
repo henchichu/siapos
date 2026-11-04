@@ -34,14 +34,14 @@ async function attentionFor(session) {
     );
     out.losses = { count: losses.length, rows: losses.slice(0, SHOWN).map((l) => ({ at: l.at, item: l.item, amount: Number(l.amount), unit: l.unit, reason: LOSS_REASONS[l.type], by: l.byName })) };
 
-    // Items at or below their reorder level (a level of 0 means "don't watch this item"), most short first. Nothing is ordered
+    // Inventory updates maintain these alerts; newly created inventory rows initialize them in the backend. Nothing is ordered
     // for them: this list is the reminder, and the order is placed with the supplier outside the app.
     const [low] = await pool.query(
       `SELECT s.StockItemID AS id, s.Name AS item, u.Symbol AS unit, i.Quantity AS onHand, i.ReorderThreshold AS reorderAt,
               (SELECT sp.Name FROM StockItemSupplier q JOIN Supplier sp ON sp.SupplierID = q.SupplierID AND sp.Active
                 WHERE q.StockItemID = s.StockItemID ORDER BY q.IsPreferred DESC, sp.Name LIMIT 1) AS supplier
-         FROM Inventory i JOIN StockItem s ON s.StockItemID = i.StockItemID AND s.Active JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode
-        WHERE i.LocationID = ? AND i.BusinessID = ? AND i.ReorderThreshold > 0 AND i.Quantity <= i.ReorderThreshold
+         FROM LowStockAlert a JOIN Inventory i ON i.InventoryID = a.InventoryID JOIN StockItem s ON s.StockItemID = i.StockItemID AND s.Active JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode
+        WHERE i.LocationID = ? AND i.BusinessID = ?
         ORDER BY i.Quantity / i.ReorderThreshold, s.Name`,
       [locationId, businessId]
     );

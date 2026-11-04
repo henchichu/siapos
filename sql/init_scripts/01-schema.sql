@@ -851,6 +851,14 @@ CREATE TABLE IF NOT EXISTS Inventory (
     INDEX IX_Inventory_LocationID (LocationID)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS LowStockAlert (
+    InventoryID CHAR(36) NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (InventoryID),
+    CONSTRAINT FK_LowStockAlert_Inventory FOREIGN KEY (InventoryID)
+        REFERENCES Inventory(InventoryID) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Customer (
     CustomerID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
@@ -1803,3 +1811,28 @@ CREATE TABLE IF NOT EXISTS Refund (
     INDEX IX_Refund_DateTime (RefundDateTime)
 ) ENGINE=InnoDB;
 
+
+-- Approval decisions are append-only commands executed by TR_ApprovalAction_AfterInsert.
+CREATE TABLE IF NOT EXISTS ApprovalAction (
+    ApprovalActionID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    ActorEmployeeID CHAR(36) NOT NULL,
+    ApproverEmployeeID CHAR(36) NULL,
+    LocationID CHAR(36) NOT NULL,
+    ActionType VARCHAR(32) NOT NULL,
+    TargetID CHAR(36) NOT NULL,
+    Payload JSON NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (ApprovalActionID),
+    CONSTRAINT FK_ApprovalAction_Actor FOREIGN KEY (ActorEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT FK_ApprovalAction_Approver FOREIGN KEY (ApproverEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT FK_ApprovalAction_Location FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT CK_ApprovalAction_Type CHECK (ActionType IN (
+        'DISCOUNT_APPLY', 'REFUND_APPROVE', 'REFUND_REJECT',
+        'TIMECARD_APPROVE', 'TIMECARD_REJECT', 'TIMECARD_EDIT', 'PAY_PERIOD_CLOSE')),
+    CONSTRAINT CK_ApprovalAction_Payload CHECK (JSON_TYPE(Payload) = 'OBJECT'),
+    INDEX IX_ApprovalAction_Target (BusinessID, ActionType, TargetID)
+) ENGINE=InnoDB;

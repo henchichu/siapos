@@ -133,6 +133,8 @@ test("add a stock item", async () => {
   const made = await add({});
   assert.equal(made.status, 200);
   madeItems.push(made.body.id);
+  const [[alert]] = await pool.query("SELECT COUNT(*) AS n FROM LowStockAlert a JOIN Inventory i ON i.InventoryID = a.InventoryID WHERE i.StockItemID = ?", [made.body.id]);
+  assert.equal(Number(alert.n), 1, "a new empty item with a positive threshold starts with an alert");
   const item = await row(made.body.id);
   assert.deepEqual([item.name, item.unit, item.onHand, item.reorderAt, item.avgCost, item.supplierIds], [`Test syrup ${stamp}`, "ml", 0, 300, null, ["sup-supply"]]);
   assert.equal((await add({})).status, 409, "names are unique");

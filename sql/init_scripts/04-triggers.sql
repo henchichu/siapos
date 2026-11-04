@@ -1,13 +1,6 @@
 USE miniworld;
 
--- Cross-row and cross-table rules that CHECK constraints and foreign keys can't express.
--- Lookup codes used below are fixed by 02-seed.sql:
--- Every rule raises SQLSTATE '45000' with a readable MESSAGE_TEXT.
-
 DELIMITER $$
-
--- shortcut: SQL inventory imports need the backfill in sql/provision/low-stock-alerts.sql; revisit insert handling when adding import writers.
-DROP TRIGGER IF EXISTS TR_Inventory_AfterUpdate$$
 
 CREATE TRIGGER TR_Inventory_AfterUpdate AFTER UPDATE ON Inventory FOR EACH ROW
 BEGIN
@@ -19,10 +12,6 @@ BEGIN
     END IF;
 END$$
 
--- Inventory is driven by its ledger: Quantity and AverageUnitCost change only here, when an
--- InventoryTransaction is inserted (a trigger writes with its definer's rights, which app_user
--- lacks on those columns). Ledger rows are append-only: app_user has no UPDATE or DELETE on
--- the table. See 03-privileges.sql.
 CREATE TRIGGER TR_InventoryTransaction_AfterInsert AFTER INSERT ON InventoryTransaction FOR EACH ROW
 BEGIN
     -- AverageUnitCost is assigned first so it still sees the old Quantity.

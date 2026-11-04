@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# Runs after all seeds; SQL imports can rerun the backfill in sql/provision/low-stock-alerts.sql.
+# Runs after all seeds: stock that starts out already low, and is never updated again, still gets its alert.
 MYSQL_PWD="$(cat /run/secrets/db_root_password)" mysql -uroot <<'SQL'
 USE miniworld;
 

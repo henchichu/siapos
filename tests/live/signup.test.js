@@ -14,6 +14,7 @@ const signup = (c, o) => c.call("/signup", body(o));
 test.before(async () => { env = await start(); });
 test.after(async () => {
   for (const e of made) {
+    await admin.query("DELETE la FROM LoyaltyAccount la JOIN Customer c ON c.CustomerID = la.CustomerID WHERE c.Email = ?", [e]);
     await admin.query("DELETE FROM CustomerCredential WHERE CustomerID IN (SELECT CustomerID FROM Customer WHERE Email = ?)", [e]);
     await admin.query("DELETE FROM Customer WHERE Email = ?", [e]);
   }
@@ -30,7 +31,7 @@ test("a new customer is created, signed in, and sent to the kiosk; they can sign
   assert.deepEqual([row.biz, row.email, row.active], ["biz-brewbean", b.email.toLowerCase(), 1], "stored lower-case, in the business");
   assert.equal((await client(env.base).call("/login", { email: b.email, password: b.password })).body.redirect, "/kiosk.html");
   const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM LoyaltyAccount la JOIN Customer c ON c.CustomerID = la.CustomerID WHERE c.Email = ?", [b.email.toLowerCase()]);
-  assert.equal(n, 0, "not enrolled in rewards: staff do that");
+  assert.equal(n, 1, "enrolled in rewards at sign-up");
 });
 
 test("an email already used by a customer (with or without a password) or an employee is refused", async () => {

@@ -1812,7 +1812,8 @@ CREATE TABLE IF NOT EXISTS Refund (
 ) ENGINE=InnoDB;
 
 
--- Approval decisions are append-only commands executed by TR_ApprovalAction_AfterInsert.
+-- A manager's decision, recorded as it is made. TR_ApprovalAction_AfterInsert queues it in NotificationQueue and the backend
+-- worker (server/approvals.js) carries it out.
 CREATE TABLE IF NOT EXISTS ApprovalAction (
     ApprovalActionID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
@@ -1831,8 +1832,23 @@ CREATE TABLE IF NOT EXISTS ApprovalAction (
     CONSTRAINT FK_ApprovalAction_Location FOREIGN KEY (LocationID, BusinessID)
         REFERENCES Location(LocationID, BusinessID) ON DELETE RESTRICT,
     CONSTRAINT CK_ApprovalAction_Type CHECK (ActionType IN (
-        'DISCOUNT_APPLY', 'REFUND_APPROVE', 'REFUND_REJECT',
-        'TIMECARD_APPROVE', 'TIMECARD_REJECT', 'TIMECARD_EDIT', 'PAY_PERIOD_CLOSE')),
+        'DISCOUNT_APPLY', 'REFUND_APPROVE', 'REFUND_REJECT', 'TIMECARD_APPROVE', 'TIMECARD_REJECT')),
     CONSTRAINT CK_ApprovalAction_Payload CHECK (JSON_TYPE(Payload) = 'OBJECT'),
     INDEX IX_ApprovalAction_Target (BusinessID, ActionType, TargetID)
+) ENGINE=InnoDB;
+
+-- Work for the backend worker, put here by simple triggers. Pending until the worker has done it, then Done, or Failed with the reason.
+CREATE TABLE IF NOT EXISTS NotificationQueue (
+    NotificationID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    EntityName VARCHAR(40) NOT NULL,
+    EntityID CHAR(36) NOT NULL,
+    ActionType VARCHAR(32) NOT NULL,
+    NewData JSON NOT NULL,
+    Status ENUM('Pending', 'Done', 'Failed') NOT NULL DEFAULT 'Pending',
+    Error VARCHAR(255) NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ProcessedAt DATETIME NULL,
+    PRIMARY KEY (NotificationID),
+    INDEX IX_NotificationQueue_Pending (Status, NotificationID),
+    INDEX IX_NotificationQueue_Entity (EntityName, EntityID)
 ) ENGINE=InnoDB;

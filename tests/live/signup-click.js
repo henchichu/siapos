@@ -56,6 +56,7 @@ const EMAIL = `click-${Date.now().toString(36)}@example.com`;
     check("a good sign-up creates the customer with a password", sent.length === 2 && made.n === 1, JSON.stringify(sent.at(-1)));
     check("React reported no errors", w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w.errors));
   } finally {
+    await admin.query("DELETE FROM LoyaltyAccount WHERE CustomerID IN (SELECT CustomerID FROM Customer WHERE Email = ?)", [EMAIL]); // sign-up enrols in rewards
     await admin.query("DELETE FROM CustomerCredential WHERE CustomerID IN (SELECT CustomerID FROM Customer WHERE Email = ?)", [EMAIL]);
     await admin.query("DELETE FROM Customer WHERE Email = ?", [EMAIL]);
     server.close(); await pool.end(); await admin.end();

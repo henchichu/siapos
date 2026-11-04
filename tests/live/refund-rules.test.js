@@ -1,4 +1,4 @@
-// Needs the dev database. ApprovalAction enforces refund rules: a refund over the
+// Needs the dev database. The refund rules the backend now enforces itself (their database triggers were removed): a refund over the
 // limit, or on an old order, must be signed by someone holding the override permission (Leo has it, Ana can only approve discounts),
 // and a request can't return more of an item than was bought, even by listing it twice.
 const test = require("node:test");

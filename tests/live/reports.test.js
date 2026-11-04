@@ -204,7 +204,7 @@ test("hours past 40 in a Monday to Sunday week are overtime at 1.5x", async () =
   const q = { period: "pp-curr", location: "loc-downtown" };
   const before = person(await labor(maya, q), "Leo Brandt");
   const id = `te-test-ot-${Date.now()}`;
-  await pool.query(
+  await admin.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, TimeEntryStatusCode)
      VALUES (?, 'emp-leo', 'loc-downtown', 'biz-brewbean', 'pp-curr', CONVERT_TZ(TIMESTAMP(?, '20:00'), 'America/Chicago', '+00:00'),
              CONVERT_TZ(TIMESTAMP(?, '22:00'), 'America/Chicago', '+00:00'), 2)`, [id, sunday, sunday]);

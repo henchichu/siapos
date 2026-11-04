@@ -1,4 +1,4 @@
-// Needs the dev database. The rules a shift must keep, enforced by the approval trigger for edits and server/shift.js checkShift for clock-in: an open pay
+// Needs the dev database. The rules a shift must keep, now enforced by the backend (server/shift.js checkShift): an open pay
 // period, a clock-in inside it by the café's local date, no overlap with the person's other shifts, one request at a time per person.
 const test = require("node:test");
 const assert = require("node:assert/strict");

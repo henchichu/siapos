@@ -26,18 +26,17 @@ R "GRANT SELECT ON @DB@.* TO 'app_user'@'%';"
 for tb in $(R "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='@DB@' AND TABLE_TYPE='BASE TABLE'" | tail -n +2); do
   R "REVOKE ALL PRIVILEGES ON @DB@.\`$tb\` FROM 'app_user'@'%';" >/dev/null   # table grants outlive a dropped database
   case $tb in
-    Location|EmployeePayRate|LoyaltyTransaction|OrderDiscount|PayPeriod) continue ;;
+    Location|EmployeePayRate|LoyaltyTransaction) continue ;;
     InventoryTransaction|LowStockAlert) g="INSERT" ;;
-
-    Inventory) g="INSERT (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold), UPDATE (ReorderThreshold)" ;;
-    OrderItemModifier|OrderItemComponent|PromotionRedemption) g="INSERT" ;;
-    OrderItem) g="INSERT, UPDATE" ;;
-    Payment) g="INSERT, UPDATE (PaymentStatusCode)" ;;
-    Refund) g="INSERT (RefundID, PaymentID, ReturnID, OrderID, BusinessID, Amount, TaxAmount, Reason, CreatedBy)" ;;
-    ReturnItem) g="INSERT" ;;
     ApprovalAction) g="INSERT (ApprovalActionID, BusinessID, ActorEmployeeID, ApproverEmployeeID, LocationID, ActionType, TargetID, Payload)" ;;
-    Returns) g="INSERT (ReturnID, OrderID, BusinessID, CreatedBy)" ;;
-    TimeEntry) g="INSERT (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt)" ;;
+    NotificationQueue) g="UPDATE (Status, Error, ProcessedAt)" ;;
+    PayPeriod) g="UPDATE (Closed)" ;;
+    Inventory) g="INSERT (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold), UPDATE (ReorderThreshold)" ;;
+    OrderItemModifier|OrderItemComponent|OrderDiscount|PromotionRedemption) g="INSERT" ;;
+    OrderItem|TimeEntry) g="INSERT, UPDATE" ;;
+    Payment) g="INSERT, UPDATE (PaymentStatusCode)" ;;
+    Refund) g="INSERT, UPDATE (RefundStatusCode, RefundDateTime, ApprovedByEmployeeID, UpdatedBy)" ;;
+    ReturnItem) g="INSERT, DELETE" ;;
     *) g="INSERT, UPDATE, DELETE" ;;
   esac
   R "GRANT $g ON @DB@.\`$tb\` TO 'app_user'@'%';" >/dev/null

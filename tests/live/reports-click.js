@@ -48,7 +48,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   const m = await open(base, "10420001", "111111");
 
   check("the sidebar has Reports, marked as this page", m.$(".nav [aria-current=page]")?.textContent === "Reports");
-  check("five tabs, as in the wireframes", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Live sales|1. Sales by day|2. Top sellers|3. Labor cost|4. Stock losses");
+  check("the wireframes' five tabs and Customers", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Live sales|1. Sales by day|2. Top sellers|3. Labor cost|4. Stock losses|5. Customers");
   check("Live sales is open", m.$(".tabs [aria-pressed=true]")?.textContent === "Live sales" && !!m.$("section[aria-label='Live sales']"));
   const { today } = await (await m.w.fetch("/api/reports/options")).json();
   check("Live sales filters: a Day, today, and no Location list", m.field("Day")?.value === today && !m.field("From") && !m.field("Location"));
@@ -144,6 +144,28 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.choose(m.field("Pay period"), "pp-prev");
   await m.click(m.byText("button", "Run report"), 700);
   check("an earlier period: her old rate", pRow("Priya Shah")[5] === "$16.50" && /closed/.test(m.field("Pay period").selectedOptions[0].textContent));
+  await m.click(m.byText(".tabs .tab", "5. Customers"), 700);
+  const cTable = "table[aria-label='Customers by RFM score']";
+  const cHeads = m.$$(`${cTable} thead th`).map((t) => t.textContent);
+  const cRows = () => m.$$(`${cTable} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1).map((r) => [...r.children].map((c) => c.textContent));
+  const cFoot = () => [...m.$(`${cTable} tfoot tr`).children].map((c) => c.textContent);
+  check("Customers opens", m.$(".tabs [aria-pressed=true]").textContent === "5. Customers" && m.w.location.hash === "#customers");
+  check("Customers has dates and no Location list, and goes back 90 days", !m.field("Location") && m.field("From").value === new Date(Date.parse(`${m.field("To").value}T00:00:00Z`) - 89 * 864e5).toISOString().slice(0, 10));
+  check("Customers cards", m.cards().map(([k]) => k).join("|") === "Customers|Average spend|Average orders|Average days since last order", m.cards().join());
+  check("Customers columns", cHeads.join("|") === "Customer|Membership|Segment|Last order|Days since|Orders|Total spend|Recency|Frequency|Spend", cHeads.join("|"));
+  const tips = m.$$(`${cTable} thead .headtip`);
+  check("each score header explains itself and can be reached by keyboard", tips.map((t) => t.dataset.tip).join("|") === "How recently they ordered (5 = most recent)|How often they order (5 = most often)|How much they spend (5 = highest)" && tips.every((t) => t.tabIndex === 0 && t.getAttribute("aria-label").includes(t.dataset.tip)), tips.map((t) => t.dataset.tip).join("|"));
+  check("the scores are 1 to 5, centered like their headers", cRows().every((r) => r.slice(7).every((s) => /^[1-5]$/.test(s))) && m.$$(`${cTable} tbody tr:first-child td.score`).length === 3);
+  check("one row per customer, matching the card", cRows().length > 0 && String(cRows().length) === m.cards()[0][1], cRows().join());
+  check("the Total row adds up the spend", cFoot()[0] === "Total" && dollars(cFoot()[6]) === Math.round(cRows().reduce((a, r) => a + dollars(r[6]), 0) * 100) / 100, cFoot().join("|"));
+  const mRows = () => m.$$("table[aria-label='Customers by membership'] tbody tr").map((r) => [...r.children].map((c) => c.textContent));
+  check("the Membership filter lists the tiers, All by default", [...(m.field("Membership")?.options || [])].map((o) => o.textContent).join("|") === "All memberships|Bean|Gold|No membership" && m.field("Membership").value === "");
+  check("the breakdown has every group, adding up to the card", mRows().map((r) => r[0]).join("|") === "Bean|Gold|No membership" && String(mRows().reduce((a, r) => a + Number(r[1]), 0)) === m.cards()[0][1], mRows().join());
+  check("the minimum gaps are in the note under the cards", /At risk until 30 days after their last order, or Lapsed until 60 days/.test(m.$(".rcards").nextElementSibling?.textContent || ""), m.$(".rcards").nextElementSibling?.textContent);
+  await m.choose(m.field("Membership"), "none");
+  await m.click(m.byText("button", "Run report"), 700);
+  check("the Membership filter narrows the table and breakdown", cRows().length > 0 && cRows().every((r) => r[1] === "No membership") && mRows().length === 1 && mRows()[0][0] === "No membership", cRows().join());
+  check("the long note under the table is gone", !m.$(cTable).closest(".tablewrap").querySelector("p"));
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   const l = await open(base, "10420002", "222222"); // Leo works at Downtown only

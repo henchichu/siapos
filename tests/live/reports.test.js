@@ -276,6 +276,98 @@ test("a sale counts today, and its refund comes off today", async () => {
   assert.equal((await live(maya, { location: "loc-downtown" })).cards.tips - tipsBefore, 100, "a refund never takes the tip back");
 });
 
+const customers = async (c, q) => { const r = await c.call(`/reports/customers?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };
+
+test("Customers: who may see it, and the figures agree with the orders", async () => {
+  assert.equal((await sam.call("/reports/customers")).status, 403);
+  assert.equal((await leo.call("/reports/customers?location=loc-campus")).status, 403, "only the location signed in to");
+  const { today } = (await maya.call("/reports/options")).body;
+  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 89 * 864e5).toISOString().slice(0, 10);
+  const q = { from, to: today };
+  const all = await customers(maya, q);
+  assert.ok(all.rows.length > 0);
+  assert.equal(new Set(all.rows.map((r) => r.id)).size, all.rows.length, "each customer once");
+  assert.equal(all.cards.customers, all.rows.length);
+  assert.equal(all.total.spend, all.rows.reduce((a, r) => a + r.spend, 0));
+  assert.equal(all.cards.averageSpend, Math.round(all.total.spend / all.rows.length));
+  for (const r of all.rows) {
+    for (const k of ["r", "f", "m"]) assert.ok(r[k] >= 1 && r[k] <= 5, k);
+    assert.ok(r.lastOrder <= today && r.daysSince >= 0 && r.segment);
+    assert.ok(!("email" in r) && !("phone" in r), "no contact details");
+  }
+
+  // the same customer's orders, counted one by one
+  const who = all.rows[0];
+  const [orders] = await pool.query(
+    `SELECT o.OrderID, (SELECT SUM(oi.NetAmount) FROM OrderItem oi WHERE oi.OrderID = o.OrderID) AS sold,
+            (SELECT COALESCE(SUM(r.Amount - r.TaxAmount), 0) FROM Refund r WHERE r.OrderID = o.OrderID AND r.RefundStatusCode = 2) AS back
+       FROM Orders o JOIN Location l USING (LocationID)
+      WHERE o.CustomerID = ? AND o.OrderStatusCode IN (2, 3, 4, 5) AND DATE(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone)) BETWEEN ? AND ?`, [who.id, from, today]);
+  const counted = orders.filter((o) => o.sold !== null);
+  assert.equal(who.orders, counted.length);
+  assert.equal(who.spend, counted.reduce((a, o) => a + Math.round((Number(o.sold) - Number(o.back)) * 100), 0));
+
+});
+
+test("Customers: grouped by membership tier, each customer once", async () => {
+  const { today, tiers } = (await maya.call("/reports/options")).body;
+  assert.deepEqual(tiers.map((t) => t.name), ["Bean", "Gold", "No membership"]);
+  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 89 * 864e5).toISOString().slice(0, 10);
+  const q = { from, to: today };
+  const all = await customers(maya, q);
+  const [accounts] = await pool.query("SELECT la.CustomerID AS id, t.Name AS name FROM LoyaltyAccount la JOIN MembershipTier t USING (TierID) WHERE la.Active");
+  for (const r of all.rows) assert.equal(r.membership, accounts.find((a) => a.id === r.id)?.name || "No membership", r.customer);
+
+  assert.deepEqual(all.byMembership.map((g) => g.name), ["Bean", "Gold", "No membership"]);
+  assert.equal(all.byMembership.reduce((a, g) => a + g.customers, 0), all.cards.customers, "the groups add up to the customers");
+  for (const g of all.byMembership) {
+    const members = all.rows.filter((r) => r.membership === g.name);
+    assert.equal(g.customers, members.length);
+    assert.equal(g.averageSpend, members.length ? Math.round(members.reduce((a, r) => a + r.spend, 0) / members.length) : null);
+    const one = await customers(maya, { ...q, tier: g.id });
+    assert.deepEqual(one.rows, members, "filtering keeps the same customers, scores and segments");
+    assert.deepEqual(one.byMembership.map((x) => x.name), [g.name]);
+    assert.equal(one.membership, g.name);
+  }
+  assert.equal(all.membership, "All memberships");
+  assert.deepEqual(all.minDays, { atRisk: 30, lapsed: 60 });
+  assert.equal((await maya.call(`/reports/customers?${new URLSearchParams({ ...q, tier: "nope" })}`)).status, 400);
+
+  // a closed account is no membership
+  const [[{ id }]] = await pool.query("SELECT la.CustomerID AS id FROM LoyaltyAccount la WHERE la.Active AND la.CustomerID IN (?) LIMIT 1", [all.rows.map((r) => r.id)]);
+  await pool.query("UPDATE LoyaltyAccount SET Active = FALSE WHERE CustomerID = ?", [id]);
+  try {
+    assert.equal((await customers(maya, q)).rows.find((r) => r.id === id).membership, "No membership");
+  } finally {
+    await pool.query("UPDATE LoyaltyAccount SET Active = TRUE WHERE CustomerID = ?", [id]);
+  }
+});
+
+test("Customers: a partial refund lowers spend; refunded in full, the order stops counting", async () => {
+  const { today } = (await maya.call("/reports/options")).body;
+  const q = { from: today, to: today, location: "loc-downtown" };
+  const ava = async () => (await customers(maya, q)).rows.find((r) => r.id === "cus-ava") || { orders: 0, spend: 0 };
+  const before = await ava();
+
+  const sale = await priya.call("/register/orders", { customerId: "cus-ava", items: [{ key: "a", variantId: "var-latte-l", quantity: 1 }, { key: "b", variantId: "var-latte-l", quantity: 1 }], payment: { method: "card", card: TEST_CARD } });
+  assert.equal(sale.status, 200, JSON.stringify(sale.body));
+  const sold = await ava();
+  assert.deepEqual([sold.orders - before.orders, sold.spend - before.spend], [1, 1050], "two lattes, before tax");
+
+  await pickUp(sale.body.orderNumber);
+  const found = (await priya.call(`/refunds/order?q=${sale.body.orderNumber}`)).body;
+  const back = async (line) => {
+    const r = await priya.call("/refunds", { managerNumber: "10420002", managerPin: "222222", reason: "test", orderId: found.orderId, lines: [{ orderItemId: line.orderItemId, qty: 1, restock: false }] });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  };
+  await back(found.lines[0]);
+  const part = await ava();
+  assert.deepEqual([part.orders - before.orders, part.spend - before.spend], [1, 525], "one latte back");
+  await back(found.lines[1]);
+  const none = await ava();
+  assert.deepEqual([none.orders, none.spend], [before.orders, before.spend], "as if it never happened");
+});
+
 test("a report date must be a real day", async () => {
   const r = await maya.call("/reports/sales-by-day?from=2026-02-31&to=2026-03-05");
   assert.equal(r.status, 400);

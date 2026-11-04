@@ -8,6 +8,7 @@ const { addOrderLines, fingerprint } = require("./orderlines");
 const { charge } = require("./mockpay");
 const kioskOrders = require("./kioskorders");
 const check = require("./validate");
+const { applyApproval } = require("./approvals");
 const { verifyOverride, findStaff, staffRules } = require("./override");
 const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval } = require("./session");
 
@@ -200,10 +201,11 @@ async function completeSale(req) {
         );
       if (priced.discountCents > 0) {
         const d = priced.discount;
-        await conn.query(
-          "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
-          [orderId, businessId, dollars(priced.discountCents), d.note ? `${d.reason}: ${d.note}` : d.reason, approval.approverId, approval.staffId]
-        );
+        await applyApproval(conn, req.session, "DISCOUNT_APPLY", orderId, {
+          amount: dollars(priced.discountCents),
+          reason: d.note ? `${d.reason}: ${d.note}` : d.reason,
+          staffId: approval.staffId,
+        }, approval.approverId);
       }
 
       await conn.query("UPDATE Orders SET Subtotal = ?, DiscountAmount = ?, Tax = ?, Total = ? WHERE OrderID = ?",

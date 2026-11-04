@@ -7,12 +7,14 @@ const { LOSS_REASONS } = require("./attention");
 const { mondayOf, splitOvertime, shiftPay } = require("./overtime");
 const { isDate } = require("./dates");
 const { cents } = require("./pricing");
+const { rfm, AT_RISK_MIN_DAYS, LAPSED_MIN_DAYS } = require("./rfm");
 
 const PERM_REPORTS = 20;
 const PERM_COSTS = 13;
 const PERM_TEAM = 17; // pay is on the team's timecards
 const COUNTED = [2, 3]; // submitted and approved shifts; open and rejected ones aren't paid
 const PAID = [2, 3, 4, 5, 7]; // confirmed, preparing, ready, completed, refunded: money was taken. Pending and cancelled never count.
+const VISITS = [2, 3, 4, 5]; // PAID without refunded: an order refunded in full doesn't count as a customer's visit
 const REFUND_DONE = 2;
 const SALE = 2;
 const TIPPED = [2, 3, 5]; // authorized, completed, refunded payments: not pending or failed
@@ -75,6 +77,13 @@ async function categories(businessId) {
   return rows;
 }
 
+// The business's membership tiers, lowest first; "none" stands for customers with no active loyalty account
+const NO_MEMBERSHIP = { id: "none", name: "No membership" };
+async function tiers(businessId) {
+  const [rows] = await pool.query("SELECT TierID AS id, Name AS name FROM MembershipTier WHERE BusinessID = ? ORDER BY MinimumPoints, Name", [businessId]);
+  return rows;
+}
+
 router.get("/reports/options", async (req, res) => {
   const { locations } = await places(req.session);
   const home = locations.find((l) => l.id === req.session.locationId) || locations[0];
@@ -88,6 +97,7 @@ router.get("/reports/options", async (req, res) => {
     payPeriod: periods.current,
     seesLabor: await hasPermission(pool, req.session.employeeId, PERM_TEAM),
     categories: await categories(req.session.businessId),
+    tiers: [...(await tiers(req.session.businessId)), NO_MEMBERSHIP],
     reasons: Object.entries(REASONS).map(([id, code]) => ({ id, name: LOSS_REASONS[code] })),
     seesCosts: await hasPermission(pool, req.session.employeeId, PERM_COSTS),
   });
@@ -252,6 +262,62 @@ router.get("/reports/losses", async (req, res) => {
     },
     rows: list,
     total: { reports, ...(costs && { cost: lost }) },
+  });
+});
+
+// 5. Customers: RFM for everyone with an order in these dates, as of the To date. Scores compare the customers in this report.
+// Spend is what they paid for those orders, after discounts and before tax, less whatever has been refunded on them.
+// An order refunded in full isn't a visit, so it isn't counted at all. Guest orders have no customer, so they aren't here.
+// Everyone is scored first and the Membership filter applied after, so filtering never changes a customer's scores or segment.
+router.get("/reports/customers", async (req, res) => {
+  const { chosen } = await scope(req);
+  const { from, to } = await range(req, chosen[0].timeZone);
+  const { businessId } = req.session;
+  const groups = [...(await tiers(businessId)), NO_MEMBERSHIP];
+  const tier = String(req.query.tier || "");
+  if (tier && !groups.some((g) => g.id === tier)) throw new HttpError(400, "Choose a membership from the list.");
+  const window = `o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
+        AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
+        AND DATE_FORMAT(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') BETWEEN ? AND ?`;
+  const args = [businessId, chosen.map((l) => l.id), VISITS, addDays(from, -1), addDays(to, 2), from, to];
+
+  const [rows] = await pool.query(
+    `SELECT c.CustomerID AS id, CONCAT_WS(' ', c.FirstName, c.LastName) AS customer, la.TierID AS tierId, COUNT(*) AS orders, MAX(s.day) AS lastOrder,
+            SUM(s.sold - COALESCE(r.refunded, 0)) AS spend
+       FROM (SELECT o.OrderID, o.CustomerID, DATE_FORMAT(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') AS day, SUM(oi.NetAmount) AS sold
+               FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
+              WHERE o.CustomerID IS NOT NULL AND ${window}
+              GROUP BY o.OrderID, o.CustomerID, day) s
+       JOIN Customer c ON c.CustomerID = s.CustomerID
+       LEFT JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
+       LEFT JOIN (SELECT OrderID, SUM(Amount - TaxAmount) AS refunded FROM Refund WHERE BusinessID = ? AND RefundStatusCode = ? GROUP BY OrderID) r ON r.OrderID = s.OrderID
+      GROUP BY c.CustomerID, c.FirstName, c.LastName, la.TierID`,
+    [...args, businessId, REFUND_DONE]
+  );
+
+  const groupOf = (id) => groups.find((g) => g.id === (id || NO_MEMBERSHIP.id));
+  const list = rfm(rows.map((x) => ({ id: x.id, customer: x.customer || "No name given", tierId: groupOf(x.tierId).id, membership: groupOf(x.tierId).name, lastOrder: x.lastOrder, daysSince: daysBetween(x.lastOrder, to), orders: Number(x.orders), spend: cents(x.spend) })))
+    .filter((c) => !tier || c.tierId === tier);
+  const n = list.length;
+  const sum = (k) => list.reduce((a, c) => a + c[k], 0);
+  const total = { customers: n, orders: sum("orders"), spend: sum("spend") };
+  res.json({
+    from, to,
+    location: chosen[0].name,
+    membership: tier ? groupOf(tier).name : "All memberships",
+    minDays: { atRisk: AT_RISK_MIN_DAYS, lapsed: LAPSED_MIN_DAYS },
+    byMembership: groups.filter((g) => !tier || g.id === tier).map((g) => {
+      const members = list.filter((c) => c.tierId === g.id);
+      return { id: g.id, name: g.name, customers: members.length, averageSpend: members.length ? Math.round(members.reduce((a, c) => a + c.spend, 0) / members.length) : null };
+    }),
+    cards: {
+      customers: n,
+      averageSpend: n ? Math.round(total.spend / n) : 0,
+      averageOrders: n ? Math.round((total.orders / n) * 10) / 10 : 0,
+      averageDays: n ? Math.round(sum("daysSince") / n) : 0,
+    },
+    rows: list,
+    total,
   });
 });
 

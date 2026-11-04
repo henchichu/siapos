@@ -1,5 +1,5 @@
 // Reports: one page, a tab per report. Each tab has its filters, Run report, four summary cards, and a table with a Total row.
-const TABS = [["live", "Live sales"], ["sales-by-day", "1. Sales by day"], ["top-sellers", "2. Top sellers"], ["labor", "3. Labor cost"], ["losses", "4. Stock losses"]];
+const TABS = [["live", "Live sales"], ["sales-by-day", "1. Sales by day"], ["top-sellers", "2. Top sellers"], ["labor", "3. Labor cost"], ["losses", "4. Stock losses"], ["customers", "5. Customers"]];
 const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "live"; };
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const weekday = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { weekday: "short", timeZone: "UTC" });
@@ -259,6 +259,49 @@ function StockLosses({ options }) {
   </section>`;
 }
 
+// 5. Customers: recency, frequency and spend per customer, over a longer range than the other tabs since people don't come in daily
+// The tip is CSS on the header's data-tip, not an element inside it: phone cards take their labels from the header's text.
+const SCORE_HEADS = [["Recency", "How recently they ordered (5 = most recent)"], ["Frequency", "How often they order (5 = most often)"], ["Spend", "How much they spend (5 = highest)"]];
+function Customers({ options }) {
+  const r = useReport("customers", { from: addDays(options.today, -89), to: options.today, location: options.location, tier: "" });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
+  const { report } = r;
+  return html`<section className="pview report" aria-label="Customers">
+    <${Filters} r=${r} options=${options}>
+      <label className="pf"><b>Membership</b>
+        <select className="select" aria-label="Membership" value=${r.filters.tier} onChange=${(e) => r.set({ tier: e.target.value })}>
+          <option value="">All memberships</option>
+          ${options.tiers.map((t) => html`<option key=${t.id} value=${t.id}>${t.name}</option>`)}</select></label>
+    <//>
+    ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
+      <p className="sub">${report.location} · ${report.membership} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Customers", String(report.cards.customers)], ["Average spend", money(report.cards.averageSpend)],
+        ["Average orders", report.cards.averageOrders.toFixed(1)], ["Average days since last order", String(report.cards.averageDays)]]} />
+      <p className=${`sub ${panelOf("summary", sub)}`}>Nobody is labelled At risk until ${report.minDays.atRisk} days after their last order, or Lapsed until ${report.minDays.lapsed} days.</p>
+      <div className=${`tablewrap ${panelOf("summary", sub)}`}>
+        <h3>Customers by membership</h3>
+        <div className="tscroll"><table className="table mg fit rowcards rfm" aria-label="Customers by membership">
+          <thead><tr><th>Membership</th><th className="r">Customers</th><th className="r">Average spend</th></tr></thead>
+          <tbody>${report.byMembership.map((g) => html`<tr key=${g.id}>
+            <td>${g.name}</td><td className="r">${g.customers}</td><td className="r">${g.averageSpend == null ? "—" : money(g.averageSpend)}</td></tr>`)}</tbody>
+        </table></div>
+      </div>
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
+        <h3>Customers by RFM score</h3>
+        <div className="tscroll"><table className="table mg fit rowcards rfm" aria-label="Customers by RFM score">
+          <thead><tr><th>Customer</th><th>Membership</th><th>Segment</th><th>Last order</th><th className="r">Days since</th><th className="r">Orders</th><th className="r">Total spend</th>
+            ${SCORE_HEADS.map(([name, tip]) => html`<th key=${name} className="score"><span className="headtip" tabIndex="0" data-tip=${tip} aria-label=${`${name}: ${tip}`}>${name}</span></th>`)}</tr></thead>
+          <tbody>${report.rows.map((x) => html`<tr key=${x.id}>
+            <td>${x.customer}</td><td>${x.membership}</td><td>${x.segment}</td><td>${shortDay(x.lastOrder)}</td><td className="r">${x.daysSince}</td><td className="r">${x.orders}</td><td className="r">${money(x.spend)}</td>
+            <td className="score">${x.r}</td><td className="score">${x.f}</td><td className="score">${x.m}</td></tr>`)}
+            ${!report.rows.length && html`<tr><td colSpan="10">No customer orders in these dates.</td></tr>`}</tbody>
+          <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td className="r">${report.total.orders}</td><td className="r">${money(report.total.spend)}</td><td></td><td></td><td></td></tr></tfoot>
+        </table></div>
+      </div><//>`}
+  </section>`;
+}
+
 function App() {
   const me = useMe();
   const [tab, setTab] = useState(tabFromHash);
@@ -284,6 +327,7 @@ function App() {
         : tab === "top-sellers" ? html`<${TopSellers} options=${options} />`
         : tab === "losses" ? html`<${StockLosses} options=${options} />`
         : tab === "labor" ? html`<${LaborCost} options=${options} />`
+        : tab === "customers" ? html`<${Customers} options=${options} />`
         : null}
     </section>
   </div>`;

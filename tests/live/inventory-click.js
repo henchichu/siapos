@@ -61,7 +61,6 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   await m.choose(m.$("select[aria-label=Supplier]"), "sup-bakery");
   check("the supplier filter keeps that supplier's items", rows().map((r) => cells(r)[0]).join("|") === "Blueberry muffin|Butter croissant");
   await m.choose(m.$("select[aria-label=Supplier]"), "");
-  check("a location dropdown is there", !!m.$("select[aria-label=Location]"));
 
   await m.click(row("12 oz cup").querySelectorAll("button.act")[0]);
   check("Restock fills the form: item, Restock chosen, Unit cost shown, no Reason", !!m.$(".pform") && m.$(".pform select").value === "stk-cup-12"

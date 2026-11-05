@@ -669,7 +669,7 @@ function StatusIsland({ order, onOpen }) {
 //  App shell 
 // A shared screen: with no touches for IDLE_MS (30 seconds once an order has been placed) the customer is signed out.
 // The server ends the session itself after 15 minutes without a touch (server/customer.js).
-const IDLE_MS = 2 * 60 * 1000, IDLE_AFTER_ORDER_MS = 30 * 1000, TOUCH_EVERY_MS = 20 * 1000;
+const IDLE_MS = 15 * 60 * 1000, IDLE_AFTER_ORDER_MS = 30 * 1000, TOUCH_EVERY_MS = 20 * 1000;
 function App() {
   const [ctx, setCtx] = useState(null);  // { businessName, locationName, payHere }
   const [catalog, setCatalog] = useState(null);

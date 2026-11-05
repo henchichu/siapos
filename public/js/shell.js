@@ -332,29 +332,3 @@ function Filters({ active = 0, popup, children }) {
   <//>`;
 }
 
-// The page's location choice. Wide: the dropdown where the page put it. Phone: a "Change location" button up in the page title, beside the
-// current location (the .titleaction slot PageTitle leaves), that opens the dropdown in a sheet; nothing when there is only one place to
-// choose. The button is drawn into the title (a portal), so the dropdown's state stays with the page's filters. Choosing applies as the page
-// already does; Done closes the sheet.
-// popup: { options: [[value, name]], value, onChange } shows the choices as buttons in a pop-up window like the sidebar's Switch location.
-function ChangeLocation({ show = true, popup, phoneOnly, children }) {
-  const phone = usePhone();
-  const [open, setOpen] = useState(false);
-  if (!phone) return phoneOnly ? null : children;
-  if (!show) return null;
-  const button = html`<button type="button" className="filterbtn" aria-haspopup="dialog" onClick=${() => setOpen(true)}>Change location</button>`;
-  const slot = document.querySelector(".titleaction");
-  return html`<${React.Fragment}>
-    ${slot ? ReactDOM.createPortal(button, slot) : html`<div className="filterbar">${button}</div>`}
-    ${open && popup && html`<${Modal} title="Change location" onClose=${() => setOpen(false)} className="popup">
-      <ul className="places">${popup.options.map(([value, name]) => html`<li key=${value}>
-        <button className=${`btn block ${value === popup.value ? "primary" : ""}`} aria-current=${value === popup.value ? "true" : undefined}
-          onClick=${() => { setOpen(false); if (value !== popup.value) popup.onChange(value); }}>${name}</button></li>`)}</ul>
-      <div className="btns"><button type="button" className="btn" onClick=${() => setOpen(false)}>Cancel</button></div>
-    <//>`}
-    ${open && !popup && html`<${Sheet} title="Change location" onClose=${() => setOpen(false)}>
-      <div className="pfilters">${children}</div>
-      <div className="pactions"><button type="button" className="pbtn" onClick=${() => setOpen(false)}>Done</button></div>
-    <//>`}
-  <//>`;
-}

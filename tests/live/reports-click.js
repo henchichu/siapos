@@ -1,4 +1,4 @@
-// Drives the real Reports page in jsdom: the tabs, Sales by day's filters, cards, chart and table, as the general manager and as a manager.
+// Drives the real Reports page in jsdom: the tabs, Revenue (live and history) filters, cards, chart and table, as the general manager and as a manager.
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
@@ -34,9 +34,9 @@ async function open(base, number, pin) {
     click: async (el, ms = 500) => { if (!el) throw new Error("missing element"); el.click(); await sleep(ms); },
     type: async (el, v) => { set(w.HTMLInputElement, el, v); el.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80); },
     choose: async (el, v) => { set(w.HTMLSelectElement, el, v); el.dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(150); },
-    heads: () => $$("table[aria-label='Sales by day and location'] thead th").map((t) => t.textContent),
-    rows: () => $$("table[aria-label='Sales by day and location'] tbody tr").filter((r) => r.querySelectorAll("td").length > 1),
-    foot: () => [...($("table[aria-label='Sales by day and location'] tfoot tr")?.querySelectorAll("td") || [])].map((c) => c.textContent),
+    heads: () => $$("section.report table thead th").map((t) => t.textContent),
+    rows: () => $$("section.report table tbody tr").filter((r) => r.querySelectorAll("td").length > 1),
+    foot: () => [...($("section.report table tfoot tr")?.querySelectorAll("td") || [])].map((c) => c.textContent),
     cards: () => $$(".rcard").map((c) => [c.querySelector("span").textContent, c.querySelector("b").textContent]),
     bars: () => $$(".chart .col"),
   };
@@ -48,8 +48,9 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   const m = await open(base, "10420001", "111111");
 
   check("the sidebar has Reports, marked as this page", m.$(".nav [aria-current=page]")?.textContent === "Reports");
-  check("the wireframes' five tabs and Customers", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Live sales|Sales by day|Top sellers|Labor cost|Stock losses|Customers");
-  check("Live sales is open", m.$(".tabs [aria-pressed=true]")?.textContent === "Live sales" && !!m.$("section[aria-label='Live sales']"));
+  check("the wireframes' five tabs and Customers", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Revenue|Top sellers|Labor cost|Stock losses|Customers");
+  check("Revenue is open, on Live", m.$(".tabs [aria-pressed=true]")?.textContent === "Revenue" && !!m.$("section[aria-label='Live sales']")
+    && m.$$("[aria-label='Revenue views'] .tab").map((t) => t.textContent).join("|") === "Live|History");
   const { today } = await (await m.w.fetch("/api/reports/options")).json();
   check("Live sales filters: a Day, today, and no Location list", m.field("Day")?.value === today && !m.field("From") && !m.field("Location"));
   check("seven cards, Net sales so far in black", m.cards().map(([k]) => k).join("|") === "Gross sales|Discounts|Refunds|Net sales so far|Cost of goods|Profit|Tips"
@@ -74,30 +75,37 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText(".livebar button", "By day"), 700);
   check("By day: Monday up to today", m.$("section[aria-label='Live sales'] .tablewrap h3").textContent === "Day by day" && hHeads()[0] === "Day"
     && hRows().at(-1)[0].includes(new Date(`${today}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" })) && hRows()[0][0].startsWith("Mon"));
+  check("Live offers only By hour and By day", m.$$(".livebar .tab").map((t) => t.textContent).join("|") === "By hour|By day");
   const past = new Date(Date.parse(`${today}T00:00:00Z`) - 8 * 864e5).toISOString().slice(0, 10);
   await m.type(m.field("Day"), past);
   await m.click(m.byText("button", "Run report"), 700);
   check("an earlier day: no refresh, Net sales without 'so far'", ![...m.w.timers.values()].some((t) => t.ms === 60000) && /As of/.test(m.$(".livebar").textContent) && m.cards()[3][0] === "Net sales");
 
-  await m.click(m.byText(".tabs .tab", "Sales by day"), 700);
-  check("Sales by day opens", m.$(".tabs [aria-pressed=true]")?.textContent === "Sales by day");
-  check("filters: From, To and Run report", !!m.field("From") && !!m.field("To") && !m.field("Location") && !!m.byText("button", "Run report"));
-  check("the four cards", m.cards().map(([k]) => k).join("|") === "Net sales|Orders|Average order|Tax collected", m.cards().join());
-  check("one bar per day, last 7 days", m.bars().length === 7);
-  check("table columns", m.heads().join("|") === "Date|Location|Orders|Gross|Discounts|Refunds|Net sales", m.heads().join("|"));
-  check("a row per day, all at their location", m.rows().length >= 6 && m.rows().every((r) => r.textContent.includes("Brewbean Downtown")));
-  const sumNet = m.rows().reduce((a, r) => a + dollars(r.lastElementChild.textContent), 0);
-  check("the Total row adds up and matches Net sales", m.foot()[0] === "Total" && Math.abs(dollars(m.foot()[6]) - sumNet) < 0.005 && m.foot()[6] === m.cards()[0][1], m.foot().join("|"));
+  await m.click(m.byText("[aria-label='Revenue views'] .tab", "History"), 700);
+  check("History opens", !!m.$("section[aria-label='Revenue history']") && m.byText("[aria-label='Revenue views'] .tab", "History").getAttribute("aria-pressed") === "true");
+  check("filters: From, To and Run report, no Location", !!m.field("From") && !!m.field("To") && !m.field("Location") && !!m.byText("button", "Run report"));
+  check("Daily, Monthly and Yearly", m.$$(".livebar .tab").map((t) => t.textContent).join("|") === "Daily|Monthly|Yearly");
+  check("every figure Live shows", m.cards().map(([k]) => k).join("|") === "Gross sales|Discounts|Refunds|Net sales|Cost of goods|Profit|Tips" && m.$$(".rcard")[3].className.includes("dark"), m.cards().join());
+  check("one bar per day, last 30 days", m.bars().length === 30 && m.rows().length === 30);
+  check("table columns", m.heads().join("|") === "Day|Orders|Gross|Discounts|Refunds|Net sales|Cost|Profit|Running net", m.heads().join("|"));
+  const sumNet = m.rows().reduce((a, r) => a + dollars(r.children[5].textContent), 0);
+  check("the Total row adds up and matches Net sales", m.foot()[0] === "Total" && Math.abs(dollars(m.foot()[5]) - sumNet) < 0.005 && m.foot()[5] === m.cards()[3][1], m.foot().join("|"));
 
-  m.bars()[6].dispatchEvent(new m.w.MouseEvent("mouseover", { bubbles: true })); await sleep(100);
+  m.bars()[29].dispatchEvent(new m.w.MouseEvent("mouseover", { bubbles: true })); await sleep(100);
   check("hovering a bar shows its day and amount", /\$\d/.test(m.$(".tip")?.textContent || ""), m.$(".tip")?.textContent);
 
   const to = m.field("To").value;
   const from = new Date(Date.parse(`${to}T00:00:00Z`) - 13 * 864e5).toISOString().slice(0, 10);
   await m.type(m.field("From"), from);
-  check("the report waits for Run report", m.bars().length === 7);
+  check("the report waits for Run report", m.bars().length === 30);
   await m.click(m.byText("button", "Run report"), 700);
-  check("Run report: 14 days, Downtown only", m.bars().length === 14 && m.rows().every((r) => r.children[1].textContent === "Brewbean Downtown") && /Brewbean Downtown/.test(m.$(".report .sub").textContent));
+  check("Run report: 14 days, Downtown only", m.bars().length === 14 && /Brewbean Downtown/.test(m.$(".report .sub").textContent));
+
+  await m.click(m.byText(".livebar button", "Monthly"), 700);
+  check("Monthly: a row per month in the dates", m.$(".tablewrap h3").textContent === "Month by month" && m.heads()[0] === "Month" && m.rows().length === (from.slice(0, 7) === to.slice(0, 7) ? 1 : 2));
+  await m.type(m.field("From"), `${Number(to.slice(0, 4)) - 1}-01-01`);
+  await m.click(m.byText(".livebar button", "Yearly"), 700);
+  check("Yearly: a row per year, the last is this year", m.$(".tablewrap h3").textContent === "Year by year" && m.heads()[0] === "Year" && m.rows().length === 2 && m.rows().at(-1).children[0].textContent === to.slice(0, 4));
 
   await m.type(m.field("From"), "2026-12-01");
   await m.click(m.byText("button", "Run report"), 500);
@@ -169,9 +177,8 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   const l = await open(base, "10420002", "222222"); // Leo works at Downtown only
-  await l.click(l.byText(".tabs .tab", "Sales by day"), 700);
   check("a manager has no location list", !l.field("Location"));
-  check("and sees only their own location's figures", l.rows().length > 0 && l.rows().every((r) => r.children[1].textContent === "Brewbean Downtown"));
+  check("and sees only their own location's figures", /Brewbean Downtown/.test(l.$(".report p.sub").textContent));
   check("manager page: no React warnings", l.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, l.w.errors.join(" | "));
 
   server.close(); await pool.end();

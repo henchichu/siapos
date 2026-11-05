@@ -281,7 +281,7 @@ function CountTab({ data, reload }) {
     setBusy(false);
   };
 
-  return html`<section className="pview count" aria-label="Stock count">
+  return html`<section className="pview stockcount" aria-label="Stock count">
     <header className="phead"><h2>Stock count</h2>
       <div className="cardtools"><button className="pbtn outline noprint" aria-label="Print count sheet" onClick=${() => window.print()}>Print<span className="hide-phone"> count sheet</span></button><span className="filterslot"></span></div></header>
     <${Filters} popup active=${supplier ? 1 : 0}><div className="pfilters wrap">

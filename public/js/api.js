@@ -10,6 +10,7 @@ async function api(path, body) {
     throw new Error("Not signed in.");
   }
   if (!res.ok) throw new Error(data.error || "Something went wrong. Try again.");
+  if (body !== undefined) window.dispatchEvent(new Event("api-wrote")); // the menu's badges refresh (shell.js)
   return data;
 }
 

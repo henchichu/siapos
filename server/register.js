@@ -4,7 +4,7 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { notify } = require("./watchers");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
-const { addOrderLines, fingerprint } = require("./orderlines");
+const { addOrderLines, fingerprint, nextOrderNumber } = require("./orderlines");
 const { charge } = require("./mockpay");
 const kioskOrders = require("./kioskorders");
 const check = require("./validate");
@@ -197,9 +197,9 @@ async function completeSale(req) {
 
       const orderId = crypto.randomUUID();
       await conn.query(
-        `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode)
-         VALUES (?, ?, ?, ?, ?, ?, 1)`,
-        [orderId, locationId, businessId, registerId, employeeId, customerId || null]
+        `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderNumber, PricesIncludeTax)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, (SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?))`,
+        [orderId, locationId, businessId, registerId, employeeId, customerId || null, await nextOrderNumber(conn, businessId), businessId]
       );
 
       await addOrderLines(conn, { orderId, businessId, locationId, employeeId, priced,

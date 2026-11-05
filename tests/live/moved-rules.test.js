@@ -36,6 +36,23 @@ test("a variant with no recipe can't be sold at the register or the kiosk, and n
   }
 });
 
+// The database no longer cross-checks this at completion, so the one code path that writes both sides is tested here.
+test("a sale's SALE ledger rows equal minus the components its lines used, per stock item", async () => {
+  const r = await sale([{ key: "a", variantId: "var-croissant", quantity: 2 }, { key: "b", variantId: "var-croissant", quantity: 1 }]);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const [[o]] = await pool.query("SELECT OrderID AS id FROM Orders WHERE OrderNumber = ? AND BusinessID = 'biz-brewbean'", [r.body.orderNumber]);
+  const [rows] = await admin.query(
+    `SELECT x.StockItemID FROM (
+       SELECT c.StockItemID, c.QuantityUsed q FROM OrderItemComponent c JOIN OrderItem oi ON oi.OrderItemID = c.OrderItemID WHERE oi.OrderID = ?
+       UNION ALL
+       SELECT StockItemID, QuantityChange FROM InventoryTransaction WHERE OrderID = ? AND TransactionTypeCode = 2) x
+      GROUP BY x.StockItemID HAVING SUM(x.q) <> 0`, [o.id, o.id]);
+  assert.deepEqual(rows, [], "every stock item nets to zero");
+  const [[{ n }]] = await admin.query("SELECT COUNT(*) AS n FROM InventoryTransaction WHERE OrderID = ? AND TransactionTypeCode = 2", [o.id]);
+  assert.ok(n > 0, "the sale did write ledger rows");
+  await pickUp(r.body.orderNumber);
+});
+
 test("on a tax-inclusive business, a sale's lines carry the order's convention and the price is the total", async () => {
   await admin.query("UPDATE Business SET PricesIncludeTax = 1 WHERE BusinessID = 'biz-brewbean'");
   try {

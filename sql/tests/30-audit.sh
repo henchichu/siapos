@@ -22,11 +22,9 @@ a "shrinkage by type"               "SELECT GROUP_CONCAT(CONCAT(d,' ',v) ORDER B
 echo "--- one-off discounts ---"
 t "order O1, 8.00 - 1.50"      ok   "INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode,EmployeeID,Subtotal,DiscountAmount,Total) VALUES ('O1','L1','B1',2,'E3',8.00,1.50,6.50); INSERT INTO OrderItem (OrderItemID,OrderID,VariantID,BusinessID,Quantity,UnitPrice,LineTotal,DiscountAmount,UnitCost,LineCost,TaxCategoryID,TaxRate,TaxAmount) VALUES ('OI1','O1','V1','B1',2,4.00,8.00,1.50,1.00,2.00,'TZ',0,0); INSERT INTO OrderItemComponent (OrderItemID,StockItemID,BusinessID,QuantityUsed,StockUnitCode,UnitCost) VALUES ('OI1','S1','B1',2,1,1.00); INSERT INTO InventoryTransaction (InventoryTransactionID,BusinessID,StockItemID,LocationID,QuantityChange,UnitCost,TransactionTypeCode,OrderID) VALUES ('X1','B1','S1','L1',-2,1.00,2,'O1');"
 t "payment 6.50, tip 1.00"     ok   "INSERT INTO Payment (PaymentID,OrderID,PaymentMethodCode,Amount,TipAmount,PaymentStatusCode) VALUES ('PA1','O1',2,6.50,1.00,3);"
-t "complete, discount unexplained" fail "UPDATE Orders SET OrderStatusCode=5, CompletedAt=NOW() WHERE OrderID='O1';"
 t "approved by other business" fail "$OD ('D1','O1','B1',1.50,'Spilled','E9');"
 t "blank reason"               fail "$OD ('D1','O1','B1',1.50,'  ','E2');"
 t "manager approves 1.00"      ok   "$OD ('D1','O1','B1',1.00,'Spilled','E2');"
-t "complete, 1.00 of 1.50"     fail "UPDATE Orders SET OrderStatusCode=5, CompletedAt=NOW() WHERE OrderID='O1';"
 t "promo covers 0.50"          ok   "INSERT INTO Promotion (PromotionID,BusinessID,Name,DiscountTypeCode,DiscountValue,StartsAt,EndsAt) VALUES ('PR1','B1','Promo',2,0.50,'2026-01-01','2027-01-01'); INSERT INTO PromotionRedemption (BusinessID,RedemptionID,PromotionID,OrderID,DiscountAmount) VALUES ('B1','RD1','PR1','O1',0.50);"
 t "complete O1"                ok   "UPDATE Orders SET OrderStatusCode=5, CompletedAt=NOW() WHERE OrderID='O1';"
 t "edit closed discount"       fail "UPDATE OrderDiscount SET Reason='x' WHERE OrderDiscountID='D1';"
@@ -80,11 +78,8 @@ t "grant server Approve discounts" ok "INSERT INTO RolePermission (RoleID,Busine
 t "deactivate manager role"    ok   "UPDATE Role SET Active=0 WHERE RoleID='RM1';"
 
 echo "--- order numbers ---"
-a "numbered per business"           "SELECT GROUP_CONCAT(OrderNumber ORDER BY OrderNumber) FROM Orders WHERE BusinessID='B1'" "1,2,3,4"
 t "failed insert"              fail "INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode,OrderStatusCode) VALUES ('O5','L1','B1',2,5);"
 s "order in B2"                ok   "INSERT INTO Location (LocationID,BusinessID,Name,TimeZone) VALUES ('L9','B2','Shop','Europe/London'); INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode) VALUES ('O9','L9','B2',2); INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode) VALUES ('O6','L1','B1',2);"
-a "B2 starts at 1, no gap in B1"    "SELECT GROUP_CONCAT(OrderNumber ORDER BY OrderID) FROM Orders WHERE OrderID IN ('O6','O9')" "5,1"
-t "renumber an order"          fail "UPDATE Orders SET OrderNumber=99 WHERE OrderID='O4';"
 
 echo "--- an order with no register ---"
 t "no register, not a register order" ok  "INSERT INTO Orders (OrderID,LocationID,BusinessID,ChannelCode) VALUES ('O8','L1','B1',2);"

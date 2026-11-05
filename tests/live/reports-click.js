@@ -48,7 +48,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   const m = await open(base, "10420001", "111111");
 
   check("the sidebar has Reports, marked as this page", m.$(".nav [aria-current=page]")?.textContent === "Reports");
-  check("the wireframes' five tabs and Customers", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Live sales|1. Sales by day|2. Top sellers|3. Labor cost|4. Stock losses|5. Customers");
+  check("the wireframes' five tabs and Customers", m.$$(".tabs[aria-label=Reports] .tab").map((t) => t.textContent).join("|") === "Live sales|Sales by day|Top sellers|Labor cost|Stock losses|Customers");
   check("Live sales is open", m.$(".tabs [aria-pressed=true]")?.textContent === "Live sales" && !!m.$("section[aria-label='Live sales']"));
   const { today } = await (await m.w.fetch("/api/reports/options")).json();
   check("Live sales filters: a Day, today, and no Location list", m.field("Day")?.value === today && !m.field("From") && !m.field("Location"));
@@ -79,8 +79,8 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText("button", "Run report"), 700);
   check("an earlier day: no refresh, Net sales without 'so far'", ![...m.w.timers.values()].some((t) => t.ms === 60000) && /As of/.test(m.$(".livebar").textContent) && m.cards()[3][0] === "Net sales");
 
-  await m.click(m.byText(".tabs .tab", "1. Sales by day"), 700);
-  check("Sales by day opens", m.$(".tabs [aria-pressed=true]")?.textContent === "1. Sales by day");
+  await m.click(m.byText(".tabs .tab", "Sales by day"), 700);
+  check("Sales by day opens", m.$(".tabs [aria-pressed=true]")?.textContent === "Sales by day");
   check("filters: From, To and Run report", !!m.field("From") && !!m.field("To") && !m.field("Location") && !!m.byText("button", "Run report"));
   check("the four cards", m.cards().map(([k]) => k).join("|") === "Net sales|Orders|Average order|Tax collected", m.cards().join());
   check("one bar per day, last 7 days", m.bars().length === 7);
@@ -103,8 +103,8 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText("button", "Run report"), 500);
   check("a From after To is explained", /on or before/.test(m.$(".report .msg")?.textContent || ""));
 
-  await m.click(m.byText(".tabs .tab", "2. Top sellers"), 700);
-  check("Top sellers opens without a reload", m.$(".tabs [aria-pressed=true]").textContent === "2. Top sellers" && m.w.location.hash === "#top-sellers" && !!m.$("section[aria-label='Top sellers']"));
+  await m.click(m.byText(".tabs .tab", "Top sellers"), 700);
+  check("Top sellers opens without a reload", m.$(".tabs [aria-pressed=true]").textContent === "Top sellers" && m.w.location.hash === "#top-sellers" && !!m.$("section[aria-label='Top sellers']"));
   check("Top sellers filters add Category", !!m.field("From") && !!m.field("To") && !m.field("Location") && m.field("Category")?.value === ""
     && [...m.field("Category").options].map((o) => o.textContent).join("|") === "All categories|Bakery|Coffee|Retail|Tea|No category");
   check("Top sellers cards", m.cards().map(([k]) => k).join("|") === "Units sold|Revenue|Cost of goods|Margin %", m.cards().join());
@@ -118,11 +118,11 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText("button", "Run report"), 700);
   check("the Category filter narrows the ranking", tRows().length > 0 && tRows().every((r) => r[2] === "Bakery") && tRows()[0][0] === "1" && /Bakery/.test(m.$(".report .sub").textContent));
 
-  await m.click(m.byText(".tabs .tab", "4. Stock losses"), 700);
+  await m.click(m.byText(".tabs .tab", "Stock losses"), 700);
   const lHeads = () => m.$$("table[aria-label='Stock losses by item and reason'] thead th").map((t) => t.textContent);
   const lRows = () => m.$$("table[aria-label='Stock losses by item and reason'] tbody tr").filter((r) => r.querySelectorAll("td").length > 1).map((r) => [...r.children].map((c) => c.textContent));
   const lFoot = () => [...m.$("table[aria-label='Stock losses by item and reason'] tfoot tr").children].map((c) => c.textContent);
-  check("Stock losses opens", m.$(".tabs [aria-pressed=true]").textContent === "4. Stock losses" && m.w.location.hash === "#losses");
+  check("Stock losses opens", m.$(".tabs [aria-pressed=true]").textContent === "Stock losses" && m.w.location.hash === "#losses");
   check("Stock losses filters add Reason", [...(m.field("Reason")?.options || [])].map((o) => o.textContent).join("|") === "All reasons|Broken or spilled|Spoiled or expired|Stolen");
   check("Stock losses cards", m.cards().map(([k]) => k).join("|") === "Stock lost at cost|Loss reports|Loss as % of stock used|Most common reason", m.cards().join());
   check("Stock losses columns", lHeads().join("|") === "Stock item|Reason|Reports|Amount lost|Unit|Cost", lHeads().join("|"));
@@ -131,11 +131,11 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText("button", "Run report"), 700);
   check("the Reason filter narrows the table", lRows().length > 0 && lRows().every((r) => r[1] === "Spoiled or expired") && m.cards()[3][1] === "Spoiled or expired");
 
-  await m.click(m.byText(".tabs .tab", "3. Labor cost"), 700);
+  await m.click(m.byText(".tabs .tab", "Labor cost"), 700);
   const pHeads = () => m.$$("table[aria-label='Labor cost by employee'] thead th").map((t) => t.textContent);
   const pRow = (name) => [...(m.$$("table[aria-label='Labor cost by employee'] tbody tr").find((r) => r.children[0].textContent === name)?.children || [])].map((c) => c.textContent);
   const pFoot = () => [...m.$("table[aria-label='Labor cost by employee'] tfoot tr").children].map((c) => c.textContent);
-  check("Labor cost opens", m.$(".tabs [aria-pressed=true]").textContent === "3. Labor cost" && m.w.location.hash === "#labor");
+  check("Labor cost opens", m.$(".tabs [aria-pressed=true]").textContent === "Labor cost" && m.w.location.hash === "#labor");
   check("a Pay period dropdown instead of dates", !m.field("From") && /to/.test(m.field("Pay period")?.selectedOptions[0]?.textContent || "") && !m.field("Location"));
   check("Labor cost cards", m.cards().map(([k]) => k).join("|") === "Hours worked|Labor cost|Net sales|Labor as % of sales", m.cards().join());
   check("Labor cost columns", pHeads().join("|") === "Employee|Role|Shifts|Regular hours|Overtime hours|Hourly rate|Pay", pHeads().join("|"));
@@ -144,12 +144,12 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.choose(m.field("Pay period"), "pp-prev");
   await m.click(m.byText("button", "Run report"), 700);
   check("an earlier period: her old rate", pRow("Priya Shah")[5] === "$16.50" && /closed/.test(m.field("Pay period").selectedOptions[0].textContent));
-  await m.click(m.byText(".tabs .tab", "5. Customers"), 700);
+  await m.click(m.byText(".tabs .tab", "Customers"), 700);
   const cTable = "table[aria-label='Customers by RFM score']";
   const cHeads = m.$$(`${cTable} thead th`).map((t) => t.textContent);
   const cRows = () => m.$$(`${cTable} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1).map((r) => [...r.children].map((c) => c.textContent));
   const cFoot = () => [...m.$(`${cTable} tfoot tr`).children].map((c) => c.textContent);
-  check("Customers opens", m.$(".tabs [aria-pressed=true]").textContent === "5. Customers" && m.w.location.hash === "#customers");
+  check("Customers opens", m.$(".tabs [aria-pressed=true]").textContent === "Customers" && m.w.location.hash === "#customers");
   check("Customers has dates and no Location list, and goes back 90 days", !m.field("Location") && m.field("From").value === new Date(Date.parse(`${m.field("To").value}T00:00:00Z`) - 89 * 864e5).toISOString().slice(0, 10));
   check("Customers cards", m.cards().map(([k]) => k).join("|") === "Customers|Average spend|Average orders|Average days since last order", m.cards().join());
   check("Customers columns", cHeads.join("|") === "Customer|Membership|Segment|Last order|Days since|Orders|Total spend|Recency|Frequency|Spend", cHeads.join("|"));
@@ -169,7 +169,7 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   const l = await open(base, "10420002", "222222"); // Leo works at Downtown only
-  await l.click(l.byText(".tabs .tab", "1. Sales by day"), 700);
+  await l.click(l.byText(".tabs .tab", "Sales by day"), 700);
   check("a manager has no location list", !l.field("Location"));
   check("and sees only their own location's figures", l.rows().length > 0 && l.rows().every((r) => r.children[1].textContent === "Brewbean Downtown"));
   check("manager page: no React warnings", l.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, l.w.errors.join(" | "));

@@ -15,7 +15,8 @@ function useMe() {
   return me;
 }
 
-// The numbers on the menu's badges (server/counts.js), polled every 10 seconds. The sidebar and any page showing one share the poll.
+// The numbers on the menu's badges (server/counts.js): polled every 10 seconds, and fetched again when the tab regains focus
+// or this page saves something. The sidebar and any page showing one share the poll.
 const COUNT_KEY = { "Needs attention": "attention", Register: "register", Kitchen: "kitchen" };
 const countsStore = { value: {}, subs: new Set(), timer: null };
 const loadCounts = () => api("/nav-counts").then((v) => { countsStore.value = v; countsStore.subs.forEach((f) => f(v)); }).catch(() => {});
@@ -23,8 +24,14 @@ function useCounts() {
   const [counts, setCounts] = useState(countsStore.value);
   useEffect(() => {
     countsStore.subs.add(setCounts);
-    if (countsStore.subs.size === 1) { loadCounts(); countsStore.timer = setInterval(loadCounts, 10000); }
-    return () => { countsStore.subs.delete(setCounts); if (!countsStore.subs.size) { clearInterval(countsStore.timer); countsStore.timer = null; } };
+    if (countsStore.subs.size === 1) {
+      loadCounts(); countsStore.timer = setInterval(loadCounts, 10000);
+      let wait; const soon = () => { clearTimeout(wait); wait = setTimeout(loadCounts, 300); }; // a burst of saves is one fetch
+      const visible = () => { if (!document.hidden) soon(); };
+      window.addEventListener("focus", soon); window.addEventListener("api-wrote", soon); document.addEventListener("visibilitychange", visible);
+      countsStore.off = () => { clearTimeout(wait); window.removeEventListener("focus", soon); window.removeEventListener("api-wrote", soon); document.removeEventListener("visibilitychange", visible); };
+    }
+    return () => { countsStore.subs.delete(setCounts); if (!countsStore.subs.size) { clearInterval(countsStore.timer); countsStore.timer = null; countsStore.off?.(); } };
   }, []);
   return counts;
 }

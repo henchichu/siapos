@@ -1,5 +1,5 @@
 // Reports: one page, a tab per report. Each tab has its filters, Run report, four summary cards, and a table with a Total row.
-const TABS = [["live", "Live sales"], ["sales-by-day", "1. Sales by day"], ["top-sellers", "2. Top sellers"], ["labor", "3. Labor cost"], ["losses", "4. Stock losses"], ["customers", "5. Customers"]];
+const TABS = [["live", "Live sales"], ["sales-by-day", "Sales by day"], ["top-sellers", "Top sellers"], ["labor", "Labor cost"], ["losses", "Stock losses"], ["customers", "Customers"]];
 const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "live"; };
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const weekday = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { weekday: "short", timeZone: "UTC" });

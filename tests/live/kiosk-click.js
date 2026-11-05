@@ -148,10 +148,10 @@ const clearChloe = async () => {
     await clearChloe();
     const d = await kiosk(base);
     const realD = d.w.Date.now;
-    d.w.Date.now = () => realD() + 60 * 1000; await sleep(1500);
-    check("a minute of no touches is still signed in", await d.signedIn());
-    d.w.Date.now = () => realD() + 3 * 60 * 1000; await sleep(1500);
-    check("after 2 minutes idle, signed out", !(await d.signedIn()));
+    d.w.Date.now = () => realD() + 14 * 60 * 1000; await sleep(1500);
+    check("14 minutes of no touches is still signed in", await d.signedIn());
+    d.w.Date.now = () => realD() + 16 * 60 * 1000; await sleep(1500);
+    check("after 15 minutes idle, signed out", !(await d.signedIn()));
     check("React reported no errors on the later pages", c.w.errors.length === 0 && d.w.errors.length === 0, [...c.w.errors, ...d.w.errors].slice(0, 3).join(" | "));
   } finally {
     await clearChloe();

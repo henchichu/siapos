@@ -20,7 +20,7 @@ const SALE = 2;
 const TIPPED = [2, 3, 5]; // authorized, completed, refunded payments: not pending or failed
 // The stock losses staff report, under the names Needs attention uses. Count corrections and adjustments aren't losses.
 const REASONS = { broken: 5, spoiled: 6, stolen: 7 }; // the same keys the Inventory page sends
-const MAX_DAYS = 366;
+const MAX_DAYS = 366, MAX_REVENUE_DAYS = 3660; // Revenue history may span years
 
 const router = express.Router();
 router.use("/reports", requirePermission(PERM_REPORTS));
@@ -53,12 +53,12 @@ async function today(timeZone) {
 }
 
 // From and To are the café's local calendar days, both included
-async function range(req, timeZone) {
+async function range(req, timeZone, maxDays = MAX_DAYS) {
   const to = req.query.to ? String(req.query.to) : await today(timeZone);
   const from = req.query.from ? String(req.query.from) : addDays(to, -6);
   if (!isDate(from) || !isDate(to)) throw new HttpError(400, "Choose a From and a To date.");
   if (from > to) throw new HttpError(400, "From must be on or before To.");
-  if (daysBetween(from, to) >= MAX_DAYS) throw new HttpError(400, `Choose a range of ${MAX_DAYS} days or fewer.`);
+  if (daysBetween(from, to) >= maxDays) throw new HttpError(400, `Choose a range of ${maxDays} days or fewer.`);
   return { from, to };
 }
 
@@ -104,7 +104,7 @@ router.get("/reports/options", async (req, res) => {
 });
 
 // Sales per day and location. Sales count on the day the order was paid, refunds on the day the money went back,
-// each in that location's own time zone. Shared by Sales by day and Labor cost.
+// each in that location's own time zone. Labor cost sets its net sales against it.
 async function salesByDay(businessId, chosen, from, to) {
   const ids = chosen.map((l) => l.id);
   // a day either side in UTC, then the exact local day per location
@@ -143,29 +143,6 @@ async function salesByDay(businessId, chosen, from, to) {
   const sum = (k) => list.reduce((a, r) => a + r[k], 0);
   return { list, total: { orders: sum("orders"), gross: sum("gross"), discounts: sum("discounts"), refunds: sum("refunds"), net: sum("net"), tax: sum("tax") } };
 }
-
-// 1. Sales by day: one row per day and location, and a bar per day
-router.get("/reports/sales-by-day", async (req, res) => {
-  const { chosen } = await scope(req);
-  const { from, to } = await range(req, chosen[0].timeZone);
-  const { list, total } = await salesByDay(req.session.businessId, chosen, from, to);
-  const days = Array.from({ length: daysBetween(from, to) + 1 }, (_, i) => addDays(from, i))
-    .map((day) => ({ day, net: list.filter((r) => r.day === day).reduce((a, r) => a + r.net, 0) }));
-  res.json({
-    from, to,
-    location: chosen[0].name,
-    cards: {
-      net: total.net,
-      orders: total.orders,
-      // what a customer spent per order, after discounts and before any later refund
-      average: total.orders ? Math.round((total.gross - total.discounts) / total.orders) : 0,
-      tax: total.tax,
-    },
-    days,
-    rows: list.map(({ tax, ...r }) => r),
-    total,
-  });
-});
 
 // 2. Top sellers: one ranking by units sold, before refunds. Revenue is after discounts and before tax;
 // cost is what the stock cost when each line was sold. Cost and margin only for a role that may see costs.
@@ -385,20 +362,29 @@ router.get("/reports/labor", async (req, res) => {
   });
 });
 
-// Live sales: one day so far, hour by hour, or each day of its week so far. Same measures as Sales by day,
-// plus cost of goods, profit and tips. The page asks again every minute while the day is today.
-router.get("/reports/live", async (req, res) => {
+// Revenue. Live: one day so far, hour by hour, or each day of its week so far. History (From and To given): each day,
+// month or year in the dates. Same measures either way, plus cost of goods, profit and tips.
+// The page asks again every minute while a live day is today.
+router.get("/reports/revenue", async (req, res) => {
   const { chosen } = await scope(req);
-  const day = req.query.day ? String(req.query.day) : await today(chosen[0].timeZone);
-  if (!isDate(day)) throw new HttpError(400, "Choose a day.");
-  const by = req.query.by === "day" ? "day" : "hour";
-  const from = by === "day" ? mondayOf(day) : day;
+  const history = Boolean(req.query.from);
+  let day, from, by;
+  if (history) {
+    ({ from, to: day } = await range(req, chosen[0].timeZone, MAX_REVENUE_DAYS));
+    by = ["month", "year"].includes(req.query.by) ? req.query.by : "day";
+  } else {
+    day = req.query.day ? String(req.query.day) : await today(chosen[0].timeZone);
+    if (!isDate(day)) throw new HttpError(400, "Choose a day.");
+    by = req.query.by === "day" ? "day" : "hour";
+    from = by === "day" ? mondayOf(day) : day;
+  }
   const costs = await hasPermission(pool, req.session.employeeId, PERM_COSTS);
   const { businessId } = req.session;
   const ids = chosen.map((l) => l.id);
   const near = [addDays(from, -1), addDays(day, 2)];
   const local = (col) => `CONVERT_TZ(${col}, '+00:00', l.TimeZone)`;
-  const bucket = (col) => (by === "hour" ? `HOUR(${local(col)})` : `DATE_FORMAT(${local(col)}, '%Y-%m-%d')`);
+  const FORMAT = { day: "%Y-%m-%d", month: "%Y-%m", year: "%Y" };
+  const bucket = (col) => (by === "hour" ? `HOUR(${local(col)})` : `DATE_FORMAT(${local(col)}, '${FORMAT[by]}')`);
 
   const [sales] = await pool.query(
     `SELECT ${bucket("o.OrderDateTime")} AS k, COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
@@ -428,9 +414,15 @@ router.get("/reports/live", async (req, res) => {
     [businessId, ids, PAID, TIPPED, ...near, from, day]
   );
 
-  // By hour: every hour from the first sale or refund to the last, the quiet ones too. By day: Monday to the day.
+  // By hour: every hour from the first sale or refund to the last, the quiet ones too. By day, month and year: every one
+  // in the dates, the quiet ones too (a live week starts on Monday).
   const hours = [...sales, ...refunds].map((r) => Number(r.k));
+  const months = [];
+  for (let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)); `${y}-${String(m).padStart(2, "0")}` <= day.slice(0, 7); m === 12 ? (y++, m = 1) : m++)
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
   const keys = by === "day" ? Array.from({ length: daysBetween(from, day) + 1 }, (_, i) => addDays(from, i))
+    : by === "month" ? months
+    : by === "year" ? Array.from({ length: Number(day.slice(0, 4)) - Number(from.slice(0, 4)) + 1 }, (_, i) => String(Number(from.slice(0, 4)) + i))
     : hours.length ? Array.from({ length: Math.max(...hours) - Math.min(...hours) + 1 }, (_, i) => Math.min(...hours) + i) : [];
   let running = 0;
   const rows = keys.map((k) => {

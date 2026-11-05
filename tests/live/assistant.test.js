@@ -45,7 +45,7 @@ test("Reports are closed to her: no menu item, the page goes home, the API says 
   assert.ok(!me.nav.includes("Reports"));
   assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/attention.html", "she opens to Needs attention");
   assert.equal((await ana.call("/reports/options")).status, 403);
-  assert.equal((await ana.call("/reports/sales-by-day")).status, 403);
+  assert.equal((await ana.call("/reports/revenue")).status, 403);
 });
 
 test("every page on her menu opens", async () => {

@@ -63,12 +63,12 @@ async function open(base, number, pin, hash = "") {
   check("counter text", /\d+ waiting for approval/.test(m.text()));
   const rows = () => m.$$(".cards tbody tr").filter((r) => r.querySelectorAll("td").length > 1);
   check("default filter lists only SUBMITTED rows with Approve, Reject, Edit", rows().length > 0 && rows().every((r) => /SUBMITTED/.test(r.textContent) && /Approve/.test(r.textContent) && /Reject/.test(r.textContent) && /Edit/.test(r.textContent)));
-  const status = m.$$(".filters select")[2];
+  const status = m.$$(".filters select")[1];
   const set = async (el, v) => { Object.getOwnPropertyDescriptor(m.w.HTMLSelectElement.prototype, "value").set.call(el, v); el.dispatchEvent(new m.w.Event("change", { bubbles: true })); await sleep(80); };
   await set(m.$$(".filters select")[0], "pp-curr"); // the seeded approved and rejected cards are in the earlier period
   await set(status, "APPROVED"); await m.click(m.byText(".filters button", "Show"), 700);
   check("Show with Approved: rows say who approved, no buttons", rows().length > 0 && rows().every((r) => /APPROVED/.test(r.textContent) && /Approved by \w+/.test(r.textContent) && !r.querySelector("button")));
-  await set(m.$$(".filters select")[2], "REJECTED"); await m.click(m.byText(".filters button", "Show"), 700);
+  await set(m.$$(".filters select")[1], "REJECTED"); await m.click(m.byText(".filters button", "Show"), 700);
   check("Rejected rows offer only Edit", rows().length > 0 && rows().every((r) => r.querySelectorAll("button").length === 1 && /Edit/.test(r.textContent)));
   await m.click(rows()[0].querySelector("button"), 300);
   check("Edit opens a form with the row's clock in, clock out and break", !!m.$("dialog[open] input[type=datetime-local]") && m.$$("dialog input").length === 3);

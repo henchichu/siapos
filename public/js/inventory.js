@@ -17,10 +17,6 @@ function Tabs({ tab, onTab }) {
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;
 }
 
-function LocationSelect({ data, onLocation }) {
-  return html`<select className="select" aria-label="Location" value=${data.location.id} onChange=${(e) => onLocation(e.target.value)}>
-    ${data.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select>`;
-}
 // Deactivated suppliers only appear while "Show deactivated" is on
 const visibleSuppliers = (data, showInactive) => data.suppliers.filter((s) => s.active || showInactive);
 const SupplierSelect = ({ data, value, onChange, showInactive, empty = "All suppliers", label = "Supplier" }) => html`<select className="select" aria-label=${label} value=${value} onChange=${(e) => onChange(e.target.value)}>
@@ -340,7 +336,6 @@ function App() {
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
         <div className="inventory-toolbar">
           <${Tabs} tab=${tab} onTab=${go} />
-          <${ChangeLocation} show=${data.locations.length > 1} popup=${{ options: data.locations.map((l) => [l.id, l.name]), value: data.location.id, onChange: load }}><${LocationSelect} data=${data} onLocation=${load} /><//>
         </div>
         ${tab === "stock" && html`<${StockTab} key=${data.location.id} data=${data} reload=${() => load()} showInactive=${showInactive} setShowInactive=${setShowInactive} />`}
         ${tab === "delivery" && html`<${DeliveryTab} key=${data.location.id} data=${data} reload=${() => load()} showInactive=${showInactive} setShowInactive=${setShowInactive} />`}

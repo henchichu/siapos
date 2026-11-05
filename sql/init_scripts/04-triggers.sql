@@ -2,6 +2,7 @@ USE miniworld;
 
 DELIMITER $$
 
+-- Low Stock Alerts
 CREATE TRIGGER TR_Inventory_AfterUpdate AFTER UPDATE ON Inventory FOR EACH ROW
 BEGIN
     IF NEW.ReorderThreshold > 0 AND NEW.Quantity <= NEW.ReorderThreshold THEN
@@ -10,6 +11,16 @@ BEGIN
     ELSE
         DELETE FROM LowStockAlert WHERE InventoryID = NEW.InventoryID;
     END IF;
+END$$
+
+-- Approvals: the backend records each manager's decision in ApprovalAction and carries it out (server/approvals.js).
+DELIMITER $$
+CREATE TRIGGER TR_ApprovalAction_AfterInsert AFTER INSERT ON ApprovalAction FOR EACH ROW
+BEGIN
+    INSERT INTO NotificationQueue (EntityName, EntityID, ActionType, NewData)
+    VALUES ('ApprovalAction', NEW.ApprovalActionID, NEW.ActionType,
+            JSON_OBJECT('businessId', NEW.BusinessID, 'actorId', NEW.ActorEmployeeID, 'approverId', NEW.ApproverEmployeeID,
+                        'locationId', NEW.LocationID, 'targetId', NEW.TargetID, 'payload', NEW.Payload));
 END$$
 
 CREATE TRIGGER TR_InventoryTransaction_AfterInsert AFTER INSERT ON InventoryTransaction FOR EACH ROW
@@ -168,17 +179,3 @@ BEGIN
         CALL CheckOrderLines(NEW.OrderID);
     END IF;
 END$$
-
-DELIMITER ;
-
--- Approvals: the backend records each manager's decision in ApprovalAction and carries it out (server/approvals.js).
--- This trigger only queues it for the worker; the work itself is JavaScript.
-DELIMITER $$
-CREATE TRIGGER TR_ApprovalAction_AfterInsert AFTER INSERT ON ApprovalAction FOR EACH ROW
-BEGIN
-    INSERT INTO NotificationQueue (EntityName, EntityID, ActionType, NewData)
-    VALUES ('ApprovalAction', NEW.ApprovalActionID, NEW.ActionType,
-            JSON_OBJECT('businessId', NEW.BusinessID, 'actorId', NEW.ActorEmployeeID, 'approverId', NEW.ApproverEmployeeID,
-                        'locationId', NEW.LocationID, 'targetId', NEW.TargetID, 'payload', NEW.Payload));
-END$$
-DELIMITER ;

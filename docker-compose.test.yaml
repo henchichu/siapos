@@ -1,0 +1,12 @@
+# Local testing only: opens the database to this machine so tests/live and sql/tests can connect.
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml -f docker-compose.test.yaml up -d
+name: siapos
+
+services:
+  mysql-db:
+    ports:
+      - "127.0.0.1:3306:3306"   # host-only
+
+networks:
+  db:
+    internal: false   # a published port needs a network that isn't internal

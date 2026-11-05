@@ -1,5 +1,5 @@
 const REASONS = ["Regular", "Employee", "Complaint", "Damaged"];
-const METHODS = [["cash", "Cash"], ["card", "Card"], ["apple", "Apple Pay"], ["google", "Google Pay"], ["gift", "Gift card"]];
+const METHODS = [["cash", "Cash"], ["card", "Card"], ["apple", "Apple Pay"], ["google", "Google Pay"]];
 const TIPPED = ["card", "apple", "google"]; // the methods that go through the (mock) processor, where a tip can be added
 
 const unitOf = (line) => line.variant.priceCents + line.modifiers.reduce((a, m) => a + m.deltaCents, 0);
@@ -19,6 +19,7 @@ const NO_TOTALS = { subtotalCents: 0, promotionCents: 0, discountCents: 0, taxCe
 const sizeLabel = (product, variant) => (product.variants.length > 1 ? `, ${variant.name}` : "");
 
 function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch, category, setCategory, onRefund, showRefund, onKiosk }) {
+  const counts = useCounts();
   const q = search.trim().toLowerCase();
   const shown = catalog.products.filter((p) =>
     (!category || p.category === category) &&
@@ -29,7 +30,7 @@ function Products({ catalog, selectedId, onPick, onCustomize, search, setSearch,
     <header>
       <${PageTitle}>Products<//>
       <div className="search">
-        ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders</button>`}
+        ${showRefund && html`<button className="btn slim" onClick=${onKiosk}>Kiosk orders<${Count} n=${counts.register} /></button>`}
         ${showRefund && html`<button className="btn danger slim" onClick=${onRefund}>Refund</button>`}
         <label htmlFor="search">Search</label>
         <input id="search" className="field" placeholder="Name or SKU" value=${search}
@@ -276,8 +277,6 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
         <input className="field" inputMode="numeric" autoComplete="off" placeholder="Security code" aria-label="Card security code" value=${order.card.cvc}
           onChange=${(e) => setOrder({ card: { ...order.card, cvc: e.target.value } })} /></div>`}
       ${(order.method === "apple" || order.method === "google") && html`<p className="sub">Test mode: the wallet payment is approved at once, and nothing is charged for real.</p>`}
-      ${order.method === "gift" && html`<label>Gift card code
-        <input className="field" autoComplete="off" value=${order.giftCode} onChange=${(e) => setOrder({ giftCode: e.target.value })} /></label>`}
       <${Message} msg=${msg || (pricingError && { kind: "error", text: pricingError })} />
     </div>
     <div className="btns">
@@ -287,7 +286,7 @@ function Order({ cart, setQty, priced, pricingError, checkout, setCheckout, cata
   </aside>`;
 }
 
-const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, giftCode: "", card: { number: "", expiry: "", cvc: "" } };
+const EMPTY_ORDER = { member: null, promotionId: "", discount: null, method: "cash", tip: "", tipPct: null, card: { number: "", expiry: "", cvc: "" } };
 
 // Kiosk orders the customer chose to pay for in cash: take the cash to send them to the kitchen, or cancel to free their stock
 function KioskOrdersModal({ onClose }) {
@@ -302,6 +301,7 @@ function KioskOrdersModal({ onClose }) {
       setMsg({ kind: "ok", text: what === "pay" ? `Order ${o.orderNumber} paid and sent to the kitchen.` : `Order ${o.orderNumber} cancelled.` });
     } catch (err) { setMsg({ kind: "error", text: err.message }); }
     load();
+    loadCounts();
   };
   return html`<${Modal} title="Kiosk orders to pay" onClose=${onClose} wide>
     <p className="hint">Customers who chose cash on the kiosk pay here. An order nobody pays within ${holdMinutes} minutes is cancelled.</p>
@@ -400,7 +400,7 @@ function App() {
         discount: order.discount?.terms,
         approvalToken: order.discount?.token,
         customerId: order.member?.id,
-        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", giftCardCode: order.giftCode, card: order.method === "card" ? order.card : undefined },
+        payment: { method: order.method, tip: priced?.totalCents > 0 ? tipOf(order, priced) : "", card: order.method === "card" ? order.card : undefined },
       });
       resetOrder();
       setNotice(`Sale complete: order ${done.orderNumber}, ${money(done.totalCents)}${done.tipCents ? ` + ${money(done.tipCents)} tip` : ""}.`);

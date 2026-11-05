@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool } = require("./env");
+const { start, pool, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -13,7 +13,7 @@ let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin, hash = "") {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/shift.html" + hash, pretendToBeVisual: true }).window;
   w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
@@ -34,8 +34,8 @@ async function open(base, number, pin, hash = "") {
   // Barista: straight to My shift, no tabs
   const b = await open(base, "10420005", "555555");
   check("barista opens My shift with no tabs", /Time clock/.test(b.text()) && !b.$(".tabs") && !/Team timecards/.test(b.text()));
-  check("barista menu: Kitchen and My shift only, My shift current", b.$$(".nav a.link").map((a) => a.textContent).join("|") === "Kitchen|My shift" && b.byText(".nav a.link", "My shift").getAttribute("aria-current") === "page");
-  check("labels filled: employee, location, rate", /Jordan Lee/.test(b.text()) && /Brewbean Campus/.test(b.text()) && /Hourly rate: \$16\.00/.test(b.text()));
+  check("barista menu: Kitchen and My shift only, My shift current", b.$$(".nav a.link .label").map((a) => a.textContent).join("|") === "Kitchen|My shift" && b.byText(".nav a.link", "My shift").getAttribute("aria-current") === "page");
+  check("labels filled: employee, location, rate", /Jordan Lee/.test(b.text()) && /Brewbean Downtown/.test(b.text()) && /Hourly rate: \$16\.00/.test(b.text()));
   const btn = (t) => b.byText(".tbtn", t);
   check("clocked out: only Clock in is enabled", !btn("Clock in").disabled && btn("Clock out").disabled && btn("Break Start").disabled && btn("Break End").disabled && /Not clocked in/.test(b.text()));
   await b.click(btn("Clock in"), 600);
@@ -53,22 +53,22 @@ async function open(base, number, pin, hash = "") {
   await b.click(btn("Clock out"), 300);
   await b.click(b.byText("dialog button", "Clock out"), 700);
   check("confirmed: shift submitted", /Not clocked in/.test(b.text()) && /SUBMITTED/.test(b.text()) && !btn("Clock out") .disabled === false);
-  check("sales cards present", /Today's sales at Brewbean Campus/.test(b.text()) && /Orders/.test(b.text()) && /Net sales/.test(b.text()) && /Items sold/.test(b.text()));
+  check("sales cards present", /Today's sales at Brewbean Downtown/.test(b.text()) && /Orders/.test(b.text()) && /Net sales/.test(b.text()) && /Items sold/.test(b.text()));
   check("barista page: no React warnings", b.w.errors.length === 0, b.w.errors.join(" | "));
 
   // Manager: Team timecards first, with the toggle
-  const m = await open(base, "10420002", "222222");
+  const m = await open(base, "10420001", "111111"); // the general manager, who works at Downtown where the seeded cards are
   check("manager opens Team timecards", /Timecards/.test(m.text()) && !!m.$(".filters") && m.byText(".tab", "Team timecards").getAttribute("aria-pressed") === "true");
-  check("manager sees all ten menu links, Employees among them", m.$$(".nav a.link").length === 10 && m.$$(".nav a.link").some((a) => a.textContent === "Employees"));
+  check("manager sees all nine menu links", m.$$(".nav a.link").length === 9);
   check("counter text", /\d+ waiting for approval/.test(m.text()));
   const rows = () => m.$$(".cards tbody tr").filter((r) => r.querySelectorAll("td").length > 1);
   check("default filter lists only SUBMITTED rows with Approve, Reject, Edit", rows().length > 0 && rows().every((r) => /SUBMITTED/.test(r.textContent) && /Approve/.test(r.textContent) && /Reject/.test(r.textContent) && /Edit/.test(r.textContent)));
-  const status = m.$$(".filters select")[2];
+  const status = m.$$(".filters select")[1];
   const set = async (el, v) => { Object.getOwnPropertyDescriptor(m.w.HTMLSelectElement.prototype, "value").set.call(el, v); el.dispatchEvent(new m.w.Event("change", { bubbles: true })); await sleep(80); };
   await set(m.$$(".filters select")[0], "pp-curr"); // the seeded approved and rejected cards are in the earlier period
   await set(status, "APPROVED"); await m.click(m.byText(".filters button", "Show"), 700);
   check("Show with Approved: rows say who approved, no buttons", rows().length > 0 && rows().every((r) => /APPROVED/.test(r.textContent) && /Approved by \w+/.test(r.textContent) && !r.querySelector("button")));
-  await set(m.$$(".filters select")[2], "REJECTED"); await m.click(m.byText(".filters button", "Show"), 700);
+  await set(m.$$(".filters select")[1], "REJECTED"); await m.click(m.byText(".filters button", "Show"), 700);
   check("Rejected rows offer only Edit", rows().length > 0 && rows().every((r) => r.querySelectorAll("button").length === 1 && /Edit/.test(r.textContent)));
   await m.click(rows()[0].querySelector("button"), 300);
   check("Edit opens a form with the row's clock in, clock out and break", !!m.$("dialog[open] input[type=datetime-local]") && m.$$("dialog input").length === 3);

@@ -34,7 +34,7 @@ router.get("/kitchen/stream", requirePermission(PERM_SEE_KITCHEN), (req, res) =>
 router.get("/kitchen/tickets", requirePermission(PERM_SEE_KITCHEN), async (req, res) => {
   const { businessId, locationId, employeeId } = req.session;
   const [orders] = await pool.query(
-    `SELECT o.OrderID, o.OrderNumber, o.ChannelCode, o.OrderStatusCode, o.OrderDateTime, o.PickupAt, o.CustomerNote,
+    `SELECT o.OrderID, o.OrderNumber, o.OrderStatusCode, o.OrderDateTime, o.ChannelCode, o.CustomerNote,
             CONCAT_WS(' ', c.FirstName, c.LastName) AS CustomerName,
             h.ChangedAt AS StatusAt, e.FirstName AS StatusBy
        FROM Orders o
@@ -69,12 +69,11 @@ router.get("/kitchen/tickets", requirePermission(PERM_SEE_KITCHEN), async (req, 
   const stage = (code) => orders.filter((o) => o.OrderStatusCode === code).map((o) => ({
     id: o.OrderID,
     number: o.OrderNumber,
-    online: o.ChannelCode === 2,
-    pickupAt: o.PickupAt,
     placedAt: o.OrderDateTime,
     statusAt: o.StatusAt,
     statusBy: o.StatusBy,
     customer: o.CustomerName || "Guest",
+    kiosk: o.ChannelCode === 3,
     note: o.CustomerNote,
     items: items.filter((i) => i.OrderID === o.OrderID).map((i) => ({
       quantity: Number(i.Quantity),

@@ -60,8 +60,8 @@ function App() {
   const load = useCallback(() => api("/attention").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
-  const { losses, pendingDeliveries, timecards, refunds } = data || {};
-  const tabs = [losses && ["losses", "Losses", losses.count], pendingDeliveries && ["deliveries", "Deliveries", pendingDeliveries.count],
+  const { losses, reorder, timecards, refunds } = data || {};
+  const tabs = [losses && ["losses", "Losses", losses.count], reorder && ["reorder", "Reorder", reorder.count],
     timecards && ["timecards", "Timecards", timecards.count], refunds && ["refunds", "Refunds", refunds.count]].filter(Boolean);
   const shown = tabs.some(([k]) => k === tab) ? tab : tabs[0]?.[0];
   return html`<div className="app kitchen">
@@ -76,10 +76,10 @@ function App() {
             <${Table} heads=${[["Time"], ["Stock item"], ["Amount"], ["Reason"], ["By"]]}>
               ${losses.rows.map((l, i) => html`<tr key=${i}><td className="nw">${clock(l.at, data.timeZone)}</td><td>${l.item}</td><td className="nw">${qty(l.amount)} ${l.unit}</td><td>${l.reason}</td><td className="nw">${l.by || "—"}</td></tr>`)}<//>
           <//>`}
-          ${pendingDeliveries && html`<${Panel} title="Pending deliveries" className=${panelOf("deliveries", shown)} count=${pendingDeliveries.count} empty="No deliveries are pending."
-            action=${html`<a className="pbtn outline" href="/inventory.html#delivery">Receive delivery</a>`}>
-            <${Table} heads=${[["Purchase order"], ["Stock item / supplier"], ["Quantity", true], ["Status"]]}>
-              ${pendingDeliveries.rows.map((p) => html`<tr key=${p.id}><td className="nw">${p.orderNumber}</td><td>${p.item}<div className="sub">${p.supplier || "No supplier assigned"}</div></td><td className="r">${qty(p.quantity)} ${p.unit}</td><td className="nw">${p.status}</td></tr>`)}<//>
+          ${reorder && html`<${Panel} title="Stock to reorder" className=${panelOf("reorder", shown)} count=${reorder.count} empty="Nothing is at its reorder level."
+            action=${html`<a className="pbtn outline" href="/inventory.html">Open inventory</a>`}>
+            <${Table} heads=${[["Stock item / usual supplier"], ["On hand", true], ["Reorder at", true]]}>
+              ${reorder.rows.map((r) => html`<tr key=${r.id}><td>${r.item}<div className="sub">${r.supplier || "No supplier on file"}</div></td><td className="r">${qty(r.onHand)} ${r.unit}</td><td className="r">${qty(r.reorderAt)} ${r.unit}</td></tr>`)}<//>
           <//>`}
           ${timecards && html`<${Panel} title="Timecards waiting for approval" className=${panelOf("timecards", shown)} count=${timecards.count} empty="No timecards are waiting."
             action=${html`<a className="pbtn outline" href=${`/shift.html${timecards.periodId ? `?payPeriodId=${timecards.periodId}` : ""}#team`}>Review timecards</a>`}>

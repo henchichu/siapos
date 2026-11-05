@@ -79,7 +79,7 @@ router.get("/products/list", see, async (req, res) => {
                                         LEFT JOIN Inventory i ON i.StockItemID = vr.StockItemID AND i.LocationID = ?
                                        WHERE vr.VariantID = v.VariantID AND COALESCE(i.Quantity, 0) < vr.QuantityPerUnit)) AS inStock
        FROM Product p LEFT JOIN Category c ON c.CategoryID = p.CategoryID
-      WHERE p.BusinessID = ? AND NOT p.IsGiftCard ORDER BY p.Name`,
+      WHERE p.BusinessID = ? ORDER BY p.Name`,
     [locationId, businessId]
   );
   const [categories] = await pool.query("SELECT CategoryID AS id, Name AS name FROM Category WHERE BusinessID = ? AND Active ORDER BY Name", [businessId]);
@@ -126,14 +126,14 @@ router.post("/products", edit, async (req, res) => {
 
 router.post("/products/:id", edit, async (req, res) => {
   const f = await productFields(req);
-  const [r] = await pool.query("UPDATE Product SET Name = ?, Description = ?, CategoryID = ?, Active = ? WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard",
+  const [r] = await pool.query("UPDATE Product SET Name = ?, Description = ?, CategoryID = ?, Active = ? WHERE ProductID = ? AND BusinessID = ?",
     [f.name, f.description, f.categoryId, f.active, req.params.id, req.session.businessId]);
   if (!r.affectedRows) throw new HttpError(404, "Product not found.");
   res.json({ id: req.params.id });
 });
 
 router.post("/products/:id/active", edit, async (req, res) => {
-  const [r] = await pool.query("UPDATE Product SET Active = ? WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard",
+  const [r] = await pool.query("UPDATE Product SET Active = ? WHERE ProductID = ? AND BusinessID = ?",
     [req.body.active ? 1 : 0, req.params.id, req.session.businessId]);
   if (!r.affectedRows) throw new HttpError(404, "Product not found.");
   res.json({ ok: true });
@@ -145,7 +145,7 @@ router.post("/products/:id/photo", edit, express.raw({ type: Object.keys(PHOTO_T
   const body = req.body;
   if (!ext || !Buffer.isBuffer(body) || !body.length) throw new HttpError(400, "Choose a PNG, JPEG or WebP picture up to 2 MB.");
   if (!PHOTO_MAGIC[ext].every((b, i) => body[i] === b)) throw new HttpError(400, "That file isn't a real picture.");
-  const product = await owns(pool, "SELECT ImageKey FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [req.params.id, req.session.businessId], "Product not found.");
+  const product = await owns(pool, "SELECT ImageKey FROM Product WHERE ProductID = ? AND BusinessID = ?", [req.params.id, req.session.businessId], "Product not found.");
   const key = `products/${req.params.id}.${ext}`;
   fs.mkdirSync(path.join(UPLOAD_DIR, "products"), { recursive: true });
   fs.writeFileSync(path.join(UPLOAD_DIR, key), body);
@@ -163,7 +163,7 @@ router.get("/products/:id/photo", see, async (req, res) => {
 
 router.get("/products/:id/sizes", edit, async (req, res) => {
   const { businessId, locationId } = req.session;
-  await owns(pool, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [req.params.id, businessId], "Product not found.");
+  await owns(pool, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ?", [req.params.id, businessId], "Product not found.");
   const [sizes] = await pool.query(
     `SELECT v.VariantID AS id, v.Name AS name, v.SKU AS sku, v.Price AS price, v.TaxCategoryID AS taxCategoryId, t.Name AS taxCategory,
             v.RestockOnReturn AS restock, (SELECT COUNT(*) FROM VariantRecipe vr WHERE vr.VariantID = v.VariantID) AS recipeItems
@@ -194,7 +194,7 @@ const sizeFields = async (req) => {
 
 router.post("/products/:id/sizes", edit, async (req, res) => {
   const { businessId } = req.session;
-  await owns(pool, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [req.params.id, businessId], "Product not found.");
+  await owns(pool, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ?", [req.params.id, businessId], "Product not found.");
   const f = await sizeFields(req);
   const id = uuid();
   await pool.query(
@@ -255,7 +255,7 @@ router.get("/option-groups", edit, async (req, res) => {
   const [adds] = await pool.query("SELECT ModifierID AS id, StockItemID AS stockItemId, Quantity AS quantity FROM ModifierAddition WHERE BusinessID = ?", [businessId]);
   const [subs] = await pool.query("SELECT ModifierID AS id, FromStockItemID AS fromId, ToStockItemID AS toId FROM ModifierSubstitution WHERE BusinessID = ?", [businessId]);
   const [offered] = await pool.query("SELECT ModifierGroupID AS groupId, ProductID AS productId FROM ProductModifierGroup WHERE BusinessID = ?", [businessId]);
-  const [products] = await pool.query("SELECT ProductID AS id, Name AS name FROM Product WHERE BusinessID = ? AND Active AND NOT IsGiftCard ORDER BY Name", [businessId]);
+  const [products] = await pool.query("SELECT ProductID AS id, Name AS name FROM Product WHERE BusinessID = ? AND Active ORDER BY Name", [businessId]);
   const [stock] = await pool.query("SELECT s.StockItemID AS id, s.Name AS name, u.Symbol AS unit FROM StockItem s JOIN UnitOfMeasure u ON u.UnitCode = s.StockUnitCode WHERE s.BusinessID = ? AND s.Active ORDER BY s.Name", [businessId]);
 
   const effect = (id) => {
@@ -305,7 +305,7 @@ async function saveGroup(req, res, groupId) {
   const productIds = ids(req.body.productIds);
 
   const saved = await pool.tx(async (conn) => {
-    for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [p, businessId], "Choose products from the list.");
+    for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ?", [p, businessId], "Choose products from the list.");
     let id = groupId;
     if (id) {
       await owns(conn, "SELECT 1 AS ok FROM ModifierGroup WHERE ModifierGroupID = ? AND BusinessID = ? FOR UPDATE", [id, businessId], "Group not found.");
@@ -365,7 +365,7 @@ router.get("/promotions", edit, async (req, res) => {
     [locationId, businessId]
   );
   const [links] = await pool.query("SELECT PromotionID AS promotionId, ProductID AS productId FROM PromotionProduct WHERE BusinessID = ?", [businessId]);
-  const [products] = await pool.query("SELECT ProductID AS id, Name AS name FROM Product WHERE BusinessID = ? AND Active AND NOT IsGiftCard ORDER BY Name", [businessId]);
+  const [products] = await pool.query("SELECT ProductID AS id, Name AS name FROM Product WHERE BusinessID = ? AND Active ORDER BY Name", [businessId]);
   res.json({
     products,
     promotions: rows.map((r) => ({ ...r, active: !!r.active, kind: r.type === PERCENT ? "percent" : "amount", value: Number(r.value), productIds: links.filter((l) => l.promotionId === r.id).map((l) => l.productId) })),
@@ -387,7 +387,7 @@ async function savePromotion(req, res, promotionId) {
   if (!productIds.length) throw new HttpError(400, "Choose at least one product.");
 
   const saved = await pool.tx(async (conn) => {
-    for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ? AND NOT IsGiftCard", [p, businessId], "Choose products from the list.");
+    for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ?", [p, businessId], "Choose products from the list.");
     const [[{ tz }]] = await conn.query("SELECT TimeZone AS tz FROM Location WHERE LocationID = ?", [locationId]);
     // runs from the start of the first day to the end of the last, café time
     const at = (d, time) => [`${d} ${time}`, tz];

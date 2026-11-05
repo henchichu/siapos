@@ -31,12 +31,10 @@ function App() {
   const filters = data?.filters;
   const phone = usePhone();
   // a phone shows the Filters button inside the Results card, like every other list; wider screens keep the form above it
-  const searchBox = html`<${Filters} popup active=${(draft.locationId !== "all" ? 1 : 0) + (draft.employeeId !== "all" ? 1 : 0) + (draft.status !== "any" ? 1 : 0)}><form className="osearch" aria-label="Search orders" onSubmit=${(e) => { e.preventDefault(); search(draft); }}>
+  const searchBox = html`<${Filters} popup active=${(draft.employeeId !== "all" ? 1 : 0) + (draft.status !== "any" ? 1 : 0)}><form className="osearch" aria-label="Search orders" onSubmit=${(e) => { e.preventDefault(); search(draft); }}>
         <div className="ofilters">
           <${Field} label="From date"><input className="field date" type="date" value=${draft.from} onChange=${set("from")} /><//>
           <${Field} label="To date"><input className="field date" type="date" value=${draft.to} onChange=${set("to")} /><//>
-          <${Field} label="Location"><select className="select" value=${draft.locationId} onChange=${set("locationId")}>
-            <option value="all">All locations</option>${(filters?.locations || []).map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select><//>
           <${Field} label="Employee"><select className="select" value=${draft.employeeId} onChange=${set("employeeId")}>
             <option value="all">All employees</option>${(filters?.employees || []).map((e) => html`<option key=${e.id} value=${e.id}>${e.name}</option>`)}</select><//>
           <${Field} label="Status"><select className="select" value=${draft.status} onChange=${set("status")}>

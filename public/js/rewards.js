@@ -126,7 +126,7 @@ function OrderDialog({ id, onClose }) {
   const line = (label, cents, strong) => html`<div className=${strong ? "sumline strong" : "sumline"}><span>${label}</span><span>${money(cents)}</span></div>`;
   return html`<${Modal} title=${o ? `Order ${o.number}` : "Order"} onClose=${onClose}>
     ${error ? html`<p className="msg error" role="alert">${error}</p>` : !o ? html`<p>Loading…</p>` : html`<div className="stack odetail">
-      <p className="sub">${whenAt(o.at, o.tz)} · ${o.location} · ${o.source}${o.staff ? ` · ${o.staff}` : ""} · ${o.status}</p>
+      <p className="sub">${whenAt(o.at, o.tz)} · ${o.location}${o.staff ? ` · ${o.staff}` : ""} · ${o.status}</p>
       <table className="table" aria-label="Items">
         <colgroup><col style=${{ width: 56 }} /><col /><col style=${{ width: 96 }} /></colgroup>
         <thead><tr><th>Qty</th><th>Item</th><th className="r">Amount</th></tr></thead>
@@ -151,14 +151,13 @@ function OrderDialog({ id, onClose }) {
 
 function HistoryRows({ rows, onView }) {
   return html`<div className="tscroll"><table className="table mg fit rowcards" aria-label="Orders and points">
-    <thead><tr><th>Date</th><th>Order</th><th>Source</th><th>Items</th><th className="r">Total</th><th className="r">Points earned</th><th className="r">Points redeemed</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Order</th><th>Items</th><th className="r">Total</th><th className="r">Points earned</th><th className="r">Points redeemed</th><th></th></tr></thead>
     <tbody>${rows.map((r) => r.kind === "adjust"
       ? html`<tr key=${r.id}><td>${whenAt(r.at, r.tz)}</td><td>${r.number ?? "—"}</td><td>Points adjustment</td><td></td><td></td>
           <td className="r">${plus(r.earned)}</td><td className="r">${minus(r.redeemed)}</td><td></td></tr>`
       : html`<tr key=${r.id} className=${r.state === "Cancelled" ? "off" : ""}>
           <td>${whenAt(r.at, r.tz)}</td>
           <td>${r.number}${r.state && html`<span className="sub">${r.state}</span>`}</td>
-          <td>${r.source}</td>
           <td>${r.items} ${r.items === 1 ? "item" : "items"}</td>
           <td className="r">${money(r.totalCents)}${r.refundedCents > 0 && html`<span className="sub">${money(-r.refundedCents)} refunded</span>`}
             ${r.pendingCents > 0 && html`<span className="sub">${money(-r.pendingCents)} refund pending</span>`}</td>

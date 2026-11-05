@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, pool, topUp } = require("./env");
+const { start, pool, topUp, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -15,11 +15,11 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const { server, base } = await start();
   await topUp("stk-oat", 3000); // the ticket below uses oat milk
   // its own ticket: a member's order with options, so the screen has something to show whatever else has been done to the demo tickets
-  const sellerLogin = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420004", pin: "444444" }) });
+  const sellerLogin = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420004")) });
   await fetch(base + "/api/register/orders", { method: "POST", headers: { "content-type": "application/json", cookie: sellerLogin.headers.get("set-cookie").split(";")[0] },
     body: JSON.stringify({ items: [{ key: "a", variantId: "var-latte-l", quantity: 2, modifierIds: ["mod-oat", "mod-extra-shot"] }], customerId: "cus-ava", payment: { method: "cash" } }) });
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ employeeNumber: "10420005", pin: "555555" }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(creds("10420005")) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
 
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/kitchen.html", pretendToBeVisual: true }).window;
@@ -48,11 +48,11 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const css = fs.readFileSync(path.join(root, "public/css/kitchen.css"), "utf8");
   check("each queue scrolls on its own", /\.queue \{[^}]*overflow-y: auto/.test(css) && /\.queues \{[^}]*min-height: 0/.test(css));
 
-  const links = $$(".nav a.link").map((a) => a.textContent);
+  const links = $$(".nav a.link").map((a) => a.querySelector(".label").textContent);
   check("a barista's menu lists only Kitchen and My shift", links.join("|") === "Kitchen|My shift", links.join("|"));
 
   await click(byText("button", "Report a loss"), 500);
-  check("Report a loss opens screen 2, #loss", /What was lost\?/.test(text()) && /Reported today at Brewbean Campus/.test(text()) && w.location.hash === "#loss");
+  check("Report a loss opens screen 2, #loss", /What was lost\?/.test(text()) && /Reported today at Brewbean Downtown/.test(text()) && w.location.hash === "#loss");
   check("today's loss is listed", /Whole milk/.test(text()) && /Broken or spilled/.test(text()));
   check("Report loss is disabled until an item and amount are set", byText("button", "Report loss").disabled);
   await click(byText("button", "Back to tickets"));

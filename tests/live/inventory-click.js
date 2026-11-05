@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const { start, client, pool } = require("./env");
+const { start, client, pool, admin, creds } = require("./env");
 
 const root = path.resolve(__dirname, "../..");
 const lib = (f) => fs.readFileSync(path.join(root, "node_modules", f), "utf8");
@@ -15,7 +15,7 @@ let cleanup = async () => restore(); // runs on success and on a crash, so a fai
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
 async function open(base, number, pin) {
-  const login = await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: number, pin }) });
+  const login = await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds(number)) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const w = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/inventory.html", pretendToBeVisual: true }).window;
   w.fetch = (url, opts = {}) => fetch(base + url, { ...opts, headers: { ...(opts.headers || {}), cookie } });
@@ -36,12 +36,12 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 (async () => {
   const { server, base } = await start();
   // The demo stock changes as people use the app, so make one item low on purpose: its reorder level goes just above what is on hand
-  const sc = client(base); await sc.call("/login/pin", { employeeNumber: "10420002", pin: "222222" });
+  const sc = client(base); await sc.call("/login", creds("10420001"));
   const muffin = (await sc.call("/inventory")).body.rows.find((r) => r.id === "stk-muffin");
   await sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.onHand + 5) });
   restore = () => sc.call("/inventory/change", { stockItemId: "stk-muffin", threshold: String(muffin.reorderAt) });
-  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ employeeNumber: "10420002", pin: "222222" }) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
-  const m = await open(base, "10420002", "222222");
+  const units = (await (await fetch(base + "/api/inventory", { headers: { cookie: (await (await fetch(base + "/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(creds("10420001")) })).headers.get("set-cookie")).split(";")[0] } })).json()).units;
+  const m = await open(base, "10420001", "111111");
   const rows = (sel = "section.pview[aria-label=Inventory]") => m.$$(`${sel} tbody tr`).filter((r) => r.querySelectorAll("td").length > 1);
   const row = (name) => rows().find((r) => cells(r)[0].startsWith(name)); // a deactivated row adds a tag after the name
 
@@ -50,7 +50,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("a row shows on hand with its unit, reorder level, average cost and status", /^\d+ ml$/.test(cells(row("Whole milk"))[1]) && /^\$0\.00\d+$/.test(cells(row("Whole milk"))[3]) && cells(row("Whole milk"))[4] === "OK");
   check("at or below the reorder level is LOW", cells(row("Blueberry muffin"))[4] === "LOW" && row("Blueberry muffin").querySelector("td.low"));
   check("the form column isn't there until a row action", !m.$(".pform"));
-  check("footer shows employee, role and location", /Leo Brandt/.test(m.text()) && /Manager · Brewbean Campus/.test(m.text()));
+  check("footer shows employee, role and location", /Maya Okafor/.test(m.text()) && /General manager · Brewbean Downtown/.test(m.text()));
 
   await m.click(m.$("input[type=checkbox]"), 200);
   check("Low stock only keeps just the LOW rows", rows().length >= 1 && rows().every((r) => cells(r)[4] === "LOW"));
@@ -61,7 +61,6 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   await m.choose(m.$("select[aria-label=Supplier]"), "sup-bakery");
   check("the supplier filter keeps that supplier's items", rows().map((r) => cells(r)[0]).join("|") === "Blueberry muffin|Butter croissant");
   await m.choose(m.$("select[aria-label=Supplier]"), "");
-  check("a location dropdown is there", !!m.$("select[aria-label=Location]"));
 
   await m.click(row("12 oz cup").querySelectorAll("button.act")[0]);
   check("Restock fills the form: item, Restock chosen, Unit cost shown, no Reason", !!m.$(".pform") && m.$(".pform select").value === "stk-cup-12"
@@ -91,7 +90,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
     await restore();
     await pool.query("DELETE FROM Supplier WHERE Name LIKE ?", [`UI supplier ${stamp}%`]); // never delivered to
     await pool.query("DELETE FROM StockItemSupplier WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
-    await pool.query("DELETE FROM Inventory WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
+    await admin.query("DELETE FROM Inventory WHERE StockItemID IN (SELECT StockItemID FROM StockItem WHERE Name LIKE ?)", [`UI stock ${stamp}%`]);
     await pool.query("DELETE FROM StockItem WHERE Name LIKE ?", [`UI stock ${stamp}%`]); // no ledger rows, so it can go
   };
   await m.click(m.byText(".phead .pbtn", "Add stock item"));
@@ -119,15 +118,8 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
 
   // Receive delivery
   await m.click(m.byText(".tab", "Receive delivery"), 500);
-  check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Campus/.test(m.text()));
-  const pendingSection = m.$('section[aria-label="Pending deliveries"]');
-  check("pending dashboard appears below recent deliveries", !!pendingSection && !!(m.$('section[aria-label="Recent deliveries"]').compareDocumentPosition(pendingSection) & m.w.Node.DOCUMENT_POSITION_FOLLOWING));
-  const expandPending = pendingSection.querySelector('[aria-label="Expand pending deliveries"]');
-  if (expandPending) await m.click(expandPending, 200);
-  const pendingMuffin = [...pendingSection.querySelectorAll("tbody tr")].find((r) => /Blueberry muffin/.test(r.textContent));
-  check("low stock automatically places a numbered purchase order", !!pendingMuffin && /PO-\d+/.test(pendingMuffin.textContent) && /Ordered/.test(pendingMuffin.textContent));
-  await m.click(pendingMuffin.querySelector("button"), 300);
-  check("pending Receive fills supplier, item and quantity", m.$('section[aria-label="Receive delivery"] select').value === "sup-bakery" && !!m.$('input[aria-label="Quantity of Blueberry muffin"]') && Number(m.$('input[aria-label="Quantity of Blueberry muffin"]').value) > 0);
+  check("Delivery tab, #delivery, today's date filled in", m.w.location.hash === "#delivery" && /^\d{4}-\d\d-\d\d$/.test(m.$("input[type=date]").value) && /Receiving at Brewbean Downtown/.test(m.text()));
+  check("recent deliveries are there, and no pending deliveries panel", !!m.$('section[aria-label="Recent deliveries"]') && !m.$('section[aria-label="Pending deliveries"]') && !/Pending/.test(m.$$(".tabs .tab").map((t) => t.textContent).join("|")));
   await m.click(m.byText('section[aria-label="Receive delivery"] button', "Clear"), 200);
   await m.choose(m.byText(".pform select, section[aria-label='Receive delivery'] select", "").closest("section").querySelectorAll("select")[0], "sup-supply");
   const addLine = async (id) => { await m.choose(m.$("select[aria-label='Stock item']"), id); await m.click(m.byText("button", "Add line"), 200); };
@@ -190,7 +182,7 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   await cleanup();
-  server.close(); await pool.end();
+  server.close(); await pool.end(); await admin.end();
   console.log(fails ? `${fails} FAILED` : "ALL PASSED");
   process.exit(fails ? 1 : 0);
 })().catch(async (e) => { console.error(e); await cleanup().catch(() => {}); process.exit(1); });

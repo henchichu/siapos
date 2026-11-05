@@ -4,8 +4,8 @@ const assert = require("node:assert/strict");
 const { priceCart, allocate, taxCents, normalizeDiscount } = require("../../server/pricing");
 
 const variants = [
-  { VariantID: "v1", Name: "Regular", Price: "3.50", TaxCategoryID: "t1", ProductID: "p1", ProductName: "Croissant", Rate: "0.102500" },
-  { VariantID: "v2", Name: "Regular", Price: "16.00", TaxCategoryID: "t2", ProductID: "p2", ProductName: "Beans", Rate: "0.022500" },
+  { VariantID: "v1", Name: "Regular", Price: "3.50", TaxCategoryID: "t1", ProductID: "p1", ProductName: "Croissant", Rate: "0.102500", HasRecipe: 1 },
+  { VariantID: "v2", Name: "Regular", Price: "16.00", TaxCategoryID: "t2", ProductID: "p2", ProductName: "Beans", Rate: "0.022500", HasRecipe: 1 },
 ];
 const db = {
   query: async (sql) => {
@@ -59,4 +59,9 @@ test("discount terms are checked", () => {
   assert.throws(() => normalizeDiscount({ applyTo: "order", type: "percent", value: 101, reason: "Regular" }), /over 100/);
   assert.throws(() => normalizeDiscount({ applyTo: "order", type: "percent", value: 5, reason: "Nope" }), /reason/);
   assert.throws(() => normalizeDiscount({ applyTo: "selected", type: "amount", value: 5, reason: "Regular", keys: [] }), /Select at least one/);
+});
+
+test("a variant with no recipe can't be priced, so it can't be sold", async () => {
+  const noRecipe = { query: (sql) => db.query(sql).then((r) => (sql.includes("FROM ProductVariant") ? [[{ ...variants[0], HasRecipe: 0 }]] : r)) };
+  await assert.rejects(priceCart(noRecipe, session, { items: [{ key: "a", variantId: "v1", quantity: 1 }] }), /no recipe/);
 });

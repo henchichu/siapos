@@ -3,14 +3,10 @@ const path = require("path");
 const root = path.resolve(__dirname, "../..");
 process.env.DB_PASSWORD_FILE ??= path.join(root, "sql/secrets/app_user_password.txt");
 process.env.MOCK_PAY ??= "1"; // the tests pay with the mock processor's test cards
-process.env.GIFTCARD_SECRET_FILE ??= path.join(root, "sql/secrets/giftcard_secret.txt");
 const fs = require("fs");
 const app = require("../../server/server");
 const pool = require("../../server/database/connection");
 
-const kioskApp = require("../../server/kiosk");
-// The public order page is its own server (server/kiosk.js), separate from the staff one
-const startKiosk = () => new Promise((resolve) => { const s = kioskApp.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 const start = () => new Promise((resolve) => { const s = app.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
 
 // Small client that keeps the session cookie
@@ -28,6 +24,10 @@ function client(base, headers = {}) {
   };
   return { call, cookie };
 }
+
+// Sign-in is email + password. The dev shop's six people by employee number (the number and PIN still sign off approvals).
+const DEV_LOGINS = { "10420001": "maya", "10420002": "leo", "10420003": "sam", "10420004": "priya", "10420005": "jordan", "10420006": "ana" };
+const creds = (number) => { const n = DEV_LOGINS[number]; if (!n) throw new Error(`no dev login for ${number}`); return { email: `${n}@brewbean.example.com`, password: `${n}-dev-pass` }; };
 
 // A wrong-PIN test must not leave an account locked for the next run
 const unlock = (employeeId) => pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
@@ -58,8 +58,8 @@ async function removeCatalog({ products = [], groups = [], promotions = [] }) {
   }
 }
 
-// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Campus
-async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
+// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Downtown
+async function topUp(stockItemId, atLeast, locationId = "loc-downtown") {
   const [[row]] = await pool.query("SELECT Quantity AS qty, AverageUnitCost AS cost FROM Inventory WHERE LocationID = ? AND StockItemID = ?", [locationId, stockItemId]);
   if (Number(row.qty) >= atLeast) return;
   await pool.query(
@@ -71,8 +71,6 @@ async function topUp(stockItemId, atLeast, locationId = "loc-campus") {
 // The mock processor (server/mockpay.js) approves this one; its expiry is far enough ahead not to age out
 const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" };
 
-// A phone at the Campus café: the page sends the café it was opened for (its QR code) with every call
-const phone = (base, locationId = "loc-campus") => client(base, { "x-location-id": locationId });
 
 // Everything a sign-up (and these tests) can put in a business, children first
 // A business made by a sign-up test, with everything in it
@@ -88,4 +86,8 @@ async function removeBusiness(id) {
   for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
 }
 
-module.exports = { start, startKiosk, client, phone, pool, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };
+// Root, for setting up what app_user may not write (loyalty points, pay periods): the same SQL a business owner would run
+const admin = require("mysql2/promise").createPool({ host: process.env.DB_HOST || "127.0.0.1", port: Number(process.env.DB_PORT) || 3306, database: process.env.DB_NAME || "miniworld", user: "root",
+  password: fs.readFileSync(process.env.DB_ROOT_PASSWORD_FILE || path.join(root, "sql/secrets/root_password.txt"), "utf8").trim(), timezone: "Z" });
+
+module.exports = { admin, start, client, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

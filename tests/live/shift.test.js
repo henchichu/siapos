@@ -1,10 +1,10 @@
 // Needs the dev database. Clocks Jordan in and out today and builds its own old pay period for the manager tests.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool } = require("./env");
+const { start, client, pool, admin, creds } = require("./env");
 
 let env;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 
@@ -13,24 +13,24 @@ const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie()
 const made = [];
 const tidy = async () => {
   if (!made.length) return;
-  await pool.query("UPDATE PayPeriod SET Closed = FALSE WHERE PayPeriodID IN (?)", [made]);
-  await pool.query("DELETE FROM TimeEntry WHERE PayPeriodID IN (?)", [made]);
-  await pool.query("DELETE FROM PayPeriod WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("UPDATE PayPeriod SET Closed = FALSE WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("DELETE FROM TimeEntry WHERE PayPeriodID IN (?)", [made]);
+  await admin.query("DELETE FROM PayPeriod WHERE PayPeriodID IN (?)", [made]);
 };
 test.before(async () => { env = await start(); });
-test.after(async () => { await tidy(); env.server.close(); await pool.end(); });
+test.after(async () => { await tidy(); env.server.close(); await pool.end(); await admin.end(); });
 
 test("the menu and the pages a role may open follow its role, fixed at sign-in", async () => {
   const menus = {
     jordan: ["Kitchen", "My shift"],
     sam: ["Register", "Kitchen", "Rewards", "Products", "My shift"],
-    leo: ["Register", "Kitchen", "Needs attention", "Orders", "Rewards", "Products", "Inventory", "Reports", "Employees", "My shift"],
+    leo: ["Needs attention", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "Reports", "My shift"],
   };
   const jordan = await signIn("10420005", "555555"), sam = await signIn("10420003", "333333"), leo = await signIn("10420002", "222222"), maya = await signIn("10420001", "111111");
   assert.deepEqual((await jordan.call("/session")).body.nav, menus.jordan);
   assert.deepEqual((await sam.call("/session")).body.nav, menus.sam);
   assert.deepEqual((await leo.call("/session")).body.nav, menus.leo);
-  assert.deepEqual((await maya.call("/session")).body.nav, [...menus.leo.slice(0, -1), "Settings", "My shift"], "an owner also gets Settings");
+  assert.deepEqual((await maya.call("/session")).body.nav, menus.leo, "the general manager opens the same pages");
 
   const blocked = await page(jordan, "/register.html");
   assert.equal(blocked.status, 302);
@@ -74,50 +74,50 @@ test("time clock: each button works only in the right state, and Clock out submi
 });
 
 test("team timecards: filters, approve, reject, edit, approve all, close", async () => {
-  const leo = await signIn("10420002", "222222");
+  const maya = await signIn("10420001", "111111");
   const priya = await signIn("10420004", "444444");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-t-${start}`;
-  await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
   const shift = (who, place, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
      VALUES (?, ?, ?, 'biz-brewbean', ?, CONVERT_TZ(? + INTERVAL 1 DAY + INTERVAL 13 HOUR, '+00:00', '+00:00'), ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 30, 2)`,
     [`te-t-${start}-${n}`, who, place, id, start, start]);
-  await shift("emp-priya", "loc-campus", 1); await shift("emp-jordan", "loc-campus", 2); await shift("emp-sam", "loc-downtown", 3);
-  const get = (q) => leo.call(`/team/timecards?payPeriodId=${id}&${q}`);
+  await shift("emp-priya", "loc-downtown", 1); await shift("emp-jordan", "loc-downtown", 2); await shift("emp-sam", "loc-downtown", 3);
+  const get = (q) => maya.call(`/team/timecards?payPeriodId=${id}&${q}`);
 
   let t = await get("status=SUBMITTED");
   assert.equal(t.body.rows.length, 3);
   assert.equal(t.body.waiting, 3);
   assert.equal(t.body.rows[0].hours, 7.5, "8h on the clock less a 30 minute break");
-  t = await get("status=SUBMITTED&locationId=loc-campus");
-  assert.equal(t.body.rows.length, 2);
-  assert.equal(t.body.waiting, 2, "the count follows period and location, not the status filter");
+  t = await get("status=SUBMITTED&locationId=loc-downtown");
+  assert.equal(t.body.rows.length, 3);
+  assert.equal(t.body.waiting, 3, "the count follows period and location, not the status filter");
 
   assert.equal((await priya.call("/team/timecards/x/approve", {})).status, 403, "a server can't approve");
-  const close = () => leo.call(`/team/pay-periods/${id}/close`, {});
+  const close = () => maya.call(`/team/pay-periods/${id}/close`, {});
   assert.match((await close()).body.error, /3 timecards are still open or waiting/);
 
-  const sam = (await get("status=SUBMITTED&locationId=loc-downtown")).body.rows[0];
-  assert.equal((await leo.call(`/team/timecards/${sam.id}/reject`, {})).status, 200);
-  assert.equal((await leo.call(`/team/timecards/${sam.id}/approve`, {})).status, 409, "a rejected card can't be approved");
+  const sam = (await get("status=SUBMITTED")).body.rows.find((r) => r.id.endsWith("-3"));
+  assert.equal((await maya.call(`/team/timecards/${sam.id}/reject`, {})).status, 200);
+  assert.equal((await maya.call(`/team/timecards/${sam.id}/approve`, {})).status, 409, "a rejected card can't be approved");
   assert.equal((await get("status=REJECTED")).body.rows.length, 1);
 
-  const edit = (body) => leo.call(`/team/timecards/${sam.id}/edit`, body);
+  const edit = (body) => maya.call(`/team/timecards/${sam.id}/edit`, body);
   assert.equal((await edit({ clockIn: `${start}T09:00`, clockOut: `${start}T08:00`, breakMinutes: 0 })).status, 400, "out before in");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T09:00`, breakMinutes: 90 })).status, 400, "break longer than the shift");
   const future = await edit({ clockIn: `${start}T08:00`, clockOut: "2999-01-01T09:00", breakMinutes: 0 });
   assert.deepEqual([future.status, future.body.error], [400, "A shift can't end in the future."]);
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:30`, breakMinutes: 30 })).status, 200);
-  const fixed = (await get("locationId=loc-downtown")).body.rows[0];
+  const fixed = (await get("locationId=loc-downtown")).body.rows.find((r) => r.id === sam.id);
   assert.deepEqual([fixed.status, fixed.hours, fixed.breakMinutes], ["SUBMITTED", 8, 30], "an edited card goes back to Submitted");
 
-  const all = await leo.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" });
+  const all = await maya.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" });
   assert.equal(all.body.approved, 3);
   t = await get("status=APPROVED");
   assert.equal(t.body.rows.length, 3);
-  assert.match(t.body.rows[0].approvedBy, /^Leo /);
+  assert.match(t.body.rows[0].approvedBy, /^Maya /);
   assert.equal(t.body.waiting, 0);
 
   const done = await close();
@@ -126,32 +126,23 @@ test("team timecards: filters, approve, reject, edit, approve all, close", async
   assert.equal(done.body.message, "Success: Pay period successfully finalized and closed");
   assert.equal((await edit({ clockIn: `${start}T08:00`, clockOut: `${start}T16:00`, breakMinutes: 0 })).status, 409, "closed periods are locked");
   assert.equal((await close()).status, 409);
-  assert.equal((await leo.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
+  assert.equal((await maya.call("/team/pay-periods/pp-next/close", {})).status, 409, "the running period can't be closed");
 });
 
-test("nobody approves or edits their own timecard, except an owner", async () => {
-  const leo = await signIn("10420002", "222222");
+test("a manager may approve or edit their own timecard", async () => {
   const maya = await signIn("10420001", "111111");
   const [[{ start }]] = await pool.query("SELECT COALESCE(DATE_FORMAT(MAX(EndDate) + INTERVAL 1 DAY, '%Y-%m-%d'), '2020-01-01') AS start FROM PayPeriod WHERE EndDate < '2026-01-01'");
   const id = `pp-own-${start}`;
-  await pool.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
+  await admin.query("INSERT INTO PayPeriod (PayPeriodID, BusinessID, StartDate, EndDate) VALUES (?, 'biz-brewbean', ?, ? + INTERVAL 13 DAY)", [id, start, start]);
   made.push(id);
   const card = (who, n) => pool.query(
     `INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID, ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode)
-     VALUES (?, ?, 'loc-campus', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
+     VALUES (?, ?, 'loc-downtown', 'biz-brewbean', ?, ? + INTERVAL 1 DAY + INTERVAL 13 HOUR, ? + INTERVAL 1 DAY + INTERVAL 21 HOUR, 0, 2)`,
     [`te-own-${start}-${n}`, who, id, start, start]);
-  await card("emp-leo", 1);
+  await card("emp-maya", 1);
   const mine = `te-own-${start}-1`;
-  const status = async () => (await leo.call(`/team/timecards?payPeriodId=${id}`)).body.rows[0].status;
-
-  assert.equal((await leo.call(`/team/timecards/${mine}/approve`, {})).status, 409, "a manager can't approve their own card");
-  assert.equal((await leo.call(`/team/timecards/${mine}/reject`, {})).status, 409);
   const times = { clockIn: `${start}T08:00`, clockOut: `${start}T20:00`, breakMinutes: 0 };
-  assert.equal((await leo.call(`/team/timecards/${mine}/edit`, times)).status, 409, "or edit it");
-  assert.equal((await leo.call("/team/timecards/approve-all", { payPeriodId: id, locationId: "all" })).body.approved, 0, "approve all skips it");
-  assert.equal(await status(), "SUBMITTED");
-
-  assert.equal((await maya.call(`/team/timecards/${mine}/approve`, {})).status, 200, "someone else can");
-  await card("emp-maya", 2);
-  assert.equal((await maya.call(`/team/timecards/te-own-${start}-2/approve`, {})).status, 200, "an owner has no one above them, so may approve their own");
+  assert.equal((await maya.call(`/team/timecards/${mine}/edit`, times)).status, 200, "edit their own");
+  assert.equal((await maya.call(`/team/timecards/${mine}/approve`, {})).status, 200, "approve their own");
+  assert.equal((await maya.call(`/team/timecards?payPeriodId=${id}`)).body.rows[0].status, "APPROVED");
 });

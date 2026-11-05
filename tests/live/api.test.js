@@ -1,11 +1,11 @@
 // Needs the dev database. Each run adds a few real test sales to it (orders can't be deleted).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, unlock, pickUp, topUp, TEST_CARD } = require("./env");
+const { start, client, pool, unlock, pickUp, topUp, TEST_CARD, creds } = require("./env");
 
-const DENIED = "Unauthorized. Supervisor or Owner credentials required to override.";
+const DENIED = "Unauthorized. Supervisor credentials required to override.";
 let env, sam;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const croissant = { key: "a", variantId: "var-croissant", quantity: 1 };
 
 test.before(async () => { env = await start(); await topUp("stk-croissant", 60, "loc-downtown"); sam = await signIn("10420003", "333333"); });
@@ -62,26 +62,16 @@ test("wrong override PINs lock the cashier, not the manager", async () => {
   const priya = await signIn("10420004", "444444");
   const discount = { applyTo: "order", type: "percent", value: 5, reason: "Regular" };
   for (let i = 0; i < 5; i++) await priya.call("/register/discount/authorize", { discount, managerNumber: "10420002", managerPin: "000000", items: [croissant] });
-  assert.equal((await client(env.base).call("/login/pin", { employeeNumber: "10420002", pin: "222222" })).status, 200); // Leo still signs in
-  assert.equal((await client(env.base).call("/login/pin", { employeeNumber: "10420004", pin: "444444" })).status, 423); // Priya is locked
+  assert.equal((await client(env.base).call("/login", creds("10420002"))).status, 200); // Leo still signs in
+  assert.equal((await client(env.base).call("/login", creds("10420004"))).status, 423); // Priya is locked
   await unlock("emp-priya");
 });
 
-test("a manager can't approve their own discount, an owner can", async () => {
+test("a manager may sign for their own discount, or for someone else's", async () => {
   const discount = { applyTo: "order", type: "percent", value: 10, reason: "Complaint" };
   const ask = async (who, managerNumber, managerPin) => (await signIn(who[0], who[1])).call("/register/discount/authorize", { discount, managerNumber, managerPin, items: [croissant] });
-  const leo = await ask(["10420002", "222222"], "10420002", "222222");
-  assert.equal(leo.status, 403);
-  assert.match(leo.body.error, /Another manager has to approve this/);
-  assert.equal((await ask(["10420001", "111111"], "10420001", "111111")).status, 200, "an owner has no one above them");
-  assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and a manager can sign for someone else");
-});
-
-test("five wrong gift card codes stop further guesses", async () => {
-  const jordanLike = await signIn("10420001", "111111");
-  const pay = (code) => jordanLike.call("/register/orders", { items: [croissant], payment: { method: "gift", giftCardCode: code } });
-  for (let i = 0; i < 5; i++) assert.equal((await pay("wrong-code-" + i)).status, 400);
-  assert.equal((await pay("wrong-code-5")).status, 429);
+  assert.equal((await ask(["10420002", "222222"], "10420002", "222222")).status, 200, "self-approval is allowed");
+  assert.equal((await ask(["10420001", "111111"], "10420002", "222222")).status, 200, "and so is signing for someone else");
 });
 
 test("a $0 sale can't carry a tip", async () => {
@@ -108,7 +98,7 @@ test("pressing Complete sale again after a lost reply gives the first receipt, n
 });
 
 test("a sale that failed can be tried again with the same id", async () => {
-  const sale = { saleId: `f-${Date.now()}`, items: [croissant], payment: { method: "gift", giftCardCode: "no-such-card" } };
+  const sale = { saleId: `f-${Date.now()}`, items: [croissant], payment: { method: "card", card: { ...TEST_CARD, number: "4242 4242 4242 4241" } } };
   assert.equal((await sam.call("/register/orders", sale)).status, 400);
   assert.equal((await sam.call("/register/orders", sale)).status, 400, "answered again, not remembered as a receipt");
   const paid = await sam.call("/register/orders", { ...sale, payment: { method: "cash" } });
@@ -138,13 +128,13 @@ test("a declined or bad card at the register makes no sale", async () => {
   assert.equal((await sam.call("/register/orders", { items: [croissant], payment: { method: "cash" } })).status, 200, "cash needs no card");
 });
 
-test("configured shops send visitors to sign-in and signed-in staff Home; old scaffold pages are gone", async () => {
+test("configured shops send visitors to sign-in and signed-in staff to their landing page; old scaffold pages are gone", async () => {
   const at = (path, headers = {}) => fetch(env.base + path, { redirect: "manual", headers });
   const root = await at("/");
   assert.deepEqual([root.status, root.headers.get("location")], [302, "/login.html"], "a configured shop sends visitors to sign-in");
   const sam = await signIn("10420003", "333333");
   const home = await at("/", { cookie: sam.cookie() });
-  assert.deepEqual([home.status, home.headers.get("location")], [302, "/home.html"], "signed in: straight to Home");
+  assert.deepEqual([home.status, home.headers.get("location")], [302, "/register.html"], "signed in: straight to the role's page");
   assert.equal((await at("/login.html")).status, 200);
   for (const path of ["/index.html", "/customers.html", "/css/styles.css"]) assert.equal((await at(path)).status, 404, path);
 });

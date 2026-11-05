@@ -4,21 +4,28 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { notify } = require("./watchers");
 const { priceCart, normalizeDiscount, cents, dollars } = require("./pricing");
-const { codeHash } = require("./giftcard");
-const { addOrderLines, fingerprint } = require("./orderlines");
+const { addOrderLines, fingerprint, nextOrderNumber } = require("./orderlines");
 const { charge } = require("./mockpay");
 const kioskOrders = require("./kioskorders");
 const check = require("./validate");
 const { verifyOverride, findStaff, staffRules } = require("./override");
-const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval, giftAllowed, giftFailed, giftOk } = require("./session");
+const { requirePermission, grantApproval, checkApproval, releaseApproval, spendApproval } = require("./session");
+const { hasPermission } = require("./pin");
+const approvals = require("./approvals");
+const { approve } = approvals;
 
 const PERM_USE_REGISTER = 1;
 const PERM_APPROVE_DISCOUNTS = 4;
-const METHODS = { cash: 1, card: 2, gift: 3, apple: 5, google: 6 };
+const METHODS = { cash: 1, card: 2, apple: 5, google: 6 };
 const PROCESSED = { 2: "card", 5: "apple", 6: "google" }; // paid through the (mock) processor, and may carry a tip
 
 const router = express.Router();
 router.use("/register", requirePermission(PERM_USE_REGISTER));
+
+// Kiosk orders waiting to be paid at the counter: the cashier takes the cash, or cancels the order and its stock goes back
+router.get("/register/kiosk-orders", async (req, res) => res.json({ orders: await kioskOrders.pendingAt(req.session.locationId), holdMinutes: kioskOrders.HOLD_MINUTES }));
+router.post("/register/kiosk-orders/:id/pay", async (req, res) => { await kioskOrders.pay(req.session, String(req.params.id)); res.json({ ok: true }); });
+router.post("/register/kiosk-orders/:id/cancel", async (req, res) => { await kioskOrders.cancelAt(req.session, String(req.params.id)); res.json({ ok: true }); });
 
 router.get("/register/catalog", async (req, res) => {
   const { businessId, locationId } = req.session;
@@ -31,7 +38,7 @@ router.get("/register/catalog", async (req, res) => {
        FROM Product p
        LEFT JOIN Category c ON c.CategoryID = p.CategoryID AND c.Active
        JOIN ProductVariant v ON v.ProductID = p.ProductID AND v.Active
-      WHERE p.BusinessID = ? AND p.Active AND NOT p.IsGiftCard
+      WHERE p.BusinessID = ? AND p.Active
       ORDER BY p.Name, v.Price`,
     [locationId, businessId]
   );
@@ -93,10 +100,6 @@ router.get("/register/member", async (req, res) => {
   res.json({ id: m.CustomerID, name: [m.FirstName, m.LastName].filter(Boolean).join(" "), tier: m.Tier, points: Number(m.Points) });
 });
 
-// Kiosk orders waiting to be paid at the counter: the cashier takes the cash, or cancels the order and its stock goes back
-router.get("/register/kiosk-orders", async (req, res) => res.json({ orders: await kioskOrders.pendingAt(req.session.locationId), holdMinutes: kioskOrders.HOLD_MINUTES }));
-router.post("/register/kiosk-orders/:id/pay", async (req, res) => { await kioskOrders.pay(req.session, String(req.params.id)); res.json({ ok: true }); });
-router.post("/register/kiosk-orders/:id/cancel", async (req, res) => { await kioskOrders.cancelAt(req.session, String(req.params.id)); res.json({ ok: true }); });
 
 const clientView = (p) => ({
   lines: p.lines.map((l) => ({ key: l.key, unitCents: l.unitCents, lineCents: l.lineCents, discountCents: l.lineDiscountCents })),
@@ -155,6 +158,15 @@ router.post("/register/orders", async (req, res) => {
   res.json(await sale);
 });
 
+// A discount a manager signed (or a staff discount that needs no signature): recorded as an approval, then written to the order
+approvals.handlers.DISCOUNT_APPLY = async (conn, a) => {
+  if (a.approverId && !(await hasPermission(conn, a.approverId, PERM_APPROVE_DISCOUNTS))) throw new HttpError(403, "The approver can't approve discounts.");
+  await conn.query(
+    "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
+    [a.targetId, a.businessId, a.payload.amount, a.payload.reason, a.approverId, a.payload.staffId || null]
+  );
+};
+
 async function completeSale(req) {
   const { employeeId, businessId, locationId, registerId } = req.session;
   const { payment = {}, customerId } = req.body;
@@ -182,25 +194,12 @@ async function completeSale(req) {
       }
       const tipCents = PROCESSED[methodCode] ? check.tipCents(payment.tip) : 0;
       if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
-      let giftCardId = null;
-      if (methodCode === 3) {
-        const code = check.giftCode(payment.giftCardCode); // a mistyped format isn't a guess, so it doesn't count against the limit
-        if (!giftAllowed(req.session)) throw new HttpError(429, "Too many wrong gift card codes. Try again in a few minutes.");
-        const [[g]] = await conn.query("SELECT GiftCardID FROM GiftCard WHERE BusinessID = ? AND CodeHash = ? AND Active",
-          [businessId, codeHash(code)]);
-        if (!g) {
-          giftFailed(req.session);
-          throw new HttpError(400, "Gift card not found.");
-        }
-        giftCardId = g.GiftCardID;
-        giftOk(req.session);
-      }
 
       const orderId = crypto.randomUUID();
       await conn.query(
-        `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode)
-         VALUES (?, ?, ?, ?, ?, ?, 1)`,
-        [orderId, locationId, businessId, registerId, employeeId, customerId || null]
+        `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderNumber, PricesIncludeTax)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, (SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?))`,
+        [orderId, locationId, businessId, registerId, employeeId, customerId || null, await nextOrderNumber(conn, businessId), businessId]
       );
 
       await addOrderLines(conn, { orderId, businessId, locationId, employeeId, priced,
@@ -213,19 +212,20 @@ async function completeSale(req) {
         );
       if (priced.discountCents > 0) {
         const d = priced.discount;
-        await conn.query(
-          "INSERT INTO OrderDiscount (OrderDiscountID, OrderID, BusinessID, Amount, Reason, ApprovedByEmployeeID, StaffEmployeeID) VALUES (UUID(), ?, ?, ?, ?, ?, ?)",
-          [orderId, businessId, dollars(priced.discountCents), d.note ? `${d.reason}: ${d.note}` : d.reason, approval.approverId, approval.staffId]
-        );
+        await approve(conn, req.session, "DISCOUNT_APPLY", orderId, {
+          amount: dollars(priced.discountCents),
+          reason: d.note ? `${d.reason}: ${d.note}` : d.reason,
+          staffId: approval.staffId,
+        }, approval.approverId);
       }
 
       await conn.query("UPDATE Orders SET Subtotal = ?, DiscountAmount = ?, Tax = ?, Total = ? WHERE OrderID = ?",
         [dollars(priced.subtotalCents), dollars(priced.promotionCents + priced.discountCents), dollars(priced.taxCents), dollars(priced.totalCents), orderId]);
       if (priced.totalCents > 0)
         await conn.query(
-          `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode, GiftCardID)
-           VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3, ?)`,
-          [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents), giftCardId]
+          `INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt, PaymentStatusCode)
+           VALUES (UUID(), ?, ?, ?, ?, ${tipCents ? "UTC_TIMESTAMP()" : "NULL"}, 3)`,
+          [orderId, methodCode, dollars(priced.totalCents), dollars(tipCents)]
         );
       // Paid and confirmed: the kitchen makes it, and it is completed when handed over (server/kitchen.js)
       await conn.query("UPDATE Orders SET OrderStatusCode = 2 WHERE OrderID = ?", [orderId]);

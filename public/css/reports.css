@@ -26,12 +26,12 @@
 .col .rbar { width: 70%; max-width: 72px; background: var(--navy); border-radius: 4px 4px 0 0; }
 .col.best .rbar { background: var(--cyan); }
 .col:hover .rbar, .col:focus .rbar { background: var(--navy-dark); }
-.col.best:hover .rbar, .col.best:focus .rbar { background: #0FB3DD; }
+.col.best:hover .rbar, .col.best:focus .rbar { background: #B98F66; }
 .chart figcaption { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .legend { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .legend::before { content: ""; width: 12px; height: 12px; border-radius: 3px; background: var(--cyan); }
 .col .lbl { height: 22px; padding-top: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
-.tip { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #fff; color: var(--text); border: 1.5px solid var(--border); border-radius: 8px; box-shadow: 0 6px 16px rgba(13, 22, 112, 0.14); padding: 6px 8px;
+.tip { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #fff; color: var(--text); border: 1.5px solid var(--border); border-radius: 8px; box-shadow: 0 6px 16px rgba(40, 24, 15, 0.14); padding: 6px 8px;
   font-size: 12px; white-space: nowrap; display: flex; flex-direction: column; gap: 2px; z-index: 1; pointer-events: none; }
 .tip b { font-size: 14px; color: var(--navy); }
 
@@ -46,3 +46,17 @@
 .livebar .tabs { padding: 0; }
 @media (max-width: 1360px) { .rcards:has(> :nth-child(7)) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .rcards:has(> :nth-child(7)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Customers: the score columns stay narrow and centered. The header's tip shows on hover and keyboard focus, opening leftwards so it stays inside the table. */
+.tablewrap .table.rfm { min-width: 0; } /* ten columns: names and headings wrap rather than the table scrolling sideways */
+.table th.score, .table td.score { width: 1%; padding-left: 6px; padding-right: 6px; text-align: center; white-space: nowrap; }
+.headtip { position: relative; display: inline-block; cursor: help; border-bottom: 1px dotted currentColor; }
+.headtip::after { display: none; content: attr(data-tip); position: absolute; top: 100%; right: 0; margin-top: 6px; width: max-content; max-width: 180px; background: #fff; color: var(--text); border: 1.5px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(13, 22, 112, 0.14); padding: 6px 8px; font-size: 12px; font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; z-index: 2; pointer-events: none; }
+.headtip:hover::after, .headtip:focus::after { display: block; }
+@media (min-width: 761px) and (max-width: 900px) {
+  .table.fit.rfm { font-size: 13px; }
+  .table.fit.rfm th, .table.fit.rfm td { padding-left: 5px; padding-right: 5px; }
+  .table.fit.rfm th.r { white-space: normal; } /* Days since stacks; amounts below it never do */
+  .table.fit.rfm td:first-child { overflow-wrap: anywhere; } /* only a customer's name may break mid-word */
+}

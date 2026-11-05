@@ -1,6 +1,6 @@
 USE miniworld;
 
--- Development seed: "Brewbean Coffee", two Chicago cafés with two weeks of trading.
+-- Development seed: "Brewbean Coffee", one Chicago café with two weeks of trading.
 -- Dev only: leave this file out of a production build.
 -- It runs after 04-triggers.sql, so every row passes the same rules the backend will.
 -- IDs are readable on purpose (the backend will generate UUIDs). Dates are relative to
@@ -18,11 +18,9 @@ SET @D = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', @tz));    -- today, café lo
 INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
 VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7);
 
--- Both take online orders for the history; Campus switches off at the end
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone, AcceptsOnlineOrders)
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
 VALUES
-    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz, TRUE),
-    ('loc-campus',   @biz, 'Brewbean Campus',   '88 Quad Walk, Chicago, IL',   '312-555-0102', @tz, TRUE);
+    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz);
 
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
@@ -41,33 +39,34 @@ INSERT INTO Register (RegisterID, LocationID, Name, RegStatusCode)
 VALUES
     ('reg-dt-1', 'loc-downtown', 'Front counter', 1),
     ('reg-dt-2', 'loc-downtown', 'Pickup window', 3),    -- 3 = MAINTENANCE
-    ('reg-cp-1', 'loc-campus',   'Counter',       1);
+    ('reg-cp-1', 'loc-downtown', 'Counter',       1);
 
 -- ---------------------------------------------------------------------------
 -- Staff, pay, shifts
 -- ---------------------------------------------------------------------------
--- The default roles from the blueprint's access levels screen; the owner holds every permission
-INSERT INTO Role (RoleID, BusinessID, Name, OpensTo, IsOwner)
+-- The default roles from the blueprint's access levels screen; the general manager holds every permission
+INSERT INTO Role (RoleID, BusinessID, Name, OpensTo)
 VALUES
-    ('role-owner',   @biz, 'Owner',             'REGISTER', TRUE),
-    ('role-manager', @biz, 'Manager',           'REGISTER', FALSE),
-    ('role-asst',    @biz, 'Assistant manager', 'REGISTER', FALSE),
-    ('role-server',  @biz, 'Server',            'REGISTER', FALSE),
-    ('role-barista', @biz, 'Chef / barista',    'KITCHEN',  FALSE);
+    ('role-gm',      @biz, 'General manager',   'REGISTER'),
+    ('role-manager', @biz, 'Manager',           'REGISTER'),
+    ('role-asst',    @biz, 'Assistant manager', 'REGISTER'),
+    ('role-server',  @biz, 'Server',            'REGISTER'),
+    ('role-barista', @biz, 'Chef / barista',    'KITCHEN');
 
--- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards), 19 (manage staff)
--- and 20 (reports): only owners and managers see Reports and Employees
+-- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards)
+-- and 20 (reports): only the general manager and managers see Reports
 INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
 SELECT r.RoleID, @biz, p.PermissionCode
   FROM Role r JOIN Permission p
     ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
     OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
+    OR (r.RoleID = 'role-gm'      AND p.PermissionCode BETWEEN 1 AND 20)
     OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
-    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23));
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
 
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES
-    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-owner'),
+    ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-gm'),
     ('emp-leo',    @biz, 'Leo',    'Brandt', 'leo@brewbean.example.com',    '10420002', 'role-manager'),
     ('emp-sam',    @biz, 'Sam',    'Rivera', 'sam@brewbean.example.com',    '10420003', 'role-server'),
     ('emp-priya',  @biz, 'Priya',  'Shah',   'priya@brewbean.example.com',  '10420004', 'role-server'),
@@ -76,20 +75,20 @@ VALUES
 
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID)
 VALUES
-    ('emp-maya', 'loc-downtown', @biz), ('emp-maya', 'loc-campus', @biz),
-    ('emp-leo',  'loc-downtown', @biz), ('emp-leo',  'loc-campus', @biz),
+    ('emp-maya', 'loc-downtown', @biz),
+    ('emp-leo',  'loc-downtown', @biz),
     ('emp-sam',  'loc-downtown', @biz),
-    ('emp-priya', 'loc-campus', @biz),
-    ('emp-jordan', 'loc-campus', @biz),
-    ('emp-ana', 'loc-campus', @biz);
+    ('emp-priya', 'loc-downtown', @biz),
+    ('emp-jordan', 'loc-downtown', @biz),
+    ('emp-ana', 'loc-downtown', @biz);
 
--- Sam got a raise when the current pay period started
+-- Priya got a raise when the current pay period started
 INSERT INTO EmployeePayRate (PayRateID, EmployeeID, BusinessID, HourlyRate, EffectiveFrom, EffectiveTo)
 VALUES
     ('rate-leo',    'emp-leo',    @biz, 24.00, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
-    ('rate-sam-1',  'emp-sam',    @biz, 16.50, TIMESTAMP(@D - INTERVAL 180 DAY), TIMESTAMP(@D - INTERVAL 13 DAY)),
-    ('rate-sam-2',  'emp-sam',    @biz, 17.25, TIMESTAMP(@D - INTERVAL 13 DAY), NULL),
-    ('rate-priya',  'emp-priya',  @biz, 16.75, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
+    ('rate-sam',    'emp-sam',    @biz, 16.75, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
+    ('rate-priya-1','emp-priya',  @biz, 16.50, TIMESTAMP(@D - INTERVAL 180 DAY), TIMESTAMP(@D - INTERVAL 13 DAY)),
+    ('rate-priya-2','emp-priya',  @biz, 17.25, TIMESTAMP(@D - INTERVAL 13 DAY), NULL),
     ('rate-ana',    'emp-ana',    @biz, 19.50, TIMESTAMP(@D - INTERVAL 180 DAY), NULL),
     ('rate-jordan', 'emp-jordan', @biz, 16.00, TIMESTAMP(@D - INTERVAL 90 DAY), NULL);
 
@@ -107,21 +106,21 @@ SELECT a.n * 10 + b.n
        (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
         UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b;
 
--- Five shifts a week each; Leo alternates between the two cafés (LocationID NULL)
+-- Five shifts a week each
 CREATE TABLE _seed_shift (EmployeeID CHAR(36), LocationID CHAR(36), StartTime TIME, Minutes INT, DayOffset INT);
 INSERT INTO _seed_shift
 VALUES
-    ('emp-leo',    NULL,           '08:00', 510, 0),
+    ('emp-leo',    'loc-downtown', '08:00', 510, 0),
     ('emp-sam',    'loc-downtown', '06:30', 510, 2),
-    ('emp-priya',  'loc-campus',   '07:00', 510, 4),
-    ('emp-jordan', 'loc-campus',   '11:00', 450, 1);
+    ('emp-priya',  'loc-downtown', '07:00', 510, 4),
+    ('emp-jordan', 'loc-downtown', '11:00', 450, 1);
 
--- Last pay period: approved. This one: submitted. The manager approves staff; the owner approves the manager.
+-- Last pay period: approved. This one: submitted. The manager approves staff; the general manager approves the manager.
 INSERT INTO TimeEntry (TimeEntryID, EmployeeID, LocationID, BusinessID, PayPeriodID,
                        ClockInAt, ClockOutAt, UnpaidBreakMinutes, TimeEntryStatusCode, ApprovedByEmployeeID)
 SELECT CONCAT('te-', SUBSTRING(e.EmployeeID, 5), '-', LPAD(d.n, 2, '0')),
        e.EmployeeID,
-       COALESCE(e.LocationID, IF(MOD(d.n, 2) = 0, 'loc-downtown', 'loc-campus')),
+       e.LocationID,
        @biz,
        IF(d.n >= 14, 'pp-prev', 'pp-curr'),
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL d.n DAY, e.StartTime), @tz, '+00:00'),
@@ -170,10 +169,6 @@ VALUES
     ('prd-muffin',    @biz, 'cat-bakery', 'Blueberry muffin', NULL),
     ('prd-bag',       @biz, 'cat-retail', 'House blend, whole bean', '12 oz bag to brew at home');
 
--- Not a sale: no category, recipe or tax; the amount is typed at the register
-INSERT INTO Product (ProductID, BusinessID, Name, Description, IsGiftCard)
-VALUES ('prd-giftcard', @biz, 'Gift card', 'Amount set at checkout', TRUE);
-
 INSERT INTO ProductVariant (VariantID, ProductID, BusinessID, Name, SKU, Price, TaxCategoryID, RestockOnReturn)
 VALUES
     ('var-latte-s',   'prd-latte',     @biz, 'Small 12 oz', 'LAT-12',  4.25, 'tax-prepared', FALSE),
@@ -183,8 +178,7 @@ VALUES
     ('var-chai',      'prd-chai',      @biz, 'Regular',     'CHAI-16', 4.75, 'tax-prepared', FALSE),
     ('var-croissant', 'prd-croissant', @biz, 'Regular',     'BAK-CRO', 3.50, 'tax-prepared', FALSE),
     ('var-muffin',    'prd-muffin',    @biz, 'Regular',     'BAK-MUF', 3.25, 'tax-prepared', FALSE),
-    ('var-bag',       'prd-bag',       @biz, 'Regular',     'RET-HB12', 16.00, 'tax-packaged', TRUE),
-    ('var-giftcard',  'prd-giftcard',  @biz, 'Regular',     'GIFT',      0.00, 'tax-none',     FALSE);
+    ('var-bag',       'prd-bag',       @biz, 'Regular',     'RET-HB12', 16.00, 'tax-packaged', TRUE);
 
 INSERT INTO VariantRecipe (VariantID, StockItemID, BusinessID, QuantityPerUnit)
 VALUES
@@ -269,7 +263,7 @@ INSERT INTO Delivery (DeliveryID, BusinessID, LocationID, SupplierID, InvoiceNum
 SELECT CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(u.SupplierID, 5)),
        @biz, l.LocationID, u.SupplierID,
        CONCAT('INV-', UPPER(SUBSTRING(u.SupplierID, 5, 3)), '-', r.n, IF(l.LocationID = 'loc-downtown', '1', '2')),
-       @D - INTERVAL IF(r.n = 1, 20, 6) DAY, 'emp-leo'
+       @D - INTERVAL IF(r.n = 1, 20, 6) DAY, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana')
   FROM Location l CROSS JOIN (SELECT DISTINCT SupplierID FROM _seed_stock) u
   JOIN _seed_seq r ON r.n IN (1, 2)
  WHERE l.BusinessID = @biz;
@@ -277,7 +271,7 @@ SELECT CONCAT('dlv-', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '
 INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID,
                                   QuantityChange, UnitCost, TransactionTypeCode, TransactionDateTime, DeliveryID)
 SELECT CONCAT('itx-rs', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'), '-', SUBSTRING(s.StockItemID, 5)),
-       @biz, s.StockItemID, l.LocationID, 'emp-leo',
+       @biz, s.StockItemID, l.LocationID, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana'),
        IF(r.n = 1, s.Qty1, s.Qty2), IF(r.n = 1, s.Cost1, s.Cost2),
        1,                                                       -- 1 = RESTOCK
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL IF(r.n = 1, 20, 6) DAY, '06:00'), @tz, '+00:00'),
@@ -313,27 +307,27 @@ INSERT INTO PromotionProduct (PromotionID, ProductID, BusinessID)
 VALUES ('promo-morning-pastry', 'prd-croissant', @biz), ('promo-morning-pastry', 'prd-muffin', @biz);
 
 -- ---------------------------------------------------------------------------
--- Orders: 6-10 a day per café over the last 13 days, 7am-5pm local
+-- Orders: 6-10 a day over the last 13 days, 7am-5pm local
 -- ---------------------------------------------------------------------------
 CREATE TABLE _seed_order (OrderID CHAR(36) PRIMARY KEY, LocationID CHAR(36), h BIGINT,
                           LocalAt DATETIME, UtcAt DATETIME, ChannelCode TINYINT, RegisterID CHAR(36),
                           EmployeeID CHAR(36), CustomerID CHAR(36), PaymentMethodCode TINYINT,
-                          Total DECIMAL(10,2), Tip DECIMAL(10,2), GiftCardID CHAR(36));
+                          Total DECIMAL(10,2), Tip DECIMAL(10,2));
 INSERT INTO _seed_order
 SELECT x.OrderID, x.LocationID, x.h, x.LocalAt, CONVERT_TZ(x.LocalAt, @tz, '+00:00'),
-       IF(MOD(x.h, 10) = 0, 2, 1),                                            -- 1 = POS, 2 = ONLINE
-       IF(MOD(x.h, 10) = 0, NULL, IF(x.lc = 'dt', 'reg-dt-1', 'reg-cp-1')),
-       IF(MOD(x.h, 10) = 0, NULL, IF(x.lc = 'dt', 'emp-sam', 'emp-priya')),
-       IF(MOD(x.h, 10) = 0 OR MOD(x.h, 5) = 0,
+       1,                                                                     -- 1 = POS
+       IF(x.lc = 'dt', 'reg-dt-1', 'reg-cp-1'),
+       IF(x.lc = 'dt', 'emp-sam', 'emp-priya'),
+       IF(MOD(x.h, 5) = 0,
           ELT(MOD(x.h, 4) + 1, 'cus-ava', 'cus-ben', 'cus-chloe', 'cus-diego'), NULL),
-       IF(MOD(x.h, 10) <> 0 AND MOD(x.h, 3) = 0, 1, 2),                       -- 1 = CASH, 2 = CARD
-       NULL, NULL, NULL
+       IF(MOD(x.h, 3) = 0, 1, 2),                                             -- 1 = CASH, 2 = CARD
+       NULL, NULL
   FROM (SELECT CONCAT('ord-', lc, '-', LPAD(d.n, 2, '0'), '-', LPAD(s.n, 2, '0')) OrderID,
                l.LocationID, l.lc,
                CRC32(CONCAT(l.lc, d.n, '-', s.n)) h,
                TIMESTAMP(@D - INTERVAL d.n DAY,
                          MAKETIME(7 + s.n, MOD(CRC32(CONCAT(l.lc, d.n, '-', s.n, 'm')), 50), 0)) LocalAt
-          FROM (SELECT 'loc-downtown' LocationID, 'dt' lc UNION ALL SELECT 'loc-campus', 'cp') l
+          FROM (SELECT 'loc-downtown' LocationID, 'dt' lc) l
           JOIN _seed_seq d ON d.n BETWEEN 1 AND 13
           JOIN _seed_seq s ON s.n < 6 + MOD(CRC32(CONCAT(l.lc, d.n)), 5)) x;
 
@@ -361,17 +355,6 @@ SELECT CONCAT(o.OrderID, '-', k.n), o.OrderID, o.LocationID, m.VariantID,
   FROM _seed_order o
   JOIN _seed_seq k ON k.n < 1 + (MOD(o.h, 3) > 0) + (MOD(o.h, 4) = 0)
   JOIN _seed_menu m ON m.idx = MOD(CRC32(CONCAT(o.OrderID, k.n)), 17);
-
--- A $25 gift card sold at Downtown, and later most of a latte paid with it (3 = GIFT_CARD)
-INSERT INTO _seed_order (OrderID, LocationID, h, LocalAt, UtcAt, ChannelCode, RegisterID, EmployeeID,
-                         PaymentMethodCode, GiftCardID)
-SELECT OrderID, 'loc-downtown', 0, LocalAt, CONVERT_TZ(LocalAt, @tz, '+00:00'), 1, 'reg-dt-1', 'emp-sam', Method, Card
-  FROM (SELECT 'ord-dt-gift-sale' OrderID, TIMESTAMP(@D - INTERVAL 5 DAY, '09:32') LocalAt, 1 Method, NULL Card
-        UNION ALL
-        SELECT 'ord-dt-gift-use', TIMESTAMP(@D - INTERVAL 2 DAY, '11:05'), 3, 'gc-0001') g;
-INSERT INTO _seed_line (OrderItemID, OrderID, LocationID, VariantID, Quantity, hl)
-VALUES ('ord-dt-gift-sale-0', 'ord-dt-gift-sale', 'loc-downtown', 'var-giftcard', 1, 1),
-       ('ord-dt-gift-use-0',  'ord-dt-gift-use',  'loc-downtown', 'var-latte-l',  1, 1);
 
 CREATE TABLE _seed_linemod (OrderItemID CHAR(36), ModifierID CHAR(36));
 INSERT INTO _seed_linemod
@@ -426,7 +409,6 @@ UPDATE _seed_line l
        l.TaxCategoryID = v.TaxCategoryID,
        l.TaxRate = r.Rate;
 
-UPDATE _seed_line SET UnitPrice = 25.00 WHERE VariantID = 'var-giftcard';
 UPDATE _seed_line SET LineTotal = ROUND(Quantity * UnitPrice, 2);
 
 -- Morning pastry promotion
@@ -436,16 +418,12 @@ UPDATE _seed_line l
  WHERE l.VariantID IN ('var-croissant', 'var-muffin') AND HOUR(o.LocalAt) < 10;
 
 -- Same steps the backend takes: open the order, add lines, total it, pay, complete
--- Some online orders pick a time (20 min out) or leave a note; the rest are "as soon as possible"
-INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime,
-                    PickupAt, CustomerNote)
-SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt,
-       IF(ChannelCode = 2 AND MOD(h, 3) = 0, UtcAt + INTERVAL 20 MINUTE, NULL),
-       IF(ChannelCode = 2 AND MOD(h, 4) < 2, ELT(MOD(h, 4) + 1, 'Extra hot, please', 'Name on the cup: Sam'), NULL)
+INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderDateTime)
+SELECT OrderID, LocationID, @biz, RegisterID, EmployeeID, CustomerID, ChannelCode, UtcAt
   FROM _seed_order
  UNION ALL       -- cancelled below; inserted here so order numbers follow time
-SELECT 'ord-cp-cancelled', 'loc-campus', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
-       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00'), NULL, NULL
+SELECT 'ord-cp-cancelled', 'loc-downtown', @biz, 'reg-cp-1', 'emp-priya', NULL, 1,
+       CONVERT_TZ(TIMESTAMP(@D - INTERVAL 2 DAY, '12:15'), @tz, '+00:00')
  ORDER BY 8, 1;
 
 INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, UnitCost, LineCost,
@@ -453,12 +431,6 @@ INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, Un
 SELECT OrderItemID, OrderID, VariantID, @biz, Quantity, UnitPrice, UnitCost, ROUND(Quantity * UnitCost, 6),
        LineTotal, DiscountAmount, TaxCategoryID, TaxRate, ROUND((LineTotal - DiscountAmount) * TaxRate, 2)
   FROM _seed_line;
-
--- The card handed over: the backend stores HMAC-SHA256(giftcard secret, code). This is that value for the code
--- 'dev-seed-card-0001' under the dev secret 'dev-giftcard-secret' (sql/secrets/giftcard_secret.txt)
-INSERT INTO GiftCard (GiftCardID, BusinessID, CodeHash, Last4, OrderItemID, CreatedAt)
-SELECT 'gc-0001', @biz, UNHEX('f0e400c15bab32c415c2ad9f54c6ba078d9341f2c26ff70810e6e45890258756'), '4821', 'ord-dt-gift-sale-0', UtcAt
-  FROM _seed_order WHERE OrderID = 'ord-dt-gift-sale';
 
 INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta)
 SELECT lm.OrderItemID, lm.ModifierID, @biz, m.PriceDelta
@@ -492,14 +464,12 @@ UPDATE _seed_order
 -- ...and the latest tip is still open, as if entered from a slip, so "unlocked tips" has a row
 SET @open_tip = (SELECT OrderID FROM _seed_order WHERE Tip > 0 ORDER BY UtcAt DESC LIMIT 1);
 
--- Gift card payments wait until the card is issued, when its sale completes below
 INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, TipAmount, TipLockedAt,
                      PaymentStatusCode, PaymentDateTime)
 SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, Tip,
        IF(OrderID = @open_tip, NULL, UtcAt + INTERVAL 2 MINUTE),
        3, UtcAt + INTERVAL 2 MINUTE                                                   -- 3 = COMPLETED
-  FROM _seed_order
- WHERE GiftCardID IS NULL;
+  FROM _seed_order;
 
 -- Before completion: redemptions freeze with the order, and completion checks they add up
 INSERT INTO PromotionRedemption (BusinessID, RedemptionID, PromotionID, OrderID, DiscountAmount, RedeemedAt)
@@ -510,19 +480,7 @@ SELECT @biz, CONCAT('red-', SUBSTRING(o.OrderID, 5)), 'promo-morning-pastry', o.
 
 UPDATE Orders o
   JOIN _seed_order s ON s.OrderID = o.OrderID
-   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE              -- 5 = COMPLETED
- WHERE s.GiftCardID IS NULL;
-
-INSERT INTO Payment (PaymentID, OrderID, PaymentMethodCode, Amount, PaymentStatusCode, PaymentDateTime, GiftCardID)
-SELECT CONCAT('pay-', SUBSTRING(OrderID, 5)), OrderID, PaymentMethodCode, Total, 3, UtcAt + INTERVAL 2 MINUTE,
-       GiftCardID
-  FROM _seed_order
- WHERE GiftCardID IS NOT NULL;
-
-UPDATE Orders o
-  JOIN _seed_order s ON s.OrderID = o.OrderID
-   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE
- WHERE s.GiftCardID IS NOT NULL;
+   SET o.OrderStatusCode = 5, o.CompletedAt = s.UtcAt + INTERVAL 3 MINUTE;             -- 5 = COMPLETED
 
 INSERT INTO OrderStatusHistory (OrderStatusHistoryID, OrderID, BusinessID, OrderStatusCode, ChangedAt, ChangedByEmployeeID)
 SELECT CONCAT('osh-', SUBSTRING(s.OrderID, 5), '-1'), s.OrderID, @biz, 1, s.UtcAt, s.EmployeeID FROM _seed_order s
@@ -564,23 +522,23 @@ CREATE TABLE _seed_loss (ID CHAR(36), LocationID CHAR(36), StockItemID CHAR(36),
 INSERT INTO _seed_loss (ID, LocationID, StockItemID, EmployeeID, Qty, TypeCode, DaysAgo, AtTime, Note)
 VALUES      -- 5 DAMAGED, 6 EXPIRED, 7 THEFT, 8 COUNT_CORRECTION
     ('itx-loss-01', 'loc-downtown', 'stk-milk',      'emp-sam',    -1890, 5, 11, '08:15', 'Dropped jug'),
-    ('itx-loss-02', 'loc-campus',   'stk-beans',     'emp-priya',   -340, 5,  9, '10:40', 'Bag split on the shelf'),
+    ('itx-loss-02', 'loc-downtown', 'stk-beans',     'emp-priya',   -340, 5,  9, '10:40', 'Bag split on the shelf'),
     ('itx-loss-03', 'loc-downtown', 'stk-croissant', 'emp-sam',       -4, 6, 10, '17:30', NULL),
-    ('itx-loss-04', 'loc-campus',   'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30', NULL),
+    ('itx-loss-04', 'loc-downtown', 'stk-croissant', 'emp-priya',     -3, 6,  7, '17:30', NULL),
     ('itx-loss-05', 'loc-downtown', 'stk-muffin',    'emp-sam',       -5, 6,  4, '17:30', NULL),
-    ('itx-loss-06', 'loc-campus',   'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
+    ('itx-loss-06', 'loc-downtown', 'stk-muffin',    'emp-jordan',    -2, 6,  2, '17:30', NULL),
     ('itx-loss-07', 'loc-downtown', 'stk-milk',      'emp-leo',    -1000, 6,  3, '07:00', 'Soured before its date'),
-    ('itx-loss-08', 'loc-campus',   'stk-bag',       'emp-leo',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
+    ('itx-loss-08', 'loc-downtown', 'stk-bag',       'emp-ana',       -1, 7,  5, '14:00', 'Missing from the retail shelf'),
     ('itx-loss-09', 'loc-downtown', 'stk-cup-16',    'emp-leo',      -12, 8,  1, '18:00', NULL),
-    ('itx-loss-10', 'loc-campus',   'stk-cup-12',    'emp-leo',        6, 8,  1, '18:00', NULL);
+    ('itx-loss-10', 'loc-downtown', 'stk-cup-12',    'emp-ana',        6, 8,  1, '18:00', NULL);
 
 -- Yesterday's closing count at each café: every stock item counted, one difference each
 INSERT INTO StockCount (StockCountID, BusinessID, LocationID, CountedByEmployeeID, CountedAt, ItemsCounted, Note)
-SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, 'emp-leo',
+SELECT CONCAT('cnt-', SUBSTRING(l.LocationID, 5)), @biz, l.LocationID, IF(l.LocationID = 'loc-downtown', 'emp-leo', 'emp-ana'),
        CONVERT_TZ(TIMESTAMP(@D - INTERVAL 1 DAY, '18:00'), @tz, '+00:00'),
        (SELECT COUNT(*) FROM StockItem WHERE BusinessID = @biz),
        IF(l.LocationID = 'loc-downtown', 'Sleeve of 16 oz cups crushed in the back', 'Found a spare sleeve of 12 oz cups')
-  FROM Location l WHERE l.LocationID IN ('loc-downtown', 'loc-campus');
+  FROM Location l WHERE l.LocationID = 'loc-downtown';
 UPDATE _seed_loss SET StockCountID = CONCAT('cnt-', SUBSTRING(LocationID, 5)) WHERE TypeCode = 8;
 
 -- Staged: the ledger trigger updates Inventory, so the INSERT can't read Inventory itself.
@@ -624,8 +582,5 @@ SELECT 'ref-0001', CONCAT('pay-', SUBSTRING(@ret_order, 5)), 'ret-0001', @ret_or
   FROM OrderItem WHERE OrderItemID = @ret_line;
 
 DROP TABLE _seed_loss, _seed_comp, _seed_linemod, _seed_line, _seed_menu, _seed_order, _seed_stock, _seed_shift, _seed_seq;
-
--- Campus has stopped taking online orders (Settings shows one On, one Off)
-UPDATE Location SET AcceptsOnlineOrders = FALSE WHERE LocationID = 'loc-campus';
 
 COMMIT;

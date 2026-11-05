@@ -10,24 +10,23 @@ CREATE TABLE IF NOT EXISTS Business (
               ON UPDATE CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
-    LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by TR_Orders_BeforeInsert
+    LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by the backend (server/orderlines.js)
     RefundOverrideAmount DECIMAL(10,2) NULL,
     RefundOverrideDays SMALLINT UNSIGNED NULL,
-    GiftCardMinAmount DECIMAL(10,2) NOT NULL DEFAULT 5.00,
-    GiftCardMaxAmount DECIMAL(10,2) NOT NULL DEFAULT 500.00,
     StaffDiscountsNeedApproval BOOLEAN NOT NULL DEFAULT FALSE,   -- FALSE: staff discounts need no manager
     StaffDiscountMaxPercent DECIMAL(5,2) NOT NULL DEFAULT 20.00, -- a bigger staff discount needs a manager's signature
-    
+    OnlyOne TINYINT GENERATED ALWAYS AS (1) STORED,              -- the same value on every row, so UQ_Business_OnlyOne allows one business per database
+
     PRIMARY KEY (BusinessID),
+
+    CONSTRAINT UQ_Business_OnlyOne
+        UNIQUE (OnlyOne),
 
     CONSTRAINT CK_Business_RefundOverrideAmount
         CHECK (RefundOverrideAmount IS NULL OR RefundOverrideAmount >= 0),
 
     CONSTRAINT CK_Business_StaffDiscountMaxPercent
         CHECK (StaffDiscountMaxPercent BETWEEN 0 AND 100),
-
-    CONSTRAINT CK_Business_GiftCardAmounts
-        CHECK (GiftCardMinAmount > 0 AND GiftCardMaxAmount >= GiftCardMinAmount),
 
     INDEX IX_Business_Name (Name)
 ) ENGINE=InnoDB;
@@ -59,7 +58,6 @@ CREATE TABLE IF NOT EXISTS Location (
     Address VARCHAR(255),
     Phone VARCHAR(30),
     Active BOOLEAN NOT NULL DEFAULT TRUE,
-    AcceptsOnlineOrders BOOLEAN NOT NULL DEFAULT FALSE,   -- owner switches it on in Settings
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -117,13 +115,12 @@ CREATE TABLE IF NOT EXISTS Permission (
     PRIMARY KEY (PermissionCode)
 ) ENGINE=InnoDB;
 
--- Each business defines its own roles; the owner role holds every permission implicitly
+-- Each business defines its own roles; RolePermission says what each may do
 CREATE TABLE IF NOT EXISTS Role (
     RoleID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
     Name VARCHAR(50) NOT NULL,
     OpensTo VARCHAR(30) NOT NULL,              -- page shown after sign-in; the backend validates it
-    IsOwner BOOLEAN NOT NULL DEFAULT FALSE,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     PRIMARY KEY (RoleID),
@@ -133,9 +130,6 @@ CREATE TABLE IF NOT EXISTS Role (
 
     CONSTRAINT UQ_Role_Business_Name
         UNIQUE (BusinessID, Name),
-
-    -- at most one owner role per business
-    UNIQUE INDEX UQ_Role_Owner ((IF(IsOwner, BusinessID, NULL))),
 
     CONSTRAINT FK_Role_Business
         FOREIGN KEY (BusinessID)
@@ -169,7 +163,7 @@ CREATE TABLE IF NOT EXISTS Employee (
     FirstName VARCHAR(50) NOT NULL,
     LastName VARCHAR(50) NOT NULL,
     Email VARCHAR(255) NOT NULL,
-    EmployeeNumber CHAR(8) NOT NULL,           -- typed at sign-in, so unique across businesses
+    EmployeeNumber CHAR(8) NOT NULL,           -- a non-secret ID, unique across businesses: names a colleague at the counter, and who approves with a PIN
     RoleID CHAR(36) NOT NULL,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
@@ -193,8 +187,9 @@ CREATE TABLE IF NOT EXISTS Employee (
         REFERENCES Role(RoleID, BusinessID)
         ON DELETE RESTRICT,
         
-    CONSTRAINT UQ_Employee_Business_Email
-        UNIQUE (BusinessID, Email),
+    -- the email is the sign-in name, so it is unique across businesses
+    CONSTRAINT UQ_Employee_Email
+        UNIQUE (Email),
 
     CONSTRAINT UQ_Employee_EmployeeNumber
         UNIQUE (EmployeeNumber),
@@ -209,8 +204,8 @@ CREATE TABLE IF NOT EXISTS Employee (
 
 CREATE TABLE IF NOT EXISTS EmployeeCredential (
     EmployeeID CHAR(36) NOT NULL,
-    PasswordHash VARCHAR(255),
-    PinHash VARCHAR(255),                      -- 6-digit PIN; the backend checks length before hashing
+    PasswordHash VARCHAR(255) NOT NULL,        -- signs in with the employee's email; 8 characters or more, checked before hashing
+    PinHash VARCHAR(255),                      -- 6-digit approval PIN, typed with the employee number to sign off a discount or refund; NULL: cannot approve
     FailedPinAttempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
     LockedUntil DATETIME NULL,
 
@@ -219,9 +214,6 @@ CREATE TABLE IF NOT EXISTS EmployeeCredential (
 
     PRIMARY KEY (EmployeeID),
 
-    CONSTRAINT CK_EmployeeCredential_Secret
-        CHECK (PasswordHash IS NOT NULL OR PinHash IS NOT NULL),
-    
     CONSTRAINT FK_EmployeeCredential_Employee
         FOREIGN KEY (EmployeeID)
         REFERENCES Employee(EmployeeID)
@@ -481,7 +473,6 @@ CREATE TABLE IF NOT EXISTS Product (
     Description TEXT,
     ImageKey VARCHAR(512),          -- storage path/key of the picture; the backend stores and serves the file
     CategoryID CHAR(36) NULL,       -- one category per product; NULL = uncategorised
-    IsGiftCard BOOLEAN NOT NULL DEFAULT FALSE,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
 
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -860,6 +851,14 @@ CREATE TABLE IF NOT EXISTS Inventory (
     INDEX IX_Inventory_LocationID (LocationID)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS LowStockAlert (
+    InventoryID CHAR(36) NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (InventoryID),
+    CONSTRAINT FK_LowStockAlert_Inventory FOREIGN KEY (InventoryID)
+        REFERENCES Inventory(InventoryID) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS Customer (
     CustomerID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
@@ -891,12 +890,30 @@ CREATE TABLE IF NOT EXISTS Customer (
             OR Phone IS NOT NULL
         ),
 
-    CONSTRAINT UQ_Customer_Business_Email
-        UNIQUE (BusinessID, Email),            -- NULLs allowed; case-insensitive collation
+    CONSTRAINT UQ_Customer_Email
+        UNIQUE (Email),                        -- the sign-in name, so unique across businesses; NULLs allowed; case-insensitive collation
 
     INDEX IX_Customer_BusinessID (BusinessID),
     INDEX IX_Customer_Phone (BusinessID, Phone),
     INDEX IX_Customer_PhoneDigits (BusinessID, PhoneDigits)
+) ENGINE=InnoDB;
+
+-- A customer who can sign in (with their email) to order at the kiosk. No row: no sign-in. An employee's email always signs in as the employee.
+CREATE TABLE IF NOT EXISTS CustomerCredential (
+    CustomerID CHAR(36) NOT NULL,
+    PasswordHash VARCHAR(255) NOT NULL,        -- 8 characters or more, checked before hashing
+    FailedAttempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    LockedUntil DATETIME NULL,
+
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (CustomerID),
+
+    CONSTRAINT FK_CustomerCredential_Customer
+        FOREIGN KEY (CustomerID)
+        REFERENCES Customer(CustomerID)
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS OrderStatus (
@@ -922,8 +939,9 @@ CREATE TABLE IF NOT EXISTS Orders (
     EmployeeID CHAR(36),
     CustomerID CHAR(36),
 
-    OrderNumber INT UNSIGNED NOT NULL DEFAULT 0,  -- set by TR_Orders_BeforeInsert
+    OrderNumber INT UNSIGNED NULL,  -- taken by the backend (nextOrderNumber); NULL only on seeded rows until 99-ready.sh numbers them
     ChannelCode TINYINT UNSIGNED NOT NULL,
+    CustomerNote VARCHAR(255) NULL,                      -- kiosk orders: the customer's note to the kitchen
     OrderDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -934,9 +952,7 @@ CREATE TABLE IF NOT EXISTS Orders (
     Tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,             -- sum of OrderItem.TaxAmount; net sales = Total - Tax
     DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- sum of OrderItem.DiscountAmount
     Total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by TR_Orders_BeforeInsert
-    PickupAt DATETIME NULL,                              -- online only; NULL = as soon as possible
-    CustomerNote VARCHAR(255) NULL,
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by the backend
 
     PRIMARY KEY (OrderID),
 
@@ -955,9 +971,6 @@ CREATE TABLE IF NOT EXISTS Orders (
     CONSTRAINT UQ_Orders_Business_OrderNumber
         UNIQUE (BusinessID, OrderNumber),
 
-    CONSTRAINT CK_Orders_PickupAt
-        CHECK (PickupAt IS NULL OR (ChannelCode = 2 AND PickupAt >= OrderDateTime)),   -- 2 = ONLINE
-    
     CONSTRAINT FK_Orders_Business
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)
@@ -1070,7 +1083,7 @@ CREATE TABLE IF NOT EXISTS OrderItem (
     TaxCategoryID CHAR(36) NOT NULL,           -- snapshot of the variant's category
     TaxRate DECIMAL(7,6) NOT NULL,             -- snapshot of LocationTaxRate.Rate
     TaxAmount DECIMAL(10,2) NOT NULL,          -- tax on (LineTotal - DiscountAmount)
-    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,  -- copied from the order by TR_OrderItem_BeforeInsert
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,  -- copied from the order by the backend (server/orderlines.js); the key below keeps the two equal
     NetAmount DECIMAL(10,2) AS
         (LineTotal - DiscountAmount - IF(PricesIncludeTax, TaxAmount, 0)) STORED,  -- revenue before tax
 
@@ -1229,7 +1242,6 @@ CREATE TABLE IF NOT EXISTS Payment (
     TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- on top of Amount; not a sale, so not in Total
     TipLockedAt DATETIME NULL,                      -- NULL: tip can still be adjusted (restaurant style)
     PaymentStatusCode TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    GiftCardID CHAR(36) NULL,                       -- the card paid with; FK added after GiftCard
     PaymentDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
               ON UPDATE CURRENT_TIMESTAMP,
@@ -1259,9 +1271,6 @@ CREATE TABLE IF NOT EXISTS Payment (
 
     CONSTRAINT CK_Payment_TipAmount
         CHECK (TipAmount >= 0),
-
-    CONSTRAINT CK_Payment_GiftCard
-        CHECK ((PaymentMethodCode = 3) = (GiftCardID IS NOT NULL)),   -- 3 = GIFT_CARD
 
     INDEX IX_Payment_OrderID (OrderID),
     INDEX IX_Payment_Status (PaymentStatusCode),
@@ -1312,28 +1321,6 @@ CREATE TABLE IF NOT EXISTS Delivery (
         ON DELETE RESTRICT,
 
     INDEX IX_Delivery_Location_Date (LocationID, DeliveredOn)
-) ENGINE=InnoDB;
-
--- Simulated supplier purchase orders. Only one unreceived order per inventory row.
-CREATE TABLE IF NOT EXISTS PurchaseOrder (
-    PurchaseOrderID CHAR(36) NOT NULL PRIMARY KEY,
-    OrderNumber BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
-    SupplierID CHAR(36) NULL,
-    UnitCost DECIMAL(18,6) NULL,
-    InventoryID CHAR(36) NOT NULL,
-    Quantity DECIMAL(12,3) NOT NULL,
-    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ReceivedDeliveryID CHAR(36) NULL,
-    Status VARCHAR(20) GENERATED ALWAYS AS
-        (CASE WHEN ReceivedDeliveryID IS NOT NULL THEN 'Received'
-              WHEN SupplierID IS NULL THEN 'Needs supplier' ELSE 'Ordered' END) STORED,
-    OpenRequest TINYINT GENERATED ALWAYS AS (IF(ReceivedDeliveryID IS NULL, 1, NULL)) STORED,
-    UNIQUE KEY UQ_PurchaseOrder_Open (InventoryID, OpenRequest),
-    CONSTRAINT FK_PurchaseOrder_Inventory FOREIGN KEY (InventoryID) REFERENCES Inventory(InventoryID) ON DELETE CASCADE,
-    CONSTRAINT FK_PurchaseOrder_Received FOREIGN KEY (ReceivedDeliveryID) REFERENCES Delivery(DeliveryID) ON DELETE RESTRICT,
-    CONSTRAINT FK_PurchaseOrder_Supplier FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID) ON DELETE RESTRICT,
-    CONSTRAINT CK_PurchaseOrder_Cost CHECK (UnitCost IS NULL OR UnitCost >= 0),
-    CONSTRAINT CK_PurchaseOrder_Quantity CHECK (Quantity > 0)
 ) ENGINE=InnoDB;
 
 -- One stocktake at a location; only items that differ get a COUNT_CORRECTION row pointing to it,
@@ -1544,7 +1531,7 @@ CREATE TABLE IF NOT EXISTS PromotionRedemption (
     CHECK (DiscountAmount > 0)
 ) ENGINE=InnoDB;
 
--- A one-off discount outside any promotion; a manager or owner approves it (04-triggers.sql)
+-- A one-off discount outside any promotion; a manager approves it (04-triggers.sql)
 CREATE TABLE IF NOT EXISTS OrderDiscount (
     OrderDiscountID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,
@@ -1824,119 +1811,44 @@ CREATE TABLE IF NOT EXISTS Refund (
     INDEX IX_Refund_DateTime (RefundDateTime)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS GiftCardTransactionType (
-    GiftCardTransactionTypeCode TINYINT UNSIGNED NOT NULL,
-    Description VARCHAR(100) NOT NULL,
 
-    PRIMARY KEY (GiftCardTransactionTypeCode)
+-- A manager's decision, recorded as it is made. TR_ApprovalAction_AfterInsert queues it in NotificationQueue and the backend
+-- worker (server/approvals.js) carries it out.
+CREATE TABLE IF NOT EXISTS ApprovalAction (
+    ApprovalActionID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    ActorEmployeeID CHAR(36) NOT NULL,
+    ApproverEmployeeID CHAR(36) NULL,
+    LocationID CHAR(36) NOT NULL,
+    ActionType VARCHAR(32) NOT NULL,
+    TargetID CHAR(36) NOT NULL,
+    Payload JSON NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (ApprovalActionID),
+    CONSTRAINT FK_ApprovalAction_Actor FOREIGN KEY (ActorEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT FK_ApprovalAction_Approver FOREIGN KEY (ApproverEmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT FK_ApprovalAction_Location FOREIGN KEY (LocationID, BusinessID)
+        REFERENCES Location(LocationID, BusinessID) ON DELETE RESTRICT,
+    CONSTRAINT CK_ApprovalAction_Type CHECK (ActionType IN (
+        'DISCOUNT_APPLY', 'REFUND_APPROVE', 'REFUND_REJECT', 'TIMECARD_APPROVE', 'TIMECARD_REJECT')),
+    CONSTRAINT CK_ApprovalAction_Payload CHECK (JSON_TYPE(Payload) = 'OBJECT'),
+    INDEX IX_ApprovalAction_Target (BusinessID, ActionType, TargetID)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS GiftCard (
-    GiftCardID CHAR(36) NOT NULL,
-    BusinessID CHAR(36) NOT NULL,
-    CodeHash BINARY(32) NOT NULL,
-    Last4 CHAR(4) NOT NULL,                    -- shown as 'Card ••1234'
-    OrderItemID CHAR(36) NOT NULL,             -- the line that sold it
-    Active BOOLEAN NOT NULL DEFAULT TRUE,      -- FALSE: lost, stolen or cancelled
+-- Work for the backend worker, put here by simple triggers. Pending until the worker has done it, then Done, or Failed with the reason.
+CREATE TABLE IF NOT EXISTS NotificationQueue (
+    NotificationID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    EntityName VARCHAR(40) NOT NULL,
+    EntityID CHAR(36) NOT NULL,
+    ActionType VARCHAR(32) NOT NULL,
+    NewData JSON NOT NULL,
+    Status ENUM('Pending', 'Done', 'Failed') NOT NULL DEFAULT 'Pending',
+    Error VARCHAR(255) NULL,
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-              ON UPDATE CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (GiftCardID),
-
-    CONSTRAINT UQ_GiftCard_ID_Business
-        UNIQUE (GiftCardID, BusinessID),
-
-    CONSTRAINT UQ_GiftCard_Business_Code
-        UNIQUE (BusinessID, CodeHash),
-
-    CONSTRAINT UQ_GiftCard_OrderItem
-        UNIQUE (OrderItemID),
-
-    CONSTRAINT FK_GiftCard_Business
-        FOREIGN KEY (BusinessID)
-        REFERENCES Business(BusinessID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCard_OrderItem
-        FOREIGN KEY (OrderItemID)
-        REFERENCES OrderItem(OrderItemID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT CK_GiftCard_Last4
-        CHECK (REGEXP_LIKE(Last4, '^[0-9A-Z]{4}$', 'c')),
-
-    INDEX IX_GiftCard_Last4 (BusinessID, Last4)
-) ENGINE=InnoDB;
-
-ALTER TABLE Payment
-    ADD CONSTRAINT FK_Payment_GiftCard
-        FOREIGN KEY (GiftCardID)
-        REFERENCES GiftCard(GiftCardID)
-        ON DELETE RESTRICT;
-
-CREATE TABLE IF NOT EXISTS GiftCardTransaction (
-    GiftCardTransactionID CHAR(36) NOT NULL,
-    GiftCardID CHAR(36) NOT NULL,
-    BusinessID CHAR(36) NOT NULL,
-    GiftCardTransactionTypeCode TINYINT UNSIGNED NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,             -- + adds to the balance, - spends it
-    PaymentID CHAR(36) NULL,                   -- REDEEM
-    RefundID CHAR(36) NULL,                    -- REFUND back onto the card
-    ReturnItemID CHAR(36) NULL,                -- CANCEL, when the card itself is returned
-    EmployeeID CHAR(36) NULL,                  -- ADJUST
-    Reason VARCHAR(255) NULL,                  -- ADJUST
-    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (GiftCardTransactionID),
-
-    CONSTRAINT FK_GiftCardTransaction_Card
-        FOREIGN KEY (GiftCardID, BusinessID)
-        REFERENCES GiftCard(GiftCardID, BusinessID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCardTransaction_Type
-        FOREIGN KEY (GiftCardTransactionTypeCode)
-        REFERENCES GiftCardTransactionType(GiftCardTransactionTypeCode)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCardTransaction_Payment
-        FOREIGN KEY (PaymentID)
-        REFERENCES Payment(PaymentID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCardTransaction_Refund
-        FOREIGN KEY (RefundID)
-        REFERENCES Refund(RefundID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCardTransaction_ReturnItem
-        FOREIGN KEY (ReturnItemID)
-        REFERENCES ReturnItem(ReturnItemID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT FK_GiftCardTransaction_Employee
-        FOREIGN KEY (EmployeeID, BusinessID)
-        REFERENCES Employee(EmployeeID, BusinessID)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT UQ_GiftCardTransaction_Payment
-        UNIQUE (PaymentID),
-
-    CONSTRAINT UQ_GiftCardTransaction_Refund
-        UNIQUE (RefundID),
-
-    CONSTRAINT UQ_GiftCardTransaction_ReturnItem
-        UNIQUE (ReturnItemID),
-
-    -- 1 ISSUE, 2 REDEEM, 3 REFUND, 4 CANCEL, 5 ADJUST
-    CONSTRAINT CK_GiftCardTransaction_Type
-        CHECK ((GiftCardTransactionTypeCode = 1 AND Amount > 0)
-            OR (GiftCardTransactionTypeCode = 2 AND Amount < 0 AND PaymentID IS NOT NULL)
-            OR (GiftCardTransactionTypeCode = 3 AND Amount > 0 AND RefundID IS NOT NULL)
-            OR (GiftCardTransactionTypeCode = 4 AND Amount < 0 AND ReturnItemID IS NOT NULL)
-            OR (GiftCardTransactionTypeCode = 5 AND Amount <> 0 AND EmployeeID IS NOT NULL
-                AND Reason IS NOT NULL AND TRIM(Reason) <> '')),
-
-    INDEX IX_GiftCardTransaction_Card (GiftCardID, CreatedAt)
+    ProcessedAt DATETIME NULL,
+    PRIMARY KEY (NotificationID),
+    INDEX IX_NotificationQueue_Pending (Status, NotificationID),
+    INDEX IX_NotificationQueue_Entity (EntityName, EntityID)
 ) ENGINE=InnoDB;

@@ -16,6 +16,9 @@ for f in "${@:-[0-9]*.sh}"; do
       echo "build failed"
       exit 1
     }
+    # One business per database is a unique index. The other rules are checked with two businesses, to keep the cross-business keys
+    # honest, so the index is dropped here, except for the script that tests it.
+    [ "$g" = 40-one-business.sh ] || echo "ALTER TABLE $DB.Business DROP INDEX UQ_Business_OnlyOne;" | root
     out=$(cat lib.sh "$g" | sed "s/@DB@/$DB/g" | docker exec -i posdb sh)
     echo "$out"
     fails=$((fails + $(grep -c '^FAIL' <<<"$out")))

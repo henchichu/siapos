@@ -8,7 +8,7 @@ test.afterEach(() => { Date.now = realNow; });
 
 function signIn() {
   let token;
-  session.create({ cookie: (_, t) => { token = t; } }, { employeeId: "e1", info: { nav: [], tiles: [] } });
+  session.create({ cookie: (_, t) => { token = t; } }, { employeeId: "e1", info: { nav: [] } });
   return { headers: { cookie: `session=${token}` } };
 }
 const at = (req, minutes, base = realNow()) => { Date.now = () => base + minutes * MIN; return session.fromRequest(req); };

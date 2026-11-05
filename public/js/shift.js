@@ -107,7 +107,6 @@ function EditCard({ row, onClose, onSaved }) {
 }
 
 function Team({ onNotice }) {
-  const phone = usePhone();
   const [sub, setSub] = useState("cards"); // the section a phone shows
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState({ payPeriodId: "", locationId: "all", status: "SUBMITTED" });
@@ -131,16 +130,12 @@ function Team({ onNotice }) {
   const { filters, rows, period, canApprove } = data;
 
   return html`<${React.Fragment}>
-    <${ChangeLocation} phoneOnly show=${filters.locations.length > 1} popup=${{ options: [["all", "All locations"], ...filters.locations.map((l) => [l.id, l.name])], value: draft.locationId, onChange: (v) => { const d = { ...draft, locationId: v }; setDraft(d); load(d); } }} />
     <${SubTabs} tabs=${[["cards", "Timecards"], ["close", "Pay period"]]} value=${sub} onChange=${setSub} label="Team sections" />
     <${Filters} popup active=${(draft.status !== "SUBMITTED" ? 1 : 0)}>
     <section className="filters" aria-label="Filters">
       <label className="wide">Pay period
         <select className="select" value=${draft.payPeriodId} onChange=${(e) => setDraft({ ...draft, payPeriodId: e.target.value })}>
           ${filters.periods.map((p) => html`<option key=${p.id} value=${p.id}>${dayOf(p.start)} to ${dayOf(p.end)}${p.closed ? " (closed)" : ""}</option>`)}</select></label>
-      ${!phone && html`<label className="loc">Location
-          <select className="select" value=${draft.locationId} onChange=${(e) => setDraft({ ...draft, locationId: e.target.value })}>
-            <option value="all">All locations</option>${filters.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select></label>`}
       <label className="stat-sel">Status
         <select className="select" value=${draft.status} onChange=${(e) => setDraft({ ...draft, status: e.target.value })}>
           ${STATUSES.map(([v, label]) => html`<option key=${v} value=${v}>${label}</option>`)}</select></label>

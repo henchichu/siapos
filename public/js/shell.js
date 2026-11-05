@@ -2,9 +2,8 @@
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
-// Menu items and Home tiles with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Employees: "/employees.html", Rewards: "/rewards.html" };
-PAGES.Settings = "/settings.html";
+// Menu items with a page of their own; every other one opens the generic section page
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Needs attention": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -15,6 +14,28 @@ function useMe() {
   useEffect(() => { (mePromise ||= api("/session")).then(setMe).catch(() => {}); }, []);
   return me;
 }
+
+// The numbers on the menu's badges (server/counts.js): polled every 10 seconds, and fetched again when the tab regains focus
+// or this page saves something. The sidebar and any page showing one share the poll.
+const COUNT_KEY = { "Needs attention": "attention", Register: "register", Kitchen: "kitchen" };
+const countsStore = { value: {}, subs: new Set(), timer: null };
+const loadCounts = () => api("/nav-counts").then((v) => { countsStore.value = v; countsStore.subs.forEach((f) => f(v)); }).catch(() => {});
+function useCounts() {
+  const [counts, setCounts] = useState(countsStore.value);
+  useEffect(() => {
+    countsStore.subs.add(setCounts);
+    if (countsStore.subs.size === 1) {
+      loadCounts(); countsStore.timer = setInterval(loadCounts, 10000);
+      let wait; const soon = () => { clearTimeout(wait); wait = setTimeout(loadCounts, 300); }; // a burst of saves is one fetch
+      const visible = () => { if (!document.hidden) soon(); };
+      window.addEventListener("focus", soon); window.addEventListener("api-wrote", soon); document.addEventListener("visibilitychange", visible);
+      countsStore.off = () => { clearTimeout(wait); window.removeEventListener("focus", soon); window.removeEventListener("api-wrote", soon); document.removeEventListener("visibilitychange", visible); };
+    }
+    return () => { countsStore.subs.delete(setCounts); if (!countsStore.subs.size) { clearInterval(countsStore.timer); countsStore.timer = null; countsStore.off?.(); } };
+  }, []);
+  return counts;
+}
+const Count = ({ n }) => n > 0 ? html`<span className="count" aria-label=${`${n} waiting`}>${n}</span>` : null;
 
 // Small outline icons, 24x24 and stroked in the text's color (theme.css .icon)
 const ICONS = {
@@ -41,7 +62,7 @@ const ICONS = {
 };
 const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
 const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Needs attention": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
-  Reports: "chart", Employees: "people", Settings: "sliders", "My shift": "clock" };
+  Reports: "chart", "My shift": "clock" };
 
 // The small icon in a summary card's corner, picked from its label
 const CARD_ICONS = [[/hour|today|week|period/i, "clock"], [/%|tax|discount/i, "percent"], [/refund|lost|loss|differ/i, "alert"],
@@ -61,27 +82,9 @@ function PageTitle({ place, children }) {
 const initials = (name = "") => name.split(/\s+/).filter(Boolean).map((w) => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join("").toUpperCase();
 
 async function signOut() {
-  if (DEMO) return; // the tour's sample pages have nobody to sign out
   try { await api("/logout", {}); } catch (err) { /* the session is gone either way */ }
   try { const navPick = localStorage.getItem(NAV_KEY); sessionStorage.clear(); localStorage.clear(); if (navPick) localStorage.setItem(NAV_KEY, navPick); } catch (err) { /* storage can be blocked */ }
   window.location.replace("/login.html"); // the menu's collapsed or open choice outlives the sign-out
-}
-
-// The overlay menu: an owner picks another of their locations and the whole page follows it
-function PickLocation({ onClose, onPicked }) {
-  const [data, setData] = useState(null);
-  const [msg, setMsg] = useState(null);
-  useEffect(() => { api("/locations").then(setData).catch((e) => setMsg({ kind: "error", text: e.message })); }, []);
-  const pick = async (l) => {
-    if (l.id === data.current) return onClose();
-    try { await api("/locations/switch", { locationId: l.id }); onPicked(); } catch (e) { setMsg({ kind: "error", text: e.message }); }
-  };
-  return html`<${Modal} title="Switch location" onClose=${onClose}>
-    <ul className="places">${(data?.locations || []).map((l) => html`<li key=${l.id}>
-      <button className=${`btn block ${l.id === data.current ? "primary" : ""}`} aria-current=${l.id === data.current ? "true" : undefined} onClick=${() => pick(l)}>${l.name}</button></li>`)}</ul>
-    <${Message} msg=${msg} dashed />
-    <div className="btns"><button className="btn" onClick=${onClose}>Cancel</button></div>
-  <//>`;
 }
 
 // Three layouts, from the same breakpoints as the pages' own stylesheets: on a phone or a window taller than it is wide the menu is
@@ -95,15 +98,11 @@ function savedCollapsed() {
   try { return localStorage.getItem(NAV_KEY) === "1"; } catch (err) { return false; }
 }
 
-// The clock icon on its own; until that image exists, the full logo cropped to its mark
-function Mark() {
-  const [ok, setOk] = useState(true);
-  return ok ? html`<img className="mark" src="/img/clockit-mark-light.png" alt="ClockIt" width="40" height="40" onError=${() => setOk(false)} />`
-    : html`<span className="mark crop"><img src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /></span>`;
-}
+// The business's first letter in a square, where the menu has no room for its name
+const Mark = ({ name }) => html`<span className="mark" aria-hidden="true">${(name || "").trim().charAt(0).toUpperCase()}</span>`;
 
 function Sidebar({ me, current, onSignOut = signOut }) {
-  const [places, setPlaces] = useState(false);
+  const counts = useCounts();
   const [mode, setMode] = useState(navMode);
   const [collapsed, setCollapsed] = useState(savedCollapsed);
   const [open, setOpen] = useState(false); // the phone drawer
@@ -163,18 +162,18 @@ function Sidebar({ me, current, onSignOut = signOut }) {
   return html`<${React.Fragment}>
     <header className="navbar">
       <button className="burger" ref=${burger} aria-expanded=${open} aria-controls="main-nav" aria-label="Open navigation" onClick=${() => setOpen(true)}><${Icon} name="menu" /></button>
-      <a href="/home.html" className="navhome"><${Mark} /></a>
+      <a href=${me?.home || "/"} className="navhome" aria-label=${me?.businessName || "Home"}><${Mark} name=${me?.businessName} /></a>
       <span className="navtitle">${current}</span>
     </header>
     ${open && html`<div className="navshade" onClick=${() => setOpen(false)}></div>`}
     <nav className="nav" id="main-nav" aria-label="Main" ref=${navRef}>
       <div>
         <button className="navclose" ref=${closer} aria-expanded=${open} aria-controls="main-nav" aria-label="Close navigation" onClick=${() => setOpen(false)}><${Icon} name="close" /></button>
-        <h1><a href="/home.html" onClick=${closeAfter} ...${tipFor("Home")}>
-          <img className="full" src="/img/clockit-logo-light.png" alt="ClockIt" width="176" height="44" /><${Mark} />
+        <h1><a href=${me?.home || "/"} onClick=${closeAfter} ...${tipFor("Home")}>
+          <span className="full">${me?.businessName || "Home"}</span><${Mark} name=${me?.businessName} />
         </a></h1>
         <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
-          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span></a></li>`)}</ul>
+          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span><${Count} n=${counts[COUNT_KEY[n]]} /></a></li>`)}</ul>
       </div>
       <div className="foot">
         ${mode === "full" && html`<button className="navtoggle" aria-expanded=${!collapsed} aria-controls="main-nav" aria-label=${collapsed ? "Expand navigation" : "Collapse navigation"}
@@ -182,14 +181,11 @@ function Sidebar({ me, current, onSignOut = signOut }) {
         <div className="who">
           <span className="avatar" aria-hidden="true">${initials(me?.employeeName)}</span>
           <span className="name">${me?.employeeName}</span>
-          ${me?.canSwitch
-            ? html`<button className="where" aria-haspopup="dialog" onClick=${() => setPlaces(true)}>${me.roleName} · ${me.locationName}</button>`
-            : html`<span>${me?.roleName} · ${me?.locationName}</span>`}
+          <span>${me?.roleName} · ${me?.locationName}</span>
           <button className="link signout" onClick=${onSignOut} ...${tipFor("Sign out")}><${Icon} name="signout" /><span className="label">Sign out</span></button>
         </div>
       </div>
       ${tip && html`<div className="navtip" aria-hidden="true" style=${{ left: tip.x, top: tip.y }}>${tip.text}</div>`}
-      ${places && html`<${PickLocation} onClose=${() => setPlaces(false)} onPicked=${() => window.location.reload()} />`}
     </nav>
   <//>`;
 }
@@ -244,7 +240,7 @@ function noteActivity() {
   try { localStorage.setItem("idle.touched", String(now)); } catch (err) { /* storage can be blocked */ }
   api("/session/touch", {}).catch(() => {});
 }
-if (!DEMO) ["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
+["pointerdown", "keydown", "wheel"].forEach((e) => document.addEventListener(e, noteActivity, true));
 
 function IdleWarning() {
   const [level, setLevel] = useState(0);
@@ -262,7 +258,7 @@ function IdleWarning() {
 }
 document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/css/idle.css" }));
 const idleRoot = document.body.appendChild(document.createElement("div"));
-if (!DEMO) { ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity
+{ ReactDOM.createRoot(idleRoot).render(html`<${IdleWarning} />`); noteActivity(); } // opening a page counts as activity
 
 // Card layout (shift.css, ".rowcards"): below 760px each row becomes a card and every cell shows its column header from data-label.
 // Set here from the header row, so no table has to repeat its headings, and again whenever a table's rows change.
@@ -336,29 +332,3 @@ function Filters({ active = 0, popup, children }) {
   <//>`;
 }
 
-// The page's location choice. Wide: the dropdown where the page put it. Phone: a "Change location" button up in the page title, beside the
-// current location (the .titleaction slot PageTitle leaves), that opens the dropdown in a sheet; nothing when there is only one place to
-// choose. The button is drawn into the title (a portal), so the dropdown's state stays with the page's filters. Choosing applies as the page
-// already does; Done closes the sheet.
-// popup: { options: [[value, name]], value, onChange } shows the choices as buttons in a pop-up window like the sidebar's Switch location.
-function ChangeLocation({ show = true, popup, phoneOnly, children }) {
-  const phone = usePhone();
-  const [open, setOpen] = useState(false);
-  if (!phone) return phoneOnly ? null : children;
-  if (!show) return null;
-  const button = html`<button type="button" className="filterbtn" aria-haspopup="dialog" onClick=${() => setOpen(true)}>Change location</button>`;
-  const slot = document.querySelector(".titleaction");
-  return html`<${React.Fragment}>
-    ${slot ? ReactDOM.createPortal(button, slot) : html`<div className="filterbar">${button}</div>`}
-    ${open && popup && html`<${Modal} title="Change location" onClose=${() => setOpen(false)} className="popup">
-      <ul className="places">${popup.options.map(([value, name]) => html`<li key=${value}>
-        <button className=${`btn block ${value === popup.value ? "primary" : ""}`} aria-current=${value === popup.value ? "true" : undefined}
-          onClick=${() => { setOpen(false); if (value !== popup.value) popup.onChange(value); }}>${name}</button></li>`)}</ul>
-      <div className="btns"><button type="button" className="btn" onClick=${() => setOpen(false)}>Cancel</button></div>
-    <//>`}
-    ${open && !popup && html`<${Sheet} title="Change location" onClose=${() => setOpen(false)}>
-      <div className="pfilters">${children}</div>
-      <div className="pactions"><button type="button" className="pbtn" onClick=${() => setOpen(false)}>Done</button></div>
-    <//>`}
-  <//>`;
-}

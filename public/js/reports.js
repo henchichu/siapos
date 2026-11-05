@@ -1,6 +1,6 @@
 // Reports: one page, a tab per report. Each tab has its filters, Run report, four summary cards, and a table with a Total row.
-const TABS = [["live", "Live sales"], ["sales-by-day", "1. Sales by day"], ["top-sellers", "2. Top sellers"], ["labor", "3. Labor cost"], ["losses", "4. Stock losses"]];
-const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "live"; };
+const TABS = [["revenue", "Revenue"], ["top-sellers", "Top sellers"], ["labor", "Labor cost"], ["losses", "Stock losses"], ["customers", "Customers"]];
+const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "revenue"; };
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const weekday = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { weekday: "short", timeZone: "UTC" });
 const shortDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
@@ -9,12 +9,6 @@ const query = (o) => new URLSearchParams(o).toString();
 function Tabs({ tab, onTab }) {
   return html`<div className="tabs" role="group" aria-label="Reports">
     ${TABS.map(([k, label]) => html`<button key=${k} className="tab" aria-pressed=${tab === k} onClick=${() => onTab(k)}>${label}</button>`)}</div>`;
-}
-
-function LocationSelect({ options, value, onChange }) {
-  return html`<select className="select" aria-label="Location" value=${value} disabled=${!options.canPickAll && options.locations.length < 2} onChange=${(e) => onChange(e.target.value)}>
-    ${options.canPickAll && html`<option value="all">All locations</option>`}
-    ${options.locations.map((l) => html`<option key=${l.id} value=${l.id}>${l.name}</option>`)}</select>`;
 }
 
 const DateField = ({ label, value, onChange }) => html`<label className="pf"><b>${label}</b>
@@ -46,10 +40,6 @@ function BarChart({ title, bars, best, className = "" }) {
   </figure>`;
 }
 
-// One bar per day; past two weeks, only every few days are labelled so the names don't collide
-const dayBars = (days) => days.map((d, i) => ({ key: d.day, value: d.net, tip: `${weekday(d.day)} ${shortDay(d.day)}`,
-  label: days.length <= 14 || i % Math.ceil(days.length / 10) === 0 ? (days.length > 7 ? shortDay(d.day) : weekday(d.day)) : "" }));
-
 // A tab's filters and its last result. The report runs once on opening, then on Run report.
 // run(patch) changes filters and runs at once (a toggle); refresh() runs the last report again, not unsaved edits.
 function useReport(path, initial) {
@@ -70,16 +60,13 @@ function useReport(path, initial) {
   return { filters, set: (patch) => setFilters({ ...filters, ...patch }), report, msg, busy, run, refresh: useCallback(() => go(applied.current), [go]) };
 }
 
-// From, To and Location, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
+// From and To, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
 function Filters({ r, options, dates = true, first, children }) {
   return html`<${React.Fragment}>
     <form className="pfilters rfilters" onSubmit=${(e) => { e.preventDefault(); r.run(); }}>
       ${first}
       ${dates && html`<${React.Fragment}><${DateField} label="From" value=${r.filters.from} onChange=${(v) => r.set({ from: v })} />
       <${DateField} label="To" value=${r.filters.to} onChange=${(v) => r.set({ to: v })} /><//>`}
-      <${ChangeLocation} show=${options.canPickAll || options.locations.length > 1} popup=${{ options: [...(options.canPickAll ? [["all", "All locations"]] : []), ...options.locations.map((l) => [l.id, l.name])], value: r.filters.location, onChange: (v) => r.set({ location: v }) }}>
-        <label className="pf"><b>Location</b><${LocationSelect} options=${options} value=${r.filters.location} onChange=${(v) => r.set({ location: v })} /></label>
-      <//>
       ${children}
       <button className="pbtn" type="submit" disabled=${r.busy}>Run report</button>
     </form>
@@ -89,12 +76,57 @@ const lastWeek = (options) => ({ from: addDays(options.today, -6), to: options.t
 const units = (n) => String(Math.round(n * 1000) / 1000);
 const percent = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
-// Live sales: one day so far, by hour or by day of its week, asked for again every minute while it is today
+// Revenue: Live (one day so far by hour, or its week by day; asked for again every minute while it is today) and History
+// (a From and To by day, month or year). Both show the same figures.
 const REFRESH_MS = 60 * 1000;
 const hourOf = (h) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
-function LiveSales({ options }) {
-  const r = useReport("live", { day: options.today, location: options.location, by: "hour" });
+const UNIT = { hour: "Hour", day: "Day", month: "Month", year: "Year" };
+const NOTE = { hour: "Hours run from the first sale to the last.", day: "A live week runs from Monday.",
+  month: "Months with no sales show as zero.", year: "Years with no sales show as zero." };
+const labelOf = (by, k) => (by === "hour" ? hourOf(k) : by === "day" ? `${weekday(k)} ${shortDay(k)}`
+  : by === "month" ? new Date(`${k}-01T00:00:00Z`).toLocaleDateString([], { month: "short", year: "numeric", timeZone: "UTC" }) : k);
+
+// The group-by buttons: each runs the report at once
+function GroupBy({ r, options }) {
+  return html`<div className="tabs thin" role="group" aria-label="Group by">
+    ${options.map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${r.filters.by === k} disabled=${r.busy}
+      onClick=${() => r.run({ by: k })}>${l}</button>`)}</div>`;
+}
+
+// Cards, chart and table for one report
+function RevenueReport({ report, live }) {
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
+  const costs = report.seesCosts;
+  const by = report.by, unit = UNIT[by];
+  const label = (k) => labelOf(by, k);
+  const cell = (x, k) => html`<td className="r">${money(x[k])}</td>`;
+  return html`<${React.Fragment}>
+    <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
+    <p className="sub">${report.location} · ${by === "hour" ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
+    <${Cards} className=${panelOf("summary", sub)} cards=${[["Gross sales", money(report.cards.gross)], ["Discounts", money(report.cards.discounts)], ["Refunds", money(report.cards.refunds)],
+      [live ? "Net sales so far" : "Net sales", money(report.cards.net), true],
+      ...(costs ? [["Cost of goods", money(report.cards.cost)], ["Profit", money(report.cards.profit)]] : []), ["Tips", money(report.cards.tips)]]} />
+    <${BarChart} className=${panelOf("chart", sub)} title=${`Net sales by ${unit.toLowerCase()}`} best=${by === "hour" ? undefined : `Best ${unit.toLowerCase()}`}
+      bars=${report.rows.map((x, i) => ({ key: x.key, value: x.net, tip: label(x.key),
+        label: report.rows.length <= 14 || i % Math.ceil(report.rows.length / 10) === 0 ? label(x.key) : "" }))} />
+    <div className=${`tablewrap ${panelOf("table", sub)}`}>
+      <h3>${`${unit} by ${unit.toLowerCase()}`}</h3>
+      <div className="tscroll"><table className="table mg fit rowcards" aria-label=${`${unit} by ${unit.toLowerCase()}`}>
+        <thead><tr><th>${unit}</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th>
+          <th className="r">Net sales</th>${costs && html`<${React.Fragment}><th className="r">Cost</th><th className="r">Profit</th><//>`}<th className="r">Running net</th></tr></thead>
+        <tbody>${report.rows.map((x) => html`<tr key=${x.key}>
+          <td>${label(x.key)}</td><td className="r">${x.orders}</td>${cell(x, "gross")}${cell(x, "discounts")}${cell(x, "refunds")}${cell(x, "net")}
+          ${costs && html`<${React.Fragment}>${cell(x, "cost")}${cell(x, "profit")}<//>`}${cell(x, "runningNet")}</tr>`)}
+          ${!report.rows.length && html`<tr><td colSpan=${costs ? 9 : 7}>No sales yet.</td></tr>`}</tbody>
+        <tfoot><tr><td>Total</td><td className="r">${report.total.orders}</td>${cell(report.total, "gross")}${cell(report.total, "discounts")}${cell(report.total, "refunds")}
+          ${cell(report.total, "net")}${costs && html`<${React.Fragment}>${cell(report.total, "cost")}${cell(report.total, "profit")}<//>`}<td></td></tr></tfoot>
+      </table></div>
+      <p className="sub">Net sales are before tax and tips. A refund comes off the ${by === "hour" ? "hour" : "day"} it was paid back. ${NOTE[by]}</p>
+    </div><//>`;
+}
+
+function LiveSales({ options }) {
+  const r = useReport("revenue", { day: options.today, location: options.location, by: "hour" });
   const { report } = r;
   const live = report?.isToday;
   useEffect(() => {
@@ -102,69 +134,33 @@ function LiveSales({ options }) {
     const t = setInterval(r.refresh, REFRESH_MS);
     return () => clearInterval(t);
   }, [live, r.refresh]);
-  const costs = report?.seesCosts;
-  const byHour = report?.by !== "day";
-  const label = (k) => (byHour ? hourOf(k) : `${weekday(k)} ${shortDay(k)}`);
-  const cell = (x, k) => html`<td className="r">${money(x[k])}</td>`;
-
   return html`<section className="pview report" aria-label="Live sales">
     <${Filters} r=${r} options=${options} dates=${false} first=${html`<${DateField} label="Day" value=${r.filters.day} onChange=${(v) => r.set({ day: v })} />`} />
     <div className="livebar">
-      <div className="tabs thin" role="group" aria-label="Group by">
-        ${[["hour", "By hour"], ["day", "By day"]].map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${r.filters.by === k} disabled=${r.busy}
-          onClick=${() => r.run({ by: k })}>${l}</button>`)}</div>
+      <${GroupBy} r=${r} options=${[["hour", "By hour"], ["day", "By day"]]} />
       ${report && html`<span className="sub" role="status">${live ? "Updated" : "As of"} ${clock(report.updatedAt, report.timeZone)}${live ? " · refreshes every minute" : ""}</span>`}
     </div>
-    ${report && html`<${React.Fragment}>
-      <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
-      <p className="sub">${report.location} · ${byHour ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
-      <${Cards} className=${panelOf("summary", sub)} cards=${[["Gross sales", money(report.cards.gross)], ["Discounts", money(report.cards.discounts)], ["Refunds", money(report.cards.refunds)],
-        [live ? "Net sales so far" : "Net sales", money(report.cards.net), true],
-        ...(costs ? [["Cost of goods", money(report.cards.cost)], ["Profit", money(report.cards.profit)]] : []), ["Tips", money(report.cards.tips)]]} />
-      <${BarChart} className=${panelOf("chart", sub)} title=${byHour ? "Net sales by hour" : "Net sales by day"} bars=${report.rows.map((x) => ({ key: x.key, value: x.net, tip: label(x.key), label: label(x.key) }))} />
-      <div className=${`tablewrap ${panelOf("table", sub)}`}>
-        <h3>${byHour ? "Hour by hour" : "Day by day"}</h3>
-        <div className="tscroll"><table className="table mg fit rowcards" aria-label=${byHour ? "Hour by hour" : "Day by day"}>
-          <thead><tr><th>${byHour ? "Hour" : "Day"}</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th>
-            <th className="r">Net sales</th>${costs && html`<${React.Fragment}><th className="r">Cost</th><th className="r">Profit</th><//>`}<th className="r">Running net</th></tr></thead>
-          <tbody>${report.rows.map((x) => html`<tr key=${x.key}>
-            <td>${label(x.key)}</td><td className="r">${x.orders}</td>${cell(x, "gross")}${cell(x, "discounts")}${cell(x, "refunds")}${cell(x, "net")}
-            ${costs && html`<${React.Fragment}>${cell(x, "cost")}${cell(x, "profit")}<//>`}${cell(x, "runningNet")}</tr>`)}
-            ${!report.rows.length && html`<tr><td colSpan=${costs ? 9 : 7}>No sales yet.</td></tr>`}</tbody>
-          <tfoot><tr><td>Total</td><td className="r">${report.total.orders}</td>${cell(report.total, "gross")}${cell(report.total, "discounts")}${cell(report.total, "refunds")}
-            ${cell(report.total, "net")}${costs && html`<${React.Fragment}>${cell(report.total, "cost")}${cell(report.total, "profit")}<//>`}<td></td></tr></tfoot>
-        </table></div>
-        <p className="sub">Net sales are before tax and tips. A refund comes off the hour it was paid back. ${byHour ? "Hours run from the first sale to the last." : "The week runs from Monday."}</p>
-      </div><//>`}
+    ${report && html`<${RevenueReport} report=${report} live=${live} />`}
   </section>`;
 }
 
-// 1. Sales by day
-function SalesByDay({ options }) {
-  const r = useReport("sales-by-day", lastWeek(options));
-  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
+function RevenueHistory({ options }) {
+  const r = useReport("revenue", { from: addDays(options.today, -29), to: options.today, location: options.location, by: "day" });
   const { report } = r;
-  return html`<section className="pview report" aria-label="Sales by day">
+  return html`<section className="pview report" aria-label="Revenue history">
     <${Filters} r=${r} options=${options} />
-    ${report && html`<${React.Fragment}>
-      <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
-      <p className="sub">${report.location} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
-      <${Cards} className=${panelOf("summary", sub)} cards=${[["Net sales", money(report.cards.net)], ["Orders", String(report.cards.orders)], ["Average order", money(report.cards.average)], ["Tax collected", money(report.cards.tax)]]} />
-      <${BarChart} className=${panelOf("chart", sub)} title="Net sales per day" bars=${dayBars(report.days)} best="Best day" />
-      <div className=${`tablewrap ${panelOf("table", sub)}`}>
-        <h3>Sales by day and location</h3>
-        <div className="tscroll"><table className="table mg fit rowcards" aria-label="Sales by day and location">
-          <thead><tr><th>Date</th><th>Location</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th><th className="r">Net sales</th></tr></thead>
-          <tbody>${report.rows.map((x) => html`<tr key=${`${x.day} ${x.location}`}>
-            <td>${weekday(x.day)} ${shortDay(x.day)}</td><td>${x.location}</td><td className="r">${x.orders}</td><td className="r">${money(x.gross)}</td>
-            <td className="r">${money(x.discounts)}</td><td className="r">${money(x.refunds)}</td><td className="r">${money(x.net)}</td></tr>`)}
-            ${!report.rows.length && html`<tr><td colSpan="7">No sales in these dates.</td></tr>`}</tbody>
-          <tfoot><tr><td>Total</td><td></td><td className="r">${report.total.orders}</td><td className="r">${money(report.total.gross)}</td>
-            <td className="r">${money(report.total.discounts)}</td><td className="r">${money(report.total.refunds)}</td><td className="r">${money(report.total.net)}</td></tr></tfoot>
-        </table></div>
-        <p className="sub">Net sales are before tax and tips. A refund comes off the day it was paid back. Gift cards count when they're spent, not when they're sold.</p>
-      </div><//>`}
+    <div className="livebar"><${GroupBy} r=${r} options=${[["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
+    ${report && html`<${RevenueReport} report=${report} />`}
   </section>`;
+}
+
+function Revenue({ options }) {
+  const [view, setView] = useState("live");
+  return html`<${React.Fragment}>
+    <div className="tabs thin" role="group" aria-label="Revenue views">
+      ${[["live", "Live"], ["history", "History"]].map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${view === k} onClick=${() => setView(k)}>${l}</button>`)}</div>
+    ${view === "live" ? html`<${LiveSales} options=${options} />` : html`<${RevenueHistory} options=${options} />`}
+  <//>`;
 }
 
 // 2. Top sellers: one ranking, with Category as a column and a filter
@@ -198,7 +194,7 @@ function TopSellers({ options }) {
           <tfoot><tr><td>Total</td><td></td><td></td><td className="r">${units(report.total.units)}</td><td className="r">${money(report.total.revenue)}</td>
             ${costs && html`<${React.Fragment}><td className="r">${money(report.total.cost)}</td><td className="r">${money(report.total.margin)}</td><td className="r">${percent(report.total.marginPct)}</td><//>`}</tr></tfoot>
         </table></div>
-        <p className="sub">Ranked by units sold. Revenue is after discounts and before tax, and doesn't take refunds off. Gift cards aren't listed.</p>
+        <p className="sub">Ranked by units sold. Revenue is after discounts and before tax, and doesn't take refunds off.</p>
       </div><//>`}
   </section>`;
 }
@@ -268,6 +264,49 @@ function StockLosses({ options }) {
   </section>`;
 }
 
+// 5. Customers: recency, frequency and spend per customer, over a longer range than the other tabs since people don't come in daily
+// The tip is CSS on the header's data-tip, not an element inside it: phone cards take their labels from the header's text.
+const SCORE_HEADS = [["Recency", "How recently they ordered (5 = most recent)"], ["Frequency", "How often they order (5 = most often)"], ["Spend", "How much they spend (5 = highest)"]];
+function Customers({ options }) {
+  const r = useReport("customers", { from: addDays(options.today, -89), to: options.today, location: options.location, tier: "" });
+  const [sub, setSub] = useState("summary"); // the part of the report a phone shows
+  const { report } = r;
+  return html`<section className="pview report" aria-label="Customers">
+    <${Filters} r=${r} options=${options}>
+      <label className="pf"><b>Membership</b>
+        <select className="select" aria-label="Membership" value=${r.filters.tier} onChange=${(e) => r.set({ tier: e.target.value })}>
+          <option value="">All memberships</option>
+          ${options.tiers.map((t) => html`<option key=${t.id} value=${t.id}>${t.name}</option>`)}</select></label>
+    <//>
+    ${report && html`<${React.Fragment}>
+      <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
+      <p className="sub">${report.location} · ${report.membership} · ${dayOf(report.from)} to ${dayOf(report.to)}</p>
+      <${Cards} className=${panelOf("summary", sub)} cards=${[["Customers", String(report.cards.customers)], ["Average spend", money(report.cards.averageSpend)],
+        ["Average orders", report.cards.averageOrders.toFixed(1)], ["Average days since last order", String(report.cards.averageDays)]]} />
+      <p className=${`sub ${panelOf("summary", sub)}`}>Nobody is labelled At risk until ${report.minDays.atRisk} days after their last order, or Lapsed until ${report.minDays.lapsed} days.</p>
+      <div className=${`tablewrap ${panelOf("summary", sub)}`}>
+        <h3>Customers by membership</h3>
+        <div className="tscroll"><table className="table mg fit rowcards rfm" aria-label="Customers by membership">
+          <thead><tr><th>Membership</th><th className="r">Customers</th><th className="r">Average spend</th></tr></thead>
+          <tbody>${report.byMembership.map((g) => html`<tr key=${g.id}>
+            <td>${g.name}</td><td className="r">${g.customers}</td><td className="r">${g.averageSpend == null ? "—" : money(g.averageSpend)}</td></tr>`)}</tbody>
+        </table></div>
+      </div>
+      <div className=${`tablewrap ${panelOf("table", sub)}`}>
+        <h3>Customers by RFM score</h3>
+        <div className="tscroll"><table className="table mg fit rowcards rfm" aria-label="Customers by RFM score">
+          <thead><tr><th>Customer</th><th>Membership</th><th>Segment</th><th>Last order</th><th className="r">Days since</th><th className="r">Orders</th><th className="r">Total spend</th>
+            ${SCORE_HEADS.map(([name, tip]) => html`<th key=${name} className="score"><span className="headtip" tabIndex="0" data-tip=${tip} aria-label=${`${name}: ${tip}`}>${name}</span></th>`)}</tr></thead>
+          <tbody>${report.rows.map((x) => html`<tr key=${x.id}>
+            <td>${x.customer}</td><td>${x.membership}</td><td>${x.segment}</td><td>${shortDay(x.lastOrder)}</td><td className="r">${x.daysSince}</td><td className="r">${x.orders}</td><td className="r">${money(x.spend)}</td>
+            <td className="score">${x.r}</td><td className="score">${x.f}</td><td className="score">${x.m}</td></tr>`)}
+            ${!report.rows.length && html`<tr><td colSpan="10">No customer orders in these dates.</td></tr>`}</tbody>
+          <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td className="r">${report.total.orders}</td><td className="r">${money(report.total.spend)}</td><td></td><td></td><td></td></tr></tfoot>
+        </table></div>
+      </div><//>`}
+  </section>`;
+}
+
 function App() {
   const me = useMe();
   const [tab, setTab] = useState(tabFromHash);
@@ -288,11 +327,11 @@ function App() {
       <${Tabs} tab=${tab} onTab=${pick} />
       ${error ? html`<p className="success" role="alert">${error}</p>`
         : !options ? html`<p className="success">Loading…</p>`
-        : tab === "live" ? html`<${LiveSales} options=${options} />`
-        : tab === "sales-by-day" ? html`<${SalesByDay} options=${options} />`
+        : tab === "revenue" ? html`<${Revenue} options=${options} />`
         : tab === "top-sellers" ? html`<${TopSellers} options=${options} />`
         : tab === "losses" ? html`<${StockLosses} options=${options} />`
         : tab === "labor" ? html`<${LaborCost} options=${options} />`
+        : tab === "customers" ? html`<${Customers} options=${options} />`
         : null}
     </section>
   </div>`;

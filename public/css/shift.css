@@ -26,7 +26,7 @@
 .pad { display: grid; grid-template-columns: repeat(2, 147px); gap: 10px; }
 .tbtn { height: 51px; padding: 14px 20px; background: var(--navy); color: #fff; border: 1.5px solid var(--navy); border-radius: var(--radius); font-size: 16px; font-weight: 600; }
 .tbtn:hover:not(:disabled) { background: var(--navy-dark); }
-.tbtn:disabled { background: #F6F7FB; color: #8A90B0; border-color: var(--border); opacity: 1; }
+.tbtn:disabled { background: #F4F4F4; color: #8F8F8F; border-color: var(--border); opacity: 1; }
 .clock .msg { min-height: 0; }
 
 .hours, .cards, .filters, .closing { padding: 24px; display: flex; flex-direction: column; gap: 16px; flex: none; }
@@ -49,7 +49,7 @@
 .act.danger { border-color: var(--coral); color: var(--red); }
 .act.danger:hover:not(:disabled) { background: #FFF1EF; }
 .act.hi { background: var(--cyan); border-color: var(--cyan); color: var(--navy-dark); }
-.act.hi:hover:not(:disabled) { background: #0FB3DD; }
+.act.hi:hover:not(:disabled) { background: #B98F66; }
 .pay-line { font-size: 14px; color: var(--muted); display: flex; gap: 24px; flex-wrap: wrap; }
 
 .filters { flex-direction: row; align-items: flex-end; flex-wrap: wrap; }

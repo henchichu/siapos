@@ -2,13 +2,13 @@
 // The ledger can't be edited, so each run leaves its movements, one delivery and one count behind.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, pool, removeCatalog } = require("./env");
+const { start, client, pool, admin, removeCatalog, creds } = require("./env");
 const madeSuppliers = [];
 const madeProducts = []; // switched-off products that use a test ingredient; removed before the ingredient
 const madeItems = []; // stock items created here, removed again (never stocked, so they have no ledger rows and can go)
 
 let env, leo, sam, jordan, stamp;
-const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login/pin", { employeeNumber: number, pin }); assert.equal(r.status, 200); return c; };
+const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 const ITEM = "stk-cup-12"; // 12 oz cup: counted in whole units ("each")
 const row = async (id = ITEM, where = "") => (await leo.call(`/inventory${where}`)).body.rows.find((r) => r.id === id);
@@ -19,8 +19,8 @@ test.after(async () => {
   try { // never stocked or delivered to, so they have no ledger rows and can go
     await removeCatalog({ products: madeProducts });
     if (madeSuppliers.length) await pool.query("DELETE FROM Supplier WHERE SupplierID IN (?)", [madeSuppliers]);
-    if (madeItems.length) for (const sql of ["DELETE FROM StockItemSupplier WHERE StockItemID IN (?)", "DELETE FROM Inventory WHERE StockItemID IN (?)", "DELETE FROM StockItem WHERE StockItemID IN (?)"]) await pool.query(sql, [madeItems]);
-  } finally { env.server.close(); await pool.end(); }
+    if (madeItems.length) for (const sql of ["DELETE FROM StockItemSupplier WHERE StockItemID IN (?)", "DELETE FROM Inventory WHERE StockItemID IN (?)", "DELETE FROM StockItem WHERE StockItemID IN (?)"]) await admin.query(sql, [madeItems]);
+  } finally { env.server.close(); await pool.end(); await admin.end(); }
 });
 
 test("only managers reach Inventory", async () => {
@@ -133,6 +133,8 @@ test("add a stock item", async () => {
   const made = await add({});
   assert.equal(made.status, 200);
   madeItems.push(made.body.id);
+  const [[alert]] = await pool.query("SELECT COUNT(*) AS n FROM LowStockAlert a JOIN Inventory i ON i.InventoryID = a.InventoryID WHERE i.StockItemID = ?", [made.body.id]);
+  assert.equal(Number(alert.n), 1, "a new empty item with a positive threshold starts with an alert");
   const item = await row(made.body.id);
   assert.deepEqual([item.name, item.unit, item.onHand, item.reorderAt, item.avgCost, item.supplierIds], [`Test syrup ${stamp}`, "ml", 0, 300, null, ["sup-supply"]]);
   assert.equal((await add({})).status, 409, "names are unique");
@@ -273,70 +275,26 @@ test("an ingredient that only a deactivated product uses can't be deactivated ei
   assert.match(blocked.body.error, /1 product recipe/);
 });
 
-test("pending receipts are location scoped, atomic, and cannot be received twice", async () => {
+test("a delivery is location scoped and atomic, and falling below the reorder level orders nothing", async () => {
   const original = await row();
-  const [originalPending] = await pool.query("SELECT p.* FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID=p.InventoryID WHERE i.LocationID='loc-campus' AND i.StockItemID=?", [ITEM]);
   try {
     await change({ threshold: String(original.onHand + 1) });
     const data = (await leo.call("/inventory")).body;
-    const pending = data.pendingDeliveries.find((p) => p.stockItemId === ITEM);
-    assert.ok(pending);
-    assert.ok(pending.quantity > 0);
-    assert.match(pending.orderNumber, /^PO-\d{6,}$/);
-    assert.equal(pending.status, "Ordered");
-    assert.equal(pending.supplierId, "sup-supply");
-    assert.equal((await leo.call("/inventory?locationId=loc-downtown")).body.pendingDeliveries?.some((p) => p.id === pending.id), false);
-    const body = { supplierId: "sup-supply", deliveredOn: data.location.today, purchaseOrderId: pending.id,
-      lines: [{ stockItemId: ITEM, quantity: "1", total: "0.11" }] };
+    assert.equal(data.pendingDeliveries, undefined, "there are no purchase orders any more");
+    assert.equal((await leo.call("/inventory/purchase-order/x/supplier", { supplierId: "sup-supply" })).status, 404);
+    const [[orders]] = await pool.query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'PurchaseOrder'");
+    assert.equal(Number(orders.n), 0);
+    const body = { supplierId: "sup-supply", deliveredOn: data.location.today, lines: [{ stockItemId: ITEM, quantity: "1", total: "0.11" }] };
     assert.equal((await sam.call("/inventory/delivery", body)).status, 403);
-    const missing = await leo.call("/inventory/delivery", { ...body, lines: [{ stockItemId: "stk-cup-16", quantity: "1", total: "0.11" }] });
-    assert.equal(missing.status, 400);
-    assert.equal((await row()).onHand, original.onHand);
-    assert.equal((await leo.call("/inventory/delivery", { ...body, supplierId: "sup-bakery" })).status, 409, "the order supplier is fixed");
-    const results = await Promise.all([leo.call("/inventory/delivery", body), leo.call("/inventory/delivery", body)]);
-    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+    assert.equal((await leo.call("/inventory/delivery", { ...body, lines: [] })).status, 400);
+    assert.equal((await row()).onHand, original.onHand, "a refused delivery changes no stock");
+    assert.equal((await leo.call("/inventory/delivery", body)).status, 200);
     assert.equal((await row()).onHand, original.onHand + 1);
-    const received = (await leo.call("/inventory")).body.deliveries.find((d) => d.id === results.find((r) => r.status === 200).body.id);
-    assert.equal(received.orderNumber, pending.orderNumber);
-    assert.equal(received.status, "Received");
-    const [[saved]] = await pool.query("SELECT Status FROM PurchaseOrder WHERE PurchaseOrderID = ?", [pending.id]);
-    assert.equal(saved.Status, "Received");
-    const remaining = (await leo.call("/inventory")).body.pendingDeliveries.filter((p) => p.stockItemId === ITEM);
-    assert.equal(remaining.length, 1, "partial receipt below threshold creates one follow-up");
-    assert.notEqual(remaining[0].id, pending.id);
+    const received = (await leo.call("/inventory")).body.deliveries[0];
+    assert.deepEqual([received.supplier, received.status], ["Counter Supply Co.", "Received"]);
+    assert.equal(received.orderNumber, undefined);
   } finally {
     await change({ threshold: String(original.reorderAt) });
     await leo.call("/inventory/count", { counts: [{ stockItemId: ITEM, counted: String(original.onHand) }] });
-    const ids = originalPending.map((p) => p.PurchaseOrderID);
-    const [current] = await pool.query("SELECT p.PurchaseOrderID AS id FROM PurchaseOrder p JOIN Inventory i ON i.InventoryID=p.InventoryID WHERE i.LocationID='loc-campus' AND i.StockItemID=?", [ITEM]);
-    const added = current.filter((p) => !ids.includes(p.id)).map((p) => p.id);
-    if (added.length) await pool.query("DELETE FROM PurchaseOrder WHERE PurchaseOrderID IN (?)", [added]);
-    for (const p of originalPending) await pool.query("UPDATE PurchaseOrder SET ReceivedDeliveryID=? WHERE PurchaseOrderID=?", [p.ReceivedDeliveryID, p.PurchaseOrderID]);
   }
-});
-
-test("supplierless orders require assignment before receiving", async () => {
-  const data = (await leo.call("/inventory")).body;
-  const made = await leo.call("/inventory/item", { name: `Test purchase order ${stamp}`, unitCode: data.units.find((u) => u.symbol === "g").code, threshold: "5" });
-  assert.equal(made.status, 200);
-  madeItems.push(made.body.id);
-  const draft = (await leo.call("/inventory")).body.pendingDeliveries.find((p) => p.stockItemId === made.body.id);
-  assert.equal(draft.status, "Needs supplier");
-  const receive = await leo.call("/inventory/delivery", { supplierId: "sup-supply", deliveredOn: data.location.today, purchaseOrderId: draft.id, lines: [{ stockItemId: made.body.id, quantity: "1", total: "1" }] });
-  assert.equal(receive.status, 409);
-  const path = `/inventory/purchase-order/${draft.id}/supplier`;
-  assert.equal((await sam.call(path, { supplierId: "sup-supply" })).status, 403);
-  assert.equal((await leo.call(path, { supplierId: "sup-supply", locationId: "loc-downtown" })).status, 409);
-  assert.equal((await leo.call(path, { supplierId: "nope" })).status, 400);
-  assert.equal((await leo.call(path, { supplierId: "sup-supply" })).status, 200);
-  const placed = (await leo.call("/inventory")).body.pendingDeliveries.find((p) => p.id === draft.id);
-  assert.equal(placed.status, "Ordered");
-  assert.equal(placed.orderNumber, draft.orderNumber);
-  assert.equal(placed.supplierId, "sup-supply");
-  assert.ok((await row(made.body.id)).supplierIds.includes("sup-supply"), "the supplier is retained for future automatic orders");
-  assert.equal((await leo.call("/inventory/change", { locationId: "loc-downtown", stockItemId: made.body.id, threshold: "5" })).status, 200);
-  const nextOrder = (await leo.call("/inventory?locationId=loc-downtown")).body.pendingDeliveries.find((p) => p.stockItemId === made.body.id);
-  assert.equal(nextOrder.supplierId, "sup-supply", "future automatic orders use the assigned supplier");
-  assert.equal(nextOrder.status, "Ordered");
-  assert.equal((await leo.call(path, { supplierId: "sup-bakery" })).status, 409);
 });

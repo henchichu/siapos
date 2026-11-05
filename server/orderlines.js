@@ -1,4 +1,4 @@
-// What a counter sale and a kiosk order share: the lines, their options, the stock each takes with its cost, and the ledger.
+// What a counter sale needs: the lines, their options, the stock each takes with its cost, and the ledger.
 // The database checks that a line's cost equals its components' cost, so both are written here, the same way every time.
 const crypto = require("crypto");
 const { HttpError } = require("./errors");
@@ -25,18 +25,19 @@ async function components(conn, line) {
   return [...used].map(([stockItemId, perUnit]) => [stockItemId, perUnit * line.quantity]);
 }
 
-// priced is what priceCart returned. employeeId is null for a kiosk order. unavailable(line) words the error for a line
+// priced is what priceCart returned. unavailable(line) words the error for a line
 // whose stock has no cost recorded here.
 async function addOrderLines(conn, { orderId, businessId, locationId, employeeId, priced, unavailable }) {
   const sale = new Map(); // stock item -> thousandths used across the whole order
   for (const l of priced.lines) {
     const itemId = crypto.randomUUID();
     await conn.query(
+      // the line carries its order's tax convention (a foreign key ties the two), so it is copied from the order
       `INSERT INTO OrderItem (OrderItemID, OrderID, VariantID, BusinessID, Quantity, UnitPrice, LineTotal,
-                              DiscountAmount, TaxCategoryID, TaxRate, TaxAmount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              DiscountAmount, TaxCategoryID, TaxRate, TaxAmount, PricesIncludeTax)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT PricesIncludeTax FROM Orders WHERE OrderID = ?))`,
       [itemId, orderId, l.variantId, businessId, l.quantity, dollars(l.unitCents), dollars(l.lineCents),
-       dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents)]
+       dollars(l.lineDiscountCents), l.taxCategoryId, l.rate, dollars(l.taxCents), orderId]
     );
     for (const m of l.modifiers)
       await conn.query("INSERT INTO OrderItemModifier (OrderItemID, ModifierID, BusinessID, PriceDelta) VALUES (?, ?, ?, ?)",
@@ -78,7 +79,14 @@ async function addOrderLines(conn, { orderId, businessId, locationId, employeeId
     );
 }
 
+// Next order number for the business. The Business row stays locked until the transaction ends, so registers queue here.
+async function nextOrderNumber(conn, businessId) {
+  await conn.query("UPDATE Business SET LastOrderNumber = LAST_INSERT_ID(LastOrderNumber + 1), UpdatedAt = UpdatedAt WHERE BusinessID = ?", [businessId]);
+  const [[{ n }]] = await conn.query("SELECT LAST_INSERT_ID() AS n");
+  return n;
+}
+
 // What a repeated order request is compared by: a hash, so the remembered request holds no card details
 const fingerprint = (body) => crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
 
-module.exports = { addOrderLines, fingerprint };
+module.exports = { addOrderLines, fingerprint, nextOrderNumber };

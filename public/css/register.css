@@ -15,8 +15,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .products h2, .order h2, .refund h2 { font-size: 24px; font-weight: 600; color: var(--navy); }
 .search { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .field { border: 1.5px solid var(--border); border-radius: var(--radius); background: #fff; color: var(--text); padding: 12px 13px; font: inherit; min-width: 0; width: 100%; }
-.field:hover:not(:disabled), .select:hover:not(:disabled) { border-color: #AEB6D6; }
-.field::placeholder { color: #5F6690; }
+.field:hover:not(:disabled), .select:hover:not(:disabled) { border-color: #B5B5B5; }
+.field::placeholder { color: #6B6B6B; }
 .field[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(13%) sepia(62%) saturate(4900%) hue-rotate(236deg) brightness(86%); } /* navy */
 .search .field { width: 220px; }
 .chips { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -40,8 +40,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn:hover:not(:disabled) { background: var(--hover); }
 .btn.primary { background: var(--navy); border-color: var(--navy); color: #fff; }
 .btn.primary:hover:not(:disabled) { background: var(--navy-dark); }
-.btn:disabled { opacity: 1; border-color: var(--border); color: #8A90B0; background: #F6F7FB; }
-.btn.primary:disabled { background: #9AA0C8; border-color: #9AA0C8; color: #fff; }
+.btn:disabled { opacity: 1; border-color: var(--border); color: #8F8F8F; background: #F4F4F4; }
+.btn.primary:disabled { background: #B4A294; border-color: #B4A294; color: #fff; }
 .btn.danger { background: #fff; border-color: var(--coral); color: var(--red); }
 .btn.danger:hover:not(:disabled) { background: #FFF1EF; }
 .btn.small { width: 36px; height: 36px; padding: 0; }
@@ -82,7 +82,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Modals */
 .modal { border: 1.5px solid var(--border); border-top: 6px solid var(--cyan); border-radius: var(--radius-card); color: var(--text); padding: 32px; width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
-.modal::backdrop { background: rgba(13, 22, 112, 0.45); }
+.modal::backdrop { background: rgba(40, 24, 15, 0.45); }
 .modal.wide { width: min(1040px, calc(100vw - 32px)); }
 .modal h2 { font-size: 28px; font-weight: 600; color: var(--navy); margin-bottom: 24px; }
 .stack { display: flex; flex-direction: column; gap: 24px; }

@@ -59,11 +59,12 @@ async function priceCart(db, session, body) {
 
   const [[biz]] = await db.query("SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?", [session.businessId]);
   const [variants] = await db.query(
-    `SELECT v.VariantID, v.Name, v.Price, v.TaxCategoryID, v.ProductID, p.Name AS ProductName, r.Rate
+    `SELECT v.VariantID, v.Name, v.Price, v.TaxCategoryID, v.ProductID, p.Name AS ProductName, r.Rate,
+            EXISTS (SELECT 1 FROM VariantRecipe vr WHERE vr.VariantID = v.VariantID) AS HasRecipe
        FROM ProductVariant v
        JOIN Product p ON p.ProductID = v.ProductID AND p.BusinessID = v.BusinessID
        LEFT JOIN LocationTaxRate r ON r.LocationID = ? AND r.TaxCategoryID = v.TaxCategoryID
-      WHERE v.VariantID IN (?) AND v.BusinessID = ? AND v.Active AND p.Active AND NOT p.IsGiftCard`,
+      WHERE v.VariantID IN (?) AND v.BusinessID = ? AND v.Active AND p.Active`,
     [session.locationId, items.map((i) => String(i.variantId)), session.businessId]
   );
   const variantById = Object.fromEntries(variants.map((v) => [v.VariantID, v]));
@@ -82,6 +83,8 @@ async function priceCart(db, session, body) {
     const quantity = Number(item.quantity);
     if (!v) throw new HttpError(400, "An item in the order isn't available.");
     if (v.Rate == null) throw new HttpError(409, `No tax rate is set for ${v.ProductName} at this location.`);
+    // a sale takes its stock from the recipe; without one it would move none and cost nothing
+    if (!v.HasRecipe) throw new HttpError(409, `${v.ProductName} has no recipe, so it can't be sold.`);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new HttpError(400, "Quantity must be 1 to 99.");
 
     const rows = offered.filter((o) => o.ProductID === v.ProductID);

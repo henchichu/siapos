@@ -1,5 +1,5 @@
-// Drives the real sign-in page in jsdom: the employee-number step, the PIN step, the keypad and the keyboard,
-// auto-advance and auto-submit, a wrong PIN, the lockout (keypad off), Start over, and a successful sign-in.
+// Drives the real sign-in page in jsdom: the email and password form, empty and wrong entries, the generic wrong-password message,
+// the lockout (form off), and a successful sign-in.
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (ok ? "" : "  " + extra)); if (!ok) fails++; };
 
-const PRIYA = { id: "emp-priya", number: "10420004", pin: "444444" };
+const PRIYA = { id: "emp-priya", email: "priya@brewbean.example.com", password: "priya-dev-pass" };
 
 (async () => {
   const { server, base } = await start();
@@ -32,56 +32,59 @@ const PRIYA = { id: "emp-priya", number: "10420004", pin: "444444" };
 
     const $ = (s) => w.document.querySelector(s);
     const $$ = (s) => [...w.document.querySelectorAll(s)];
-    const key = (k) => $$(".numpad button").find((b) => b.textContent === k);
-    const tap = async (digits) => { for (const d of digits) { key(d).click(); await sleep(20); } await sleep(400); };
-    const type = async (keys) => { for (const k of keys) { w.document.body.dispatchEvent(new w.KeyboardEvent("keydown", { key: k, bubbles: true })); await sleep(20); } await sleep(400); };
     const live = () => $(".messages")?.textContent.trim() || "";
-    const slots = () => $$(".slot").map((s) => s.textContent).join("");
-    const filled = () => $$(".pin.on").length;
+    // React watches the input event, so set the value the way a browser does
+    const fill = async (name, value) => {
+      const el = $(`input[name=${name}]`);
+      Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set.call(el, value);
+      el.dispatchEvent(new w.Event("input", { bubbles: true }));
+      await sleep(30);
+    };
+    const submit = async (email, password) => { await fill("email", email); await fill("password", password); $(".signbtn").click(); await sleep(500); };
 
-    check("step 1: Staff sign-in, the heading, 8 empty slots", $(".eyebrow")?.textContent === "Staff sign-in" && $(".prompt")?.textContent === "Enter your employee number"
-      && $$(".slot").length === 8 && slots() === "");
-    check("the logo is the light ClockIt image", $(".brand img")?.getAttribute("src") === "/img/clockit-logo-light.png" && $(".brand img").getAttribute("alt") === "ClockIt");
-    check("the keypad is 11 real buttons: 1-9, Delete, 0", $$(".numpad button").map((b) => b.textContent).join("") === "123456789Delete0" && $$(".numpad button").every((b) => b.type === "button"));
-    check("Step 1 of 2 with a two-part progress bar, first part on", /Step 1 of 2/.test($(".step")?.textContent) && $$(".progress span").length === 2 && $$(".progress span.on").length === 1);
+    check("Sign in, an email field, a password field and a Sign in button", $(".eyebrow")?.textContent === "Sign in" && $("input[name=email]")?.type === "email"
+      && $("input[name=password]")?.type === "password" && $(".signbtn")?.textContent === "Sign in");
+    check("the fields are labelled and the browser may offer saved logins", $$("label").map((l) => l.firstChild.textContent.trim()).join("|") === "Email|Password"
+      && $("input[name=email]").autocomplete === "username" && $("input[name=password]").autocomplete === "current-password");
+    check("the page is branded with the business's name from the database", $(".brand")?.textContent === "Brewbean Coffee" && w.document.title === "Brewbean Coffee · Sign in", `${$(".brand")?.textContent} | ${w.document.title}`);
+    check("no keypad, no employee number", !$(".numpad") && !/employee number/i.test(w.document.body.textContent));
     check("messages sit in an aria-live region", $(".messages")?.getAttribute("aria-live") === "assertive");
 
-    await tap("1042"); await type(["0"]);
-    check("keypad and keyboard both type into the slots", slots() === "10420", slots());
-    await type(["Backspace"]); key("Delete").click(); await sleep(100);
-    check("Backspace and Delete each remove one digit", slots() === "104", slots());
+    const before0 = answers.length;
+    $(".signbtn").click(); await sleep(200);
+    check("an empty form is explained and nothing is sent", /Enter your email and password/.test(live()) && answers.length === before0, live());
 
-    await type("99999".split(""));
-    check("an unknown number says so, in the live region, and clears the slots", /does not exist/.test(live()) && slots() === "" && !$(".pins"), live());
+    await submit("nobody@brewbean.example.com", "wrong-password");
+    const unknown = answers.filter((a) => a.url === "/api/login").at(-1);
+    check("an unknown email gets the same plain answer", unknown?.status === 401 && /^Incorrect email or password\.$/.test(live()), live());
+    check("and the password is cleared, the email kept", $("input[name=password]").value === "" && $("input[name=email]").value === "nobody@brewbean.example.com");
 
-    await type(PRIYA.number.split(""));
-    check("8 digits move on to the PIN step by themselves, greeting the person", $(".prompt")?.textContent === "Hi Priya, enter your PIN" && $$(".pin").length === 6, $(".prompt")?.textContent);
-    check("the PIN step names the business and café", $(".eyebrow")?.textContent === "Brewbean Coffee · Brewbean Campus", $(".eyebrow")?.textContent);
-    check("no step bar on the PIN step, and Not you? Start over", !$(".step") && /Not you\?\s*Start over/.test($(".again")?.textContent || ""));
+    await submit(PRIYA.email, "wrong-password");
+    check("a wrong password for a real email says exactly the same", /^Incorrect email or password\.$/.test(live()) && !$(".lockout"), live());
 
-    await tap("12");
-    check("circles fill as digits are typed", filled() === 2);
-    await type("0000".split(""));
-    const wrong = answers.filter((a) => a.url === "/api/login/pin").at(-1);
-    check("6 digits submit by themselves", wrong?.status === 401);
-    check("a wrong PIN says how many tries are left and clears the circles", /Incorrect PIN\. 4 retries left\./.test(live()) && filled() === 0 && !$(".lockout"), live());
-
-    for (let i = 0; i < 4; i++) await type("000000".split(""));
-    check("the fifth wrong PIN locks the account", answers.at(-1).status === 423 && /^Too many tries\. Locked until \d{1,2}:\d\d/.test($(".lockout")?.textContent || ""), $(".lockout")?.textContent);
-    check("the lockout bar has its lock icon and no soft message beside it", !!$(".lockout svg.lock") && !$(".messages .error"));
-    check("while locked the keypad is off", $$(".numpad button").every((b) => b.disabled));
+    for (let i = 0; i < 3; i++) await submit(PRIYA.email, "wrong-password");
+    await submit(PRIYA.email, "wrong-password");
+    check("the fifth wrong password locks the account, showing a time and its lock icon, with no soft message beside it", answers.at(-1).status === 423 && /^Too many tries\. Locked until \d{1,2}:\d\d/.test($(".lockout")?.textContent || "") && !!$(".lockout svg.lock") && !$(".messages .error"), $(".lockout")?.textContent);
+    check("while locked the fields and button are off", $("input[name=email]").disabled && $("input[name=password]").disabled && $(".signbtn").disabled);
     const before = answers.length;
-    await type("444444".split("")); await type(["Enter"]);
-    check("while locked the keyboard does nothing", answers.length === before && filled() === 0);
-
-    $(".again .link").click(); await sleep(200);
-    check("Start over goes back to step 1, empty", $(".prompt")?.textContent === "Enter your employee number" && slots() === "" && !$(".lockout") && live() === "");
+    $(".signbtn").click(); await sleep(200);
+    check("while locked nothing is sent", answers.length === before);
 
     await unlock(PRIYA.id);
-    await type(PRIYA.number.split(""));
-    await type(PRIYA.pin.split(""));
-    const ok = answers.filter((a) => a.url === "/api/login/pin").at(-1);
-    check("the right PIN signs in and heads Home", ok?.status === 200 && ok.body.redirect === "/home.html", JSON.stringify(ok));
+    // a real browser would reload the page once the lock is lifted; start a fresh one
+    const w2 = new JSDOM('<div id="root"></div>', { runScripts: "outside-only", url: base + "/login.html", pretendToBeVisual: true }).window;
+    const answers2 = [];
+    w2.fetch = async (url, opts = {}) => { const res = await fetch(base + url, opts); answers2.push({ url, status: res.status, body: await res.clone().json().catch(() => ({})) }); return res; };
+    w2.eval(lib("react/umd/react.development.js")); w2.eval(lib("react-dom/umd/react-dom.development.js")); w2.eval(lib("htm/dist/htm.umd.js"));
+    w2.errors = []; w2.console.error = (...a) => w2.errors.push(a.join(" ").slice(0, 300));
+    w2.eval(app);
+    await sleep(300);
+    const set = async (name, value) => { const el = w2.document.querySelector(`input[name=${name}]`); Object.getOwnPropertyDescriptor(w2.HTMLInputElement.prototype, "value").set.call(el, value); el.dispatchEvent(new w2.Event("input", { bubbles: true })); await sleep(30); };
+    await set("email", `  ${PRIYA.email.toUpperCase()} `); await set("password", PRIYA.password);
+    w2.document.querySelector("form").dispatchEvent(new w2.Event("submit", { bubbles: true, cancelable: true })); await sleep(600);
+    const ok = answers2.filter((a) => a.url === "/api/login").at(-1);
+    check("the right email and password sign in and head to the role's page", ok?.status === 200 && ok.body.redirect === "/register.html", JSON.stringify(ok));
+    check("no React warnings (second page)", w2.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w2.errors));
     check("no React warnings", w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, JSON.stringify(w.errors));
   } finally {
     await unlock(PRIYA.id);

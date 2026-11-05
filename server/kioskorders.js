@@ -47,14 +47,12 @@ const gone = () => new HttpError(409, "That order was already paid or cancelled.
 
 async function pendingAt(locationId) {
   const [rows] = await pool.query(
-    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.Total AS total, o.CustomerNote AS note, c.FirstName AS member,
+    `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.Total AS total, c.FirstName AS member,
             TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.OrderDateTime + INTERVAL ? MINUTE) AS secondsLeft
        FROM Orders o LEFT JOIN Customer c ON c.CustomerID = o.CustomerID
       WHERE o.LocationID = ? AND o.ChannelCode = ? AND o.OrderStatusCode = ? ORDER BY o.OrderDateTime`,
     [HOLD_MINUTES, locationId, KIOSK, PENDING]);
-  return rows.map((r) => ({ id: r.id, orderNumber: r.orderNumber, totalCents: Math.round(Number(r.total) * 100), secondsLeft: Math.max(0, r.secondsLeft),
-    // a member's name is on file; a guest's is the first part of the note (only the guest name can start it, it is checked at the kiosk)
-    name: r.member || (r.note?.startsWith("Name: ") ? /^Name: ([^|]*)/.exec(r.note)[1].trim() : null) }));
+  return rows.map((r) => ({ id: r.id, orderNumber: r.orderNumber, totalCents: Math.round(Number(r.total) * 100), secondsLeft: Math.max(0, r.secondsLeft), name: r.member }));
 }
 
 async function pay(session, orderId) {

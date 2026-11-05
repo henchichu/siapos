@@ -12,7 +12,7 @@
 /* Figma buttons: 16px semibold, 14/24 padding; dark fill or 1px outline */
 .kbtn { background: var(--navy); color: #fff; border: 1.5px solid var(--navy); border-radius: var(--radius); padding: 13px 24px; font-size: 16px; font-weight: 600; }
 .kbtn:hover:not(:disabled) { background: var(--navy-dark); }
-.kbtn:disabled { background: #9AA0C8; border-color: #9AA0C8; opacity: 1; }
+.kbtn:disabled { background: #B4A294; border-color: #B4A294; opacity: 1; }
 .kbtn.outline { background: #fff; color: var(--navy); border-color: var(--border); }
 .kbtn.outline:hover:not(:disabled) { background: var(--hover); }
 .kbtn.block { width: 100%; }

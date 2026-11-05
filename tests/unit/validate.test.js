@@ -41,11 +41,9 @@ test("labels and notes: no invisible characters, and a clear error when too long
   fails(() => v.note("", "reason", 255, { required: true }));
 });
 
-test("tip, gift code, card checksum, percent", () => {
+test("tip, card checksum, percent", () => {
   assert.deepEqual(["", "0", "2.5", "2.50", "100"].map(v.tipCents), [0, 0, 250, 250, 10000]);
   for (const no of ["1e2", "-5", "2.555", "abc", "1,5", "123456"]) fails(() => v.tipCents(no));
-  assert.equal(v.giftCode(" dev-seed-card-0001 "), "dev-seed-card-0001");
-  for (const no of ["", "short", "has space in it", "bad!chars-123"]) fails(() => v.giftCode(no));
   assert.equal(v.luhn("4242424242424242"), true);
   assert.equal(v.luhn("4242424242424241"), false);
   assert.deepEqual(["0", "8.25", "100", "0.0001"].map((x) => v.percent(x, "a tax")), [0, 8.25, 100, 0.0001]);

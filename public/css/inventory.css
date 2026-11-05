@@ -9,8 +9,8 @@
 .pactions.left { justify-content: flex-start; } .pactions.left .pbtn { flex: none; }
 .field.cell { height: 40px; min-height: 40px; padding: 8px 10px; width: 80px; border-radius: 8px; }
 .dlines td { overflow: visible; }
-.count .phead { align-items: center; }
-.count .pf > b { font-weight: 500; }
+.stockcount .phead { align-items: center; }
+.stockcount .pf > b { font-weight: 500; }
 
 /* The three totals under a stock count */
 .totals { display: flex; gap: 16px; flex-wrap: wrap; }

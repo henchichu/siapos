@@ -96,12 +96,6 @@ function tipCents(v) {
   return Math.round(Number(s) * 100);
 }
 
-const giftCode = (v) => {
-  const s = typeof v === "string" ? v.trim() : "";
-  if (!/^[A-Za-z0-9-]{8,64}$/.test(s)) bad("Enter the gift card code: letters, numbers and dashes, 8 or more characters.");
-  return s;
-};
-
 // A card number's checksum (Luhn): what every real card number passes, and a mistyped digit usually fails
 function luhn(number) {
   let sum = 0;
@@ -118,4 +112,4 @@ function percent(v, what) {
 
 const EMPLOYEE_NUMBER = /^\d{8}$/;
 
-module.exports = { collect, personName, label, note, phone, contactPhone, phoneDigits, email, tipCents, giftCode, luhn, percent, EMPLOYEE_NUMBER, INVISIBLE };
+module.exports = { collect, personName, label, note, phone, contactPhone, phoneDigits, email, tipCents, luhn, percent, EMPLOYEE_NUMBER, INVISIBLE };

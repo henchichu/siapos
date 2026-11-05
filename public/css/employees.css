@@ -13,7 +13,7 @@
 .staff .table .person b { font-weight: 600; color: var(--navy); }
 .staff .table .sub { font-size: 13px; }
 .staff .pform .sub { font-size: 13px; }
-.staff .select:disabled, .staff .field:disabled { background-color: #F6F7FB; color: var(--muted); cursor: not-allowed; }
+.staff .select:disabled, .staff .field:disabled { background-color: #F4F4F4; color: var(--muted); cursor: not-allowed; }
 
 @media (max-width: 1360px) {
   .staff { flex-direction: column; gap: 24px; }

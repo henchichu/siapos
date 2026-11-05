@@ -2,25 +2,25 @@ const express = require("express");
 const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { requirePermission } = require("./session");
-const { isOwner, hasPermission } = require("./pin");
+const { hasPermission } = require("./pin");
 const { LOSS_REASONS } = require("./attention");
 const { mondayOf, splitOvertime, shiftPay } = require("./overtime");
 const { isDate } = require("./dates");
 const { cents } = require("./pricing");
+const { rfm, AT_RISK_MIN_DAYS, LAPSED_MIN_DAYS } = require("./rfm");
 
 const PERM_REPORTS = 20;
 const PERM_COSTS = 13;
 const PERM_TEAM = 17; // pay is on the team's timecards
 const COUNTED = [2, 3]; // submitted and approved shifts; open and rejected ones aren't paid
 const PAID = [2, 3, 4, 5, 7]; // confirmed, preparing, ready, completed, refunded: money was taken. Pending and cancelled never count.
+const VISITS = [2, 3, 4, 5]; // PAID without refunded: an order refunded in full doesn't count as a customer's visit
 const REFUND_DONE = 2;
 const SALE = 2;
 const TIPPED = [2, 3, 5]; // authorized, completed, refunded payments: not pending or failed
 // The stock losses staff report, under the names Needs attention uses. Count corrections and adjustments aren't losses.
 const REASONS = { broken: 5, spoiled: 6, stolen: 7 }; // the same keys the Inventory page sends
-const MAX_DAYS = 366;
-// A gift card sold is money held for later, not a sale; what the card is spent on is the sale
-const NOT_GIFT_CARD = "NOT EXISTS (SELECT 1 FROM ProductVariant v JOIN Product p ON p.ProductID = v.ProductID WHERE v.VariantID = oi.VariantID AND p.IsGiftCard)";
+const MAX_DAYS = 366, MAX_REVENUE_DAYS = 3660; // Revenue history may span years
 
 const router = express.Router();
 router.use("/reports", requirePermission(PERM_REPORTS));
@@ -28,25 +28,22 @@ router.use("/reports", requirePermission(PERM_REPORTS));
 const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 864e5);
 
-// Owners see every location and may add them all up; anyone else only the location they signed in to
+// Reports cover the one location the person signed in to
 async function places(session) {
-  const owner = await isOwner(session.employeeId);
   const [rows] = await pool.query(
-    `SELECT LocationID AS id, Name AS name, TimeZone AS timeZone FROM Location
-      WHERE BusinessID = ? AND Active ${owner ? "" : "AND LocationID = ?"} ORDER BY Name`,
-    owner ? [session.businessId] : [session.businessId, session.locationId]
+    "SELECT LocationID AS id, Name AS name, TimeZone AS timeZone FROM Location WHERE BusinessID = ? AND Active AND LocationID = ? ORDER BY Name",
+    [session.businessId, session.locationId]
   );
-  return { owner, locations: rows };
+  return { locations: rows };
 }
 
-// The ?location= asked for, checked against what this person may see. "all" is owners only.
+// The ?location= asked for, which can only be the location they signed in to
 async function scope(req) {
-  const { owner, locations } = await places(req.session);
+  const { locations } = await places(req.session);
   const asked = String(req.query.location || "");
-  if (asked === "all" && owner) return { owner, locations, chosen: locations };
-  const one = locations.find((l) => l.id === (asked || req.session.locationId)) || (!asked && locations[0]);
+  const one = locations.find((l) => l.id === (asked || req.session.locationId));
   if (!one) throw new HttpError(403, "You can only see reports for your own location.");
-  return { owner, locations, chosen: [one] };
+  return { locations, chosen: [one] };
 }
 
 // Today's date where the café is, so a default range ends on the café's today, not the server's
@@ -56,12 +53,12 @@ async function today(timeZone) {
 }
 
 // From and To are the café's local calendar days, both included
-async function range(req, timeZone) {
+async function range(req, timeZone, maxDays = MAX_DAYS) {
   const to = req.query.to ? String(req.query.to) : await today(timeZone);
   const from = req.query.from ? String(req.query.from) : addDays(to, -6);
   if (!isDate(from) || !isDate(to)) throw new HttpError(400, "Choose a From and a To date.");
   if (from > to) throw new HttpError(400, "From must be on or before To.");
-  if (daysBetween(from, to) >= MAX_DAYS) throw new HttpError(400, `Choose a range of ${MAX_DAYS} days or fewer.`);
+  if (daysBetween(from, to) >= maxDays) throw new HttpError(400, `Choose a range of ${maxDays} days or fewer.`);
   return { from, to };
 }
 
@@ -80,27 +77,34 @@ async function categories(businessId) {
   return rows;
 }
 
+// The business's membership tiers, lowest first; "none" stands for customers with no active loyalty account
+const NO_MEMBERSHIP = { id: "none", name: "No membership" };
+async function tiers(businessId) {
+  const [rows] = await pool.query("SELECT TierID AS id, Name AS name FROM MembershipTier WHERE BusinessID = ? ORDER BY MinimumPoints, Name", [businessId]);
+  return rows;
+}
+
 router.get("/reports/options", async (req, res) => {
-  const { owner, locations } = await places(req.session);
+  const { locations } = await places(req.session);
   const home = locations.find((l) => l.id === req.session.locationId) || locations[0];
   const day = await today(home?.timeZone || "UTC");
   const periods = await payPeriods(req.session.businessId, day);
   res.json({
-    canPickAll: owner,
     locations: locations.map(({ id, name }) => ({ id, name })),
-    location: owner ? "all" : home?.id,
+    location: home?.id,
     today: day,
     payPeriods: periods.list,
     payPeriod: periods.current,
     seesLabor: await hasPermission(pool, req.session.employeeId, PERM_TEAM),
     categories: await categories(req.session.businessId),
+    tiers: [...(await tiers(req.session.businessId)), NO_MEMBERSHIP],
     reasons: Object.entries(REASONS).map(([id, code]) => ({ id, name: LOSS_REASONS[code] })),
     seesCosts: await hasPermission(pool, req.session.employeeId, PERM_COSTS),
   });
 });
 
 // Sales per day and location. Sales count on the day the order was paid, refunds on the day the money went back,
-// each in that location's own time zone. Shared by Sales by day and Labor cost.
+// each in that location's own time zone. Labor cost sets its net sales against it.
 async function salesByDay(businessId, chosen, from, to) {
   const ids = chosen.map((l) => l.id);
   // a day either side in UTC, then the exact local day per location
@@ -111,18 +115,16 @@ async function salesByDay(businessId, chosen, from, to) {
             COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
             SUM(oi.DiscountAmount) AS discounts, SUM(oi.TaxAmount) AS tax
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?) AND ${NOT_GIFT_CARD}
+      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
       GROUP BY loc, day HAVING day BETWEEN ? AND ?`,
     [businessId, ids, PAID, ...near, from, to]
   );
-  // Refunds of a gift card sale are left out with the sale itself
   const [refunds] = await pool.query(
     `SELECT o.LocationID AS loc, DATE_FORMAT(CONVERT_TZ(r.RefundDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') AS day,
             SUM(r.Amount - r.TaxAmount) AS refunds, SUM(r.TaxAmount) AS tax
        FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID JOIN Location l ON l.LocationID = o.LocationID
       WHERE r.BusinessID = ? AND o.LocationID IN (?) AND r.RefundStatusCode = ?
-        AND EXISTS (SELECT 1 FROM OrderItem oi WHERE oi.OrderID = o.OrderID AND ${NOT_GIFT_CARD})
         AND r.RefundDateTime >= ? AND r.RefundDateTime < ?
       GROUP BY loc, day HAVING day BETWEEN ? AND ?`,
     [businessId, ids, REFUND_DONE, ...near, from, to]
@@ -142,29 +144,6 @@ async function salesByDay(businessId, chosen, from, to) {
   return { list, total: { orders: sum("orders"), gross: sum("gross"), discounts: sum("discounts"), refunds: sum("refunds"), net: sum("net"), tax: sum("tax") } };
 }
 
-// 1. Sales by day: one row per day and location, and a bar per day
-router.get("/reports/sales-by-day", async (req, res) => {
-  const { chosen } = await scope(req);
-  const { from, to } = await range(req, chosen[0].timeZone);
-  const { list, total } = await salesByDay(req.session.businessId, chosen, from, to);
-  const days = Array.from({ length: daysBetween(from, to) + 1 }, (_, i) => addDays(from, i))
-    .map((day) => ({ day, net: list.filter((r) => r.day === day).reduce((a, r) => a + r.net, 0) }));
-  res.json({
-    from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
-    cards: {
-      net: total.net,
-      orders: total.orders,
-      // what a customer spent per order, after discounts and before any later refund
-      average: total.orders ? Math.round((total.gross - total.discounts) / total.orders) : 0,
-      tax: total.tax,
-    },
-    days,
-    rows: list.map(({ tax, ...r }) => r),
-    total,
-  });
-});
-
 // 2. Top sellers: one ranking by units sold, before refunds. Revenue is after discounts and before tax;
 // cost is what the stock cost when each line was sold. Cost and margin only for a role that may see costs.
 router.get("/reports/top-sellers", async (req, res) => {
@@ -179,7 +158,7 @@ router.get("/reports/top-sellers", async (req, res) => {
     `SELECT p.ProductID AS id, p.Name AS product, c.Name AS category, SUM(oi.Quantity) AS units,
             SUM(oi.NetAmount) AS revenue, SUM(oi.LineCost) AS cost
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-       JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID AND NOT p.IsGiftCard
+       JOIN ProductVariant v ON v.VariantID = oi.VariantID JOIN Product p ON p.ProductID = v.ProductID
        LEFT JOIN Category c ON c.CategoryID = p.CategoryID
       WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
@@ -202,7 +181,7 @@ router.get("/reports/top-sellers", async (req, res) => {
     ...(costs && { cost, margin: revenue - cost, marginPct: pct(revenue - cost, revenue) }) };
   res.json({
     from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     category: category === "none" ? "No category" : known.find((c) => c.id === category)?.name || "All categories",
     seesCosts: costs,
     cards: { units: total.units, revenue, cost, marginPct: costs ? total.marginPct : null },
@@ -249,7 +228,7 @@ router.get("/reports/losses", async (req, res) => {
   const usedCents = cents(used.cost);
   res.json({
     from, to,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     reason: reason ? LOSS_REASONS[REASONS[reason]] : "All reasons",
     seesCosts: costs,
     cards: {
@@ -260,6 +239,62 @@ router.get("/reports/losses", async (req, res) => {
     },
     rows: list,
     total: { reports, ...(costs && { cost: lost }) },
+  });
+});
+
+// 5. Customers: RFM for everyone with an order in these dates, as of the To date. Scores compare the customers in this report.
+// Spend is what they paid for those orders, after discounts and before tax, less whatever has been refunded on them.
+// An order refunded in full isn't a visit, so it isn't counted at all. Guest orders have no customer, so they aren't here.
+// Everyone is scored first and the Membership filter applied after, so filtering never changes a customer's scores or segment.
+router.get("/reports/customers", async (req, res) => {
+  const { chosen } = await scope(req);
+  const { from, to } = await range(req, chosen[0].timeZone);
+  const { businessId } = req.session;
+  const groups = [...(await tiers(businessId)), NO_MEMBERSHIP];
+  const tier = String(req.query.tier || "");
+  if (tier && !groups.some((g) => g.id === tier)) throw new HttpError(400, "Choose a membership from the list.");
+  const window = `o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
+        AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
+        AND DATE_FORMAT(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') BETWEEN ? AND ?`;
+  const args = [businessId, chosen.map((l) => l.id), VISITS, addDays(from, -1), addDays(to, 2), from, to];
+
+  const [rows] = await pool.query(
+    `SELECT c.CustomerID AS id, CONCAT_WS(' ', c.FirstName, c.LastName) AS customer, la.TierID AS tierId, COUNT(*) AS orders, MAX(s.day) AS lastOrder,
+            SUM(s.sold - COALESCE(r.refunded, 0)) AS spend
+       FROM (SELECT o.OrderID, o.CustomerID, DATE_FORMAT(CONVERT_TZ(o.OrderDateTime, '+00:00', l.TimeZone), '%Y-%m-%d') AS day, SUM(oi.NetAmount) AS sold
+               FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
+              WHERE o.CustomerID IS NOT NULL AND ${window}
+              GROUP BY o.OrderID, o.CustomerID, day) s
+       JOIN Customer c ON c.CustomerID = s.CustomerID
+       LEFT JOIN LoyaltyAccount la ON la.CustomerID = c.CustomerID AND la.Active
+       LEFT JOIN (SELECT OrderID, SUM(Amount - TaxAmount) AS refunded FROM Refund WHERE BusinessID = ? AND RefundStatusCode = ? GROUP BY OrderID) r ON r.OrderID = s.OrderID
+      GROUP BY c.CustomerID, c.FirstName, c.LastName, la.TierID`,
+    [...args, businessId, REFUND_DONE]
+  );
+
+  const groupOf = (id) => groups.find((g) => g.id === (id || NO_MEMBERSHIP.id));
+  const list = rfm(rows.map((x) => ({ id: x.id, customer: x.customer || "No name given", tierId: groupOf(x.tierId).id, membership: groupOf(x.tierId).name, lastOrder: x.lastOrder, daysSince: daysBetween(x.lastOrder, to), orders: Number(x.orders), spend: cents(x.spend) })))
+    .filter((c) => !tier || c.tierId === tier);
+  const n = list.length;
+  const sum = (k) => list.reduce((a, c) => a + c[k], 0);
+  const total = { customers: n, orders: sum("orders"), spend: sum("spend") };
+  res.json({
+    from, to,
+    location: chosen[0].name,
+    membership: tier ? groupOf(tier).name : "All memberships",
+    minDays: { atRisk: AT_RISK_MIN_DAYS, lapsed: LAPSED_MIN_DAYS },
+    byMembership: groups.filter((g) => !tier || g.id === tier).map((g) => {
+      const members = list.filter((c) => c.tierId === g.id);
+      return { id: g.id, name: g.name, customers: members.length, averageSpend: members.length ? Math.round(members.reduce((a, c) => a + c.spend, 0) / members.length) : null };
+    }),
+    cards: {
+      customers: n,
+      averageSpend: n ? Math.round(total.spend / n) : 0,
+      averageOrders: n ? Math.round((total.orders / n) * 10) / 10 : 0,
+      averageDays: n ? Math.round(sum("daysSince") / n) : 0,
+    },
+    rows: list,
+    total,
   });
 });
 
@@ -320,33 +355,42 @@ router.get("/reports/labor", async (req, res) => {
   const { total: sales } = await salesByDay(businessId, chosen, period.start, period.end);
   res.json({
     period,
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     cards: { hours: hours(minutes), cost, net: sales.net, laborPct: sales.net > 0 ? Math.round((cost / sales.net) * 1000) / 10 : null },
     rows,
     total: { shifts: counted.length, regularHours: hours(counted.reduce((a, s) => a + s.regular, 0)), overtimeHours: hours(counted.reduce((a, s) => a + s.overtime, 0)), pay: cost },
   });
 });
 
-// Live sales: one day so far, hour by hour, or each day of its week so far. Same measures as Sales by day,
-// plus cost of goods, profit and tips. The page asks again every minute while the day is today.
-router.get("/reports/live", async (req, res) => {
+// Revenue. Live: one day so far, hour by hour, or each day of its week so far. History (From and To given): each day,
+// month or year in the dates. Same measures either way, plus cost of goods, profit and tips.
+// The page asks again every minute while a live day is today.
+router.get("/reports/revenue", async (req, res) => {
   const { chosen } = await scope(req);
-  const day = req.query.day ? String(req.query.day) : await today(chosen[0].timeZone);
-  if (!isDate(day)) throw new HttpError(400, "Choose a day.");
-  const by = req.query.by === "day" ? "day" : "hour";
-  const from = by === "day" ? mondayOf(day) : day;
+  const history = Boolean(req.query.from);
+  let day, from, by;
+  if (history) {
+    ({ from, to: day } = await range(req, chosen[0].timeZone, MAX_REVENUE_DAYS));
+    by = ["month", "year"].includes(req.query.by) ? req.query.by : "day";
+  } else {
+    day = req.query.day ? String(req.query.day) : await today(chosen[0].timeZone);
+    if (!isDate(day)) throw new HttpError(400, "Choose a day.");
+    by = req.query.by === "day" ? "day" : "hour";
+    from = by === "day" ? mondayOf(day) : day;
+  }
   const costs = await hasPermission(pool, req.session.employeeId, PERM_COSTS);
   const { businessId } = req.session;
   const ids = chosen.map((l) => l.id);
   const near = [addDays(from, -1), addDays(day, 2)];
   const local = (col) => `CONVERT_TZ(${col}, '+00:00', l.TimeZone)`;
-  const bucket = (col) => (by === "hour" ? `HOUR(${local(col)})` : `DATE_FORMAT(${local(col)}, '%Y-%m-%d')`);
+  const FORMAT = { day: "%Y-%m-%d", month: "%Y-%m", year: "%Y" };
+  const bucket = (col) => (by === "hour" ? `HOUR(${local(col)})` : `DATE_FORMAT(${local(col)}, '${FORMAT[by]}')`);
 
   const [sales] = await pool.query(
     `SELECT ${bucket("o.OrderDateTime")} AS k, COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
             SUM(oi.DiscountAmount) AS discounts, SUM(oi.LineCost) AS cost
        FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?) AND ${NOT_GIFT_CARD}
+      WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
         AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
         AND DATE_FORMAT(${local("o.OrderDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
       GROUP BY k`,
@@ -356,7 +400,6 @@ router.get("/reports/live", async (req, res) => {
     `SELECT ${bucket("r.RefundDateTime")} AS k, SUM(r.Amount - r.TaxAmount) AS refunds
        FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID JOIN Location l ON l.LocationID = o.LocationID
       WHERE r.BusinessID = ? AND o.LocationID IN (?) AND r.RefundStatusCode = ?
-        AND EXISTS (SELECT 1 FROM OrderItem oi WHERE oi.OrderID = o.OrderID AND ${NOT_GIFT_CARD})
         AND r.RefundDateTime >= ? AND r.RefundDateTime < ?
         AND DATE_FORMAT(${local("r.RefundDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
       GROUP BY k`,
@@ -371,9 +414,15 @@ router.get("/reports/live", async (req, res) => {
     [businessId, ids, PAID, TIPPED, ...near, from, day]
   );
 
-  // By hour: every hour from the first sale or refund to the last, the quiet ones too. By day: Monday to the day.
+  // By hour: every hour from the first sale or refund to the last, the quiet ones too. By day, month and year: every one
+  // in the dates, the quiet ones too (a live week starts on Monday).
   const hours = [...sales, ...refunds].map((r) => Number(r.k));
+  const months = [];
+  for (let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)); `${y}-${String(m).padStart(2, "0")}` <= day.slice(0, 7); m === 12 ? (y++, m = 1) : m++)
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
   const keys = by === "day" ? Array.from({ length: daysBetween(from, day) + 1 }, (_, i) => addDays(from, i))
+    : by === "month" ? months
+    : by === "year" ? Array.from({ length: Number(day.slice(0, 4)) - Number(from.slice(0, 4)) + 1 }, (_, i) => String(Number(from.slice(0, 4)) + i))
     : hours.length ? Array.from({ length: Math.max(...hours) - Math.min(...hours) + 1 }, (_, i) => Math.min(...hours) + i) : [];
   let running = 0;
   const rows = keys.map((k) => {
@@ -388,7 +437,7 @@ router.get("/reports/live", async (req, res) => {
   res.json({
     day, by, from,
     isToday: day === (await today(chosen[0].timeZone)),
-    location: chosen.length > 1 ? "All locations" : chosen[0].name,
+    location: chosen[0].name,
     timeZone: chosen[0].timeZone,
     updatedAt: new Date().toISOString(),
     seesCosts: costs,

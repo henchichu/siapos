@@ -1,4 +1,4 @@
-# Development only: adds the demo shop and the known dev PINs to a fresh database.
+# Development only: adds the demo shop and the known dev sign-ins to a fresh database.
 #   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 name: siapos
 
@@ -8,9 +8,7 @@ services:
       SIAPOS_DEV: "1"
     volumes:
       - ./sql/dev:/sql-dev:ro
-  kiosk-api:
-    ports:
-      - "127.0.0.1:3001:3001"         # so tests and the load test can reach the public server from this machine
+
+  pos-api:
     environment:
-      KIOSK_PHONE_SIGNIN: "1"         # the demo customers are made up, so the public address may offer phone sign-in
-      MOCK_PAY: "1"                   # offer Card, Apple Pay and Google Pay through the mock processor; no money moves
+      MOCK_PAY: "1"   # the kiosk offers Card, Apple Pay and Google Pay through the mock processor; no money moves

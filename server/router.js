@@ -1,13 +1,12 @@
 const express = require("express");
 const pool = require("./database/connection");
-const { findEmployee, workplace, authenticate, isOwner } = require("./pin");
+const { authenticatePassword } = require("./pin");
 const session = require("./session");
 const rateLimit = require("./ratelimit");
-const { EMPLOYEE_NUMBER } = require("./validate");
 const { signInAs } = require("./signin");
+const customer = require("./customer");
 
 const PERM_REPORTS = 20;
-const PERM_MANAGE_STAFF = 19;
 const PERM_MEMBERS = 9;
 
 const router = express.Router();
@@ -19,77 +18,54 @@ router.use((req, res, next) => {
 const loginLimit = rateLimit(30, 60 * 1000);
 router.use("/login", loginLimit);
 
-// Employee numbers are 8 digits, so anything else is refused without a lookup (and without saying whether a number exists)
-router.use("/login", (req, res, next) =>
-  EMPLOYEE_NUMBER.test(String(req.body.employeeNumber)) ? next() : res.status(400).json({ error: "Employee numbers are 8 digits." }));
+// The sign-in name is the email; the password is checked for length when it is set (sql/provision), not here, so an old short one still works
+const sane = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max;
 
-// Step 1 shows the first name before the PIN (the sign-in design needs it), so the lookup has its own tighter limits: enough for
-// a café's staff signing in on one address, too few to try numbers in bulk. No ban: the whole café shares that address.
-const lookupLimits = [rateLimit(10, 60 * 1000), rateLimit(60, 60 * 60 * 1000)];
-router.resetLookupLimits = () => lookupLimits.forEach((l) => l.reset());
-router.post("/login/employee", lookupLimits, async (req, res) => {
-  const emp = await findEmployee(pool, String(req.body.employeeNumber));
-  if (!emp) return res.status(404).json({ error: "Employee Number does not exist." });
-  const place = await workplace(emp.EmployeeID);
-  res.json({ firstName: emp.FirstName, businessName: emp.BusinessName, locationName: place?.LocationName });
+// The sign-in page's branding: the name of the business in this database (there is only one)
+router.get("/brand", async (req, res) => {
+  const [[b]] = await pool.query("SELECT Name AS name FROM Business WHERE Active LIMIT 1");
+  res.json({ name: b?.name || null });
 });
 
-router.post("/login/pin", async (req, res) => {
-  if (!/^\d{6}$/.test(req.body.pin)) return res.status(400).json({ error: "PIN must be 6 digits." });
-  const result = await authenticate(req.body.employeeNumber, req.body.pin);
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!sane(email, 255) || !sane(password, 200)) return res.status(400).json({ error: "Enter your email and password." });
+  let result = await authenticatePassword(email, password);
 
-  if (result.status === "missing") return res.status(404).json({ error: "Employee Number does not exist." });
+  // Not an employee's email: it may be a customer's, who signs in here too and lands on the kiosk instead
+  if (result.status === "missing") {
+    const c = await customer.authenticate(email, password);
+    if (c.status === "ok") {
+      session.destroy(req, res); // one kind of sign-in per browser
+      customer.create(res, c.customer);
+      return res.json({ redirect: "/kiosk.html" });
+    }
+    result = c;
+  }
+
   if (result.status === "locked") return res.status(423).json({ locked: true, lockedUntil: result.lockedUntil });
-  if (result.status === "bad")
-    return res
-      .status(401)
-      .json({ error: `Incorrect PIN. ${result.retriesLeft} retries left.`, retriesLeft: result.retriesLeft });
+  // A wrong email and a wrong password get the same answer, so this doesn't say which emails exist
+  if (result.status !== "ok") return res.status(401).json({ error: "Incorrect email or password." });
 
-  const refused = await signInAs(res, result.emp);
-  if (refused) return res.status(403).json({ error: refused });
-  res.json({ redirect: "/home.html" }); // everyone lands on Home; its tiles come from the role
+  customer.destroy(req, res);
+  const signedIn = await signInAs(res, result.emp);
+  if (signedIn.error) return res.status(403).json({ error: signedIn.error });
+  res.json({ redirect: signedIn.home });
 });
-
-router.use(require("./setup")); // public business sign-up: before the session check below
 
 router.post("/logout", (req, res) => {
   session.destroy(req, res);
   res.json({ ok: true });
 });
 
+router.use(customer.router); // before the staff check: customers have their own session
+router.use(require("./kiosk"));
+
 router.use(session.requireSession);
 
-router.get("/session", async (req, res) => res.json({ ...req.session.info, canSwitch: await isOwner(req.session.employeeId) }));
+router.get("/session", (req, res) => res.json(req.session.info));
 // The page calls this when the person does something, which restarts the idle clock
 router.post("/session/touch", (req, res) => { req.session.active = Date.now(); res.json({}); });
-
-// Only an owner moves between locations; everyone else stays at the one they signed in to
-const ownerOnly = async (req, res, next) =>
-  (await isOwner(req.session.employeeId)) ? next() : res.status(403).json({ error: "Only an owner can switch location." });
-
-// The places this owner works, and a switch between them: the register and every location-scoped page follow the session
-router.get("/locations", ownerOnly, async (req, res) => {
-  const [rows] = await pool.query(
-    `SELECT l.LocationID AS id, l.Name AS name FROM EmployeeLocation el JOIN Location l USING (LocationID, BusinessID)
-      WHERE el.EmployeeID = ? AND el.Active AND l.Active ORDER BY l.Name`,
-    [req.session.employeeId]
-  );
-  res.json({ current: req.session.locationId, locations: rows });
-});
-
-router.post("/locations/switch", ownerOnly, async (req, res) => {
-  const [[place]] = await pool.query(
-    `SELECT l.LocationID, l.Name AS LocationName FROM EmployeeLocation el JOIN Location l USING (LocationID, BusinessID)
-      WHERE el.EmployeeID = ? AND el.Active AND l.Active AND l.LocationID = ?`,
-    [req.session.employeeId, String(req.body.locationId)]
-  );
-  if (!place) return res.status(403).json({ error: "You don't work at that location." });
-  const [[reg]] = await pool.query("SELECT RegisterID, Name FROM Register WHERE LocationID = ? AND RegStatusCode = 1 ORDER BY Name LIMIT 1", [place.LocationID]);
-  req.session.locationId = place.LocationID;
-  req.session.registerId = reg?.RegisterID;
-  req.session.info = Object.freeze({ ...req.session.info, locationName: place.LocationName, registerName: reg?.Name });
-  res.json({ locationName: place.LocationName });
-});
 
 // A page that finds the role may not open it reports it here before redirecting home
 router.post("/access-violation", (req, res) => {
@@ -105,10 +81,9 @@ router.use(require("./shift"));
 router.use(require("./products"));
 router.use(require("./inventory"));
 router.use(require("./attention"));
+router.use(require("./counts"));
 router.use(require("./reports"));
-router.use(require("./employees"));
 router.use(require("./orders"));
-router.use(require("./settings"));
 router.use(require("./rewards"));
 
 module.exports = router;

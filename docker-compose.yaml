@@ -5,8 +5,7 @@ services:
     image: mysql:8.4.11         # the triggers and sql/tests were verified on this version
     container_name: posdb
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:3306:3306"   # host-only, for DB tools on this machine;
+    networks: [db]              # internal: no published port, reachable only by pos-api (docker-compose.test.yaml opens it for host tests)
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
       MYSQL_DATABASE: miniworld
@@ -28,6 +27,7 @@ services:
   pos-api:
     build: .
     restart: unless-stopped
+    networks: [db, web]         # db to reach MySQL, web for the published port
     healthcheck:
       # the image has no curl: node's own fetch asks the /health route
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -55,6 +55,11 @@ services:
     depends_on:
       mysql-db:
         condition: service_healthy
+
+networks:
+  db:
+    internal: true   # no route in or out of this network except through pos-api
+  web: {}
 
 volumes:
   mysql_data:

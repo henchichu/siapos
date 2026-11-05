@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS Business (
               ON UPDATE CURRENT_TIMESTAMP,
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,
-    LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by TR_Orders_BeforeInsert
+    LastOrderNumber INT UNSIGNED NOT NULL DEFAULT 0,   -- advanced by the backend (server/orderlines.js)
     RefundOverrideAmount DECIMAL(10,2) NULL,
     RefundOverrideDays SMALLINT UNSIGNED NULL,
     StaffDiscountsNeedApproval BOOLEAN NOT NULL DEFAULT FALSE,   -- FALSE: staff discounts need no manager
@@ -939,7 +939,7 @@ CREATE TABLE IF NOT EXISTS Orders (
     EmployeeID CHAR(36),
     CustomerID CHAR(36),
 
-    OrderNumber INT UNSIGNED NOT NULL DEFAULT 0,  -- set by TR_Orders_BeforeInsert
+    OrderNumber INT UNSIGNED NULL,  -- taken by the backend (nextOrderNumber); NULL only on seeded rows until 99-ready.sh numbers them
     ChannelCode TINYINT UNSIGNED NOT NULL,
     CustomerNote VARCHAR(255) NULL,                      -- kiosk orders: the customer's note to the kitchen
     OrderDateTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -952,7 +952,7 @@ CREATE TABLE IF NOT EXISTS Orders (
     Tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,             -- sum of OrderItem.TaxAmount; net sales = Total - Tax
     DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- sum of OrderItem.DiscountAmount
     Total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by TR_Orders_BeforeInsert
+    PricesIncludeTax BOOLEAN NOT NULL DEFAULT FALSE,     -- copied from Business by the backend
 
     PRIMARY KEY (OrderID),
 

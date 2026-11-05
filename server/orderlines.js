@@ -79,7 +79,14 @@ async function addOrderLines(conn, { orderId, businessId, locationId, employeeId
     );
 }
 
+// Next order number for the business. The Business row stays locked until the transaction ends, so registers queue here.
+async function nextOrderNumber(conn, businessId) {
+  await conn.query("UPDATE Business SET LastOrderNumber = LAST_INSERT_ID(LastOrderNumber + 1), UpdatedAt = UpdatedAt WHERE BusinessID = ?", [businessId]);
+  const [[{ n }]] = await conn.query("SELECT LAST_INSERT_ID() AS n");
+  return n;
+}
+
 // What a repeated order request is compared by: a hash, so the remembered request holds no card details
 const fingerprint = (body) => crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
 
-module.exports = { addOrderLines, fingerprint };
+module.exports = { addOrderLines, fingerprint, nextOrderNumber };

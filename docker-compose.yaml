@@ -25,8 +25,6 @@ services:
       interval: 5s
       retries: 20
 
-  # The staff side: registers, kitchen, timecards, reports. Published to this machine only; reach it from elsewhere over a
-  # private network (see README).
   pos-api:
     build: .
     restart: unless-stopped

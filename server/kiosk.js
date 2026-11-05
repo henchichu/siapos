@@ -8,7 +8,7 @@ const pool = require("./database/connection");
 const { HttpError } = require("./errors");
 const { priceCart, cents, dollars } = require("./pricing");
 const { notify } = require("./watchers");
-const { addOrderLines, fingerprint } = require("./orderlines");
+const { addOrderLines, fingerprint, nextOrderNumber } = require("./orderlines");
 const { charge } = require("./mockpay");
 const { label } = require("./labels");
 const check = require("./validate");
@@ -129,9 +129,9 @@ async function placeOrder(req) {
   return pool.tx(async (conn) => {
     const orderId = crypto.randomUUID();
     await conn.query(
-      `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, CustomerNote)
-       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)`,
-      [orderId, k.LocationID, businessId, customerId, KIOSK, note]);
+      `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, CustomerNote, OrderNumber, PricesIncludeTax)
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, (SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?))`,
+      [orderId, k.LocationID, businessId, customerId, KIOSK, note, await nextOrderNumber(conn, businessId), businessId]);
     await addOrderLines(conn, { orderId, businessId, locationId: k.LocationID, employeeId: null, priced,
       unavailable: (l) => `${l.productName} can't be ordered right now.` });
     await conn.query("UPDATE Orders SET Subtotal = ?, Tax = ?, Total = ? WHERE OrderID = ?",

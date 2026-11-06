@@ -127,11 +127,13 @@ async function placeOrder(req) {
     throw new HttpError(400, `A pay-at-counter order can have up to ${UNPAID_MAX_ITEMS} items. For more, order at the counter.`);
 
   return pool.tx(async (conn) => {
+    // Read separately: older order triggers update Business during the insert.
+    const [[business]] = await conn.query("SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?", [businessId]);
     const orderId = crypto.randomUUID();
     await conn.query(
       `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, CustomerNote, OrderNumber, PricesIncludeTax)
-       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, (SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?))`,
-      [orderId, k.LocationID, businessId, customerId, KIOSK, note, await nextOrderNumber(conn, businessId), businessId]);
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
+      [orderId, k.LocationID, businessId, customerId, KIOSK, note, await nextOrderNumber(conn, businessId), business.PricesIncludeTax]);
     await addOrderLines(conn, { orderId, businessId, locationId: k.LocationID, employeeId: null, priced,
       unavailable: (l) => `${l.productName} can't be ordered right now.` });
     await conn.query("UPDATE Orders SET Subtotal = ?, Tax = ?, Total = ? WHERE OrderID = ?",

@@ -2,8 +2,9 @@
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
-const IMG_ROTATION = [1,2,3,4,5,6];
-const productImg = (idx) => `/img/kiosk/product-${IMG_ROTATION[idx % 6]}.jpg`;
+const productImg = (product) => product.hasPhoto
+  ? `/api/customer/products/${product.id}/photo`
+  : "/img/kiosk/no-photo.svg";
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 const fmt = (iso, tz) => iso ? new Date(iso).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:tz }) : "";
 // crypto.randomUUID exists only on HTTPS or localhost; an iPad on plain http://<lan-ip> has just getRandomValues
@@ -471,35 +472,72 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
   const slug = (name) => "cat-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const sectionKey = sections.map(([name]) => name).join("|");
   const current = active && sections.some(([name]) => name === active) ? active : sections[0]?.[0];
+  const menuRef = useRef(null);
+  const menuScroller = () => {
+    let el = menuRef.current;
+    while (el && !/auto|scroll/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
+    return el;
+  };
   const jump = (name) => {
+    const scroller = menuScroller();
+    const section = document.getElementById(slug(name));
+    if (!scroller || !section) return;
     setActive(name); heldUntil.current = Date.now() + 900;
-    document.getElementById(slug(name))?.scrollIntoView?.({ block: "start", behavior: "smooth" }); // needs enough content below to travel; the sections are padded for that
+    const bar = menuRef.current.querySelector(".cats");
+    const inset = (bar?.offsetHeight || 0) + 24;
+    scroller.scrollTo({
+      top: scroller.scrollTop + section.getBoundingClientRect().top - scroller.getBoundingClientRect().top - inset,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
   };
   const heldUntil = useRef(0); // after a tap on the bar, the tapped category stays current until the page has settled
   useEffect(() => {
     if (sections.length < 2) return undefined;
+    const scroller = menuScroller();
+    const bar = menuRef.current?.querySelector(".cats");
+    if (!scroller) return undefined;
+    // Give even a short final category enough room to reach below the sticky bar.
+    const sizeLast = () => {
+      const last = menuRef.current.querySelector(".cat-section:last-child");
+      if (last) last.style.minHeight = `${Math.max(0, scroller.clientHeight - (bar?.offsetHeight || 0) - 24)}px`;
+    };
+    sizeLast();
+    const resize = new ResizeObserver(sizeLast);
+    resize.observe(scroller);
+    if (bar) resize.observe(bar);
     let frame = 0;
     const onScroll = (e) => {
       if (frame || Date.now() < heldUntil.current) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const t = e.target;
+        if (e.target !== scroller) return;
+        const t = scroller;
         const atEnd = t?.scrollHeight && t.scrollTop + t.clientHeight >= t.scrollHeight - 2; // a last section too short to reach the top still counts
         let found = atEnd ? sections[sections.length - 1][0] : sections[0][0];
-        if (!atEnd) for (const [name] of sections) { const el = document.getElementById(slug(name)); if (el && el.getBoundingClientRect().top <= 140) found = name; }
+        if (!atEnd) for (const [name] of sections) { const el = document.getElementById(slug(name)); if (el && el.getBoundingClientRect().top <= scroller.getBoundingClientRect().top + (bar?.offsetHeight || 0) + 26) found = name; }
         setActive(found);
       });
     };
-    document.addEventListener("scroll", onScroll, true); // scroll events don't bubble; the menu's own scroller is not known here
-    return () => { document.removeEventListener("scroll", onScroll, true); cancelAnimationFrame(frame); };
+    scroller.addEventListener("scroll", onScroll);
+    return () => { scroller.removeEventListener("scroll", onScroll); resize.disconnect(); cancelAnimationFrame(frame); };
   }, [sectionKey]);
-  useEffect(() => { document.querySelector(".cats [aria-current=true]")?.scrollIntoView?.({ inline: "nearest", block: "nearest" }); }, [current]);
+  useEffect(() => {
+    const bar = menuRef.current?.querySelector(".cats");
+    const button = bar?.querySelector("[aria-current=true]");
+    if (!button) return;
+    // Only scroll the category bar sideways; scrollIntoView also moves the menu
+    // vertically and can cancel the section jump's smooth scroll.
+    const offset = button.getBoundingClientRect().left - bar.getBoundingClientRect().left;
+    if (offset < 16) bar.scrollTo({ left: bar.scrollLeft + offset - 16 });
+    else if (offset + button.offsetWidth > bar.clientWidth - 16)
+      bar.scrollTo({ left: bar.scrollLeft + offset + button.offsetWidth - bar.clientWidth + 16 });
+  }, [current]);
   const cartTotal = cart.reduce((a, it) => a + it.unitCents * it.qty, 0);
 
   const addItem = (item) => { onAddItem(item); setCustomizing(null); };
 
 
-  const customizeEl = customizing && html`<${Customize} product=${customizing} img=${customizing.hasPhoto ? `/api/customer/products/${customizing.id}/photo` : productImg(available.indexOf(customizing))}
+  const customizeEl = customizing && html`<${Customize} product=${customizing} img=${productImg(customizing)}
       onAdd=${addItem} onCancel=${() => setCustomizing(null)} />`;
   const checkoutEl = checkoutOpen && html`<${Checkout} businessName=${businessName} cart=${cart} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
@@ -513,7 +551,7 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
   return html`
     <div className=${customizing || checkoutOpen ? "screen has-popup" : "screen"}>
       <div className="menu-body">
-        <section className="menu-main">
+        <section className="menu-main" ref=${menuRef}>
           ${sections.length > 1 && html`<nav className="cats" aria-label="Menu categories">
             ${sections.map(([name]) => html`<button key=${name} aria-current=${name === current ? "true" : undefined} onClick=${() => jump(name)}>${name}</button>`)}
           </nav>`}
@@ -523,7 +561,7 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
               ${list.map((p) => html`
                 <article key=${p.id} className="tile">
                   <button className="pick" aria-label=${"Add " + p.name} onClick=${() => setCustomizing(p)}>
-                    <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(available.indexOf(p))} alt="" loading="lazy" />
+                    <img src=${productImg(p)} alt="" loading="lazy" />
                     <h3>${p.name}</h3>
                   </button>
                 </article>`)}

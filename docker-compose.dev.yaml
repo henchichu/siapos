@@ -10,5 +10,8 @@ services:
       - ./sql/dev:/sql-dev:ro
 
   pos-api:
+    command: ["sh", "-c", "node server/seed-demo-photos.js && exec npm start"]
+    volumes:
+      - ./sql/dev/photos:/sql-dev/photos:ro
     environment:
       MOCK_PAY: "1"   # the kiosk offers Card, Apple Pay and Google Pay through the mock processor; no money moves

@@ -31,6 +31,15 @@ Prerequisite: Install Docker Engine (not to be confused with Docker Desktop, the
    None of the `.env` variables is needed for local development. Everything else (database host and logins, ports, pool sizes, uploads folder) is set in `docker-compose.yaml`.
 
 
+## Demo product photos
+
+Start the demo with `docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d --build`.
+Development startup copies the six photos from `sql/dev/photos` into the saved uploads
+volume and assigns them to Brewbean's sample products. This also works with an existing
+demo database; no reset is needed. It only fills missing photos, preserving business
+uploads. Products without photos show a neutral placeholder. Production startup does
+not run the demo photo setup.
+
 ## Setting up a business
 
 The app has no screens for creating a business, cafés, roles, employees, tax rates or pay rates: they are rows you add with SQL. Everyone who signs in belongs to one café, and sees only that café's registers, stock, orders and reports. Reports cover just that café.

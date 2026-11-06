@@ -195,11 +195,13 @@ async function completeSale(req) {
       const tipCents = PROCESSED[methodCode] ? check.tipCents(payment.tip) : 0;
       if (tipCents && priced.totalCents === 0) throw new HttpError(400, "A tip needs a payment: this sale totals $0.00."); // the tip lives on the payment row
 
+      // Read separately: older order triggers update Business during the insert.
+      const [[business]] = await conn.query("SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?", [businessId]);
       const orderId = crypto.randomUUID();
       await conn.query(
         `INSERT INTO Orders (OrderID, LocationID, BusinessID, RegisterID, EmployeeID, CustomerID, ChannelCode, OrderNumber, PricesIncludeTax)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, (SELECT PricesIncludeTax FROM Business WHERE BusinessID = ?))`,
-        [orderId, locationId, businessId, registerId, employeeId, customerId || null, await nextOrderNumber(conn, businessId), businessId]
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        [orderId, locationId, businessId, registerId, employeeId, customerId || null, await nextOrderNumber(conn, businessId), business.PricesIncludeTax]
       );
 
       await addOrderLines(conn, { orderId, businessId, locationId, employeeId, priced,

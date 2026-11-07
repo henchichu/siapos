@@ -29,6 +29,7 @@ for tb in $(R "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHE
     Location|EmployeePayRate|LoyaltyTransaction) continue ;;
     InventoryTransaction|LowStockAlert) g="INSERT" ;;
     ApprovalAction) g="INSERT (ApprovalActionID, BusinessID, ActorEmployeeID, ApproverEmployeeID, LocationID, ActionType, TargetID, Payload)" ;;
+    OrderStatusAlert) g="UPDATE (ReadAt)" ;;
     NotificationQueue) g="UPDATE (Status, Error, ProcessedAt)" ;;
     PayPeriod) g="UPDATE (Closed)" ;;
     Inventory) g="INSERT (InventoryID, LocationID, StockItemID, BusinessID, ReorderThreshold), UPDATE (ReorderThreshold)" ;;

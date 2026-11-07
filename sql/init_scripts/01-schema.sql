@@ -1040,6 +1040,22 @@ CREATE TABLE IF NOT EXISTS Orders (
     INDEX IX_Orders_Location_Status (LocationID, OrderStatusCode)   -- the kitchen's open tickets, and the check for new ones
 ) ENGINE=InnoDB;
 
+-- Customer notifications are created only by the Orders triggers.
+CREATE TABLE IF NOT EXISTS OrderStatusAlert (
+    AlertID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    OrderID CHAR(36) NOT NULL,
+    CustomerID CHAR(36) NOT NULL,
+    OrderStatusCode TINYINT UNSIGNED NOT NULL,
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ReadAt DATETIME NULL,
+    PRIMARY KEY (AlertID),
+    CONSTRAINT FK_OrderStatusAlert_OrderCustomer FOREIGN KEY (OrderID, CustomerID)
+        REFERENCES Orders(OrderID, CustomerID) ON DELETE RESTRICT,
+    CONSTRAINT FK_OrderStatusAlert_Status FOREIGN KEY (OrderStatusCode)
+        REFERENCES OrderStatus(OrderStatusCode) ON DELETE RESTRICT,
+    INDEX IX_OrderStatusAlert_Customer_Time (CustomerID, CreatedAt, AlertID)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS OrderStatusHistory (
     OrderStatusHistoryID CHAR(36) NOT NULL,
     OrderID CHAR(36) NOT NULL,

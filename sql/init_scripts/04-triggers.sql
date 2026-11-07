@@ -42,3 +42,20 @@ BEGIN
            Quantity = Quantity + NEW.QuantityChange
      WHERE LocationID = NEW.LocationID AND StockItemID = NEW.StockItemID;
 END$$
+
+-- Only orders linked to a customer produce customer notifications.
+CREATE TRIGGER TR_Orders_AlertInsert AFTER INSERT ON Orders FOR EACH ROW
+BEGIN
+    IF NEW.CustomerID IS NOT NULL THEN
+        INSERT INTO OrderStatusAlert (OrderID, CustomerID, OrderStatusCode)
+        VALUES (NEW.OrderID, NEW.CustomerID, NEW.OrderStatusCode);
+    END IF;
+END$$
+
+CREATE TRIGGER TR_Orders_AlertUpdate AFTER UPDATE ON Orders FOR EACH ROW
+BEGIN
+    IF NEW.CustomerID IS NOT NULL AND NEW.OrderStatusCode <> OLD.OrderStatusCode THEN
+        INSERT INTO OrderStatusAlert (OrderID, CustomerID, OrderStatusCode)
+        VALUES (NEW.OrderID, NEW.CustomerID, NEW.OrderStatusCode);
+    END IF;
+END$$

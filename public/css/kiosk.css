@@ -465,3 +465,9 @@
   .customer.has-island .cart-bar { bottom: calc(88px + env(safe-area-inset-bottom)); }
   .customer.has-island .menu-body { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
 }
+
+/* Customer order status notifications */
+.notifications .notification { width: 100%; box-sizing: border-box; text-align: left; gap: 16px; }
+.notifications .notification.unread { border-left: 4px solid #285e4c; }
+.notifications .notification > button { flex-shrink: 0; padding: 10px 14px; border: 1px solid #bbb; border-radius: 8px; background: white; cursor: pointer; }
+@media (max-width: 600px) { .notifications .notification { flex-wrap: wrap; } }

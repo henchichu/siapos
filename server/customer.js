@@ -128,6 +128,39 @@ router.get("/customer/me", requireCustomer, async (req, res) => {
   });
 });
 
+// Return notifications belonging to the signed-in customer.
+router.get("/customer/notifications", requireCustomer, async (req, res) => {
+  const [alerts] = await pool.query(
+    `SELECT a.AlertID AS id,
+            a.OrderID AS orderId,
+            o.OrderNumber AS orderNumber,
+            s.Description AS status,
+            a.CreatedAt AS createdAt,
+            a.ReadAt AS readAt
+       FROM OrderStatusAlert a
+       JOIN Orders o ON o.OrderID = a.OrderID
+       JOIN OrderStatus s
+         ON s.OrderStatusCode = a.OrderStatusCode
+      WHERE a.CustomerID = ?
+      ORDER BY a.CreatedAt DESC, a.AlertID DESC
+      LIMIT 100`,
+    [req.customer.customerId]
+  );
+
+  res.json({ alerts });
+});
+
+router.post("/customer/notifications/:id/read", requireCustomer, async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^[1-9][0-9]{0,19}$/.test(id)) throw new HttpError(404, "No such notification.");
+  const [result] = await pool.query(
+    "UPDATE OrderStatusAlert SET ReadAt = COALESCE(ReadAt, UTC_TIMESTAMP()) WHERE AlertID = ? AND CustomerID = ?",
+    [id, req.customer.customerId]
+  );
+  if (!result.affectedRows) throw new HttpError(404, "No such notification.");
+  res.json({ ok: true });
+});
+
 router.post("/customer/logout", (req, res) => {
   destroy(req, res);
   res.json({ ok: true });

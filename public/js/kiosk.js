@@ -161,14 +161,14 @@ const NAV_ICONS = {
 };
 const NavIcon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: NAV_ICONS[name] }}></svg>`;
 
-function CustomerNav({ businessName, locationName, memberInfo, current, onMenu, onOrders, onRewards, onExit }) {
+function CustomerNav({ businessName, locationName, memberInfo, current, onMenu, onOrders, onNotifications, onRewards, onExit }) {
   const [navKind, setNavKind] = useState(navMode);
   const [collapsed, setCollapsed] = useState(savedFold);
   const [open, setOpen] = useState(false); // the phone drawer
   const [tip, setTip] = useState(null);
   const navRef = useRef(null), burger = useRef(null), closer = useRef(null);
   const folded = navKind === "rail" || (navKind === "full" && collapsed);
-  const items = [["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
+  const items = [["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ["notifications", "Notifications", "receipt", onNotifications], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
   const label = items.find(([k]) => k === current)?.[1] || "Menu";
 
   useEffect(() => {
@@ -570,6 +570,44 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
 }
 
 //  Order history 
+const ALERT_STATUS = { PENDING_PAYMENT: "Waiting for payment", CONFIRMED: "Confirmed", PREPARING: "Preparing", READY: "Ready for pickup", COMPLETED: "Picked up", CANCELLED: "Cancelled", REFUNDED: "Refunded" };
+function Notifications() {
+  const [alerts, setAlerts] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => api("/customer/notifications").then((d) => {
+      if (mounted) { setAlerts(d.alerts); setErr(""); }
+    }).catch((e) => { if (mounted) setErr(e.message); });
+    refresh();
+    const timer = setInterval(refresh, 10000);
+    return () => { mounted = false; clearInterval(timer); };
+  }, [retry]);
+  const markRead = async (id) => {
+    setBusy(id);
+    try {
+      await post(`/customer/notifications/${id}/read`, {});
+      const d = await api("/customer/notifications");
+      setAlerts(d.alerts); setErr("");
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(null); }
+  };
+  return html`<div className="history screen notifications"><div className="body">
+    <div className="intro"><p>Order status updates</p><h2>Notifications</h2></div>
+    ${err && html`<div role="alert"><p>${err}</p><button onClick=${() => setRetry((n) => n + 1)}>Retry</button></div>`}
+    ${alerts === null && !err && html`<p role="status">Loading notifications…</p>`}
+    ${alerts && !alerts.length && html`<div className="empty-state"><div><h3>No notifications yet</h3><p>Your order status updates will appear here.</p></div></div>`}
+    ${alerts && alerts.map((a) => html`<article key=${a.id} className=${"order-card notification" + (a.readAt ? "" : " unread")}>
+      <div className="main"><div className="top"><h3>${a.orderNumber ? "Order #" + a.orderNumber : "Order " + a.orderId}</h3>
+        <span className="badge">${a.readAt ? "Read" : "Unread"}</span></div>
+        <p>${ALERT_STATUS[a.status] || a.status}</p><p className="meta">${fmt(a.createdAt)}</p></div>
+      ${!a.readAt && html`<button disabled=${busy !== null} onClick=${() => markRead(a.id)} aria-label=${"Mark notification " + a.id + " as read"}>${busy === a.id ? "Saving…" : "Mark as read"}</button>`}
+    </article>`)}
+  </div></div>`;
+}
+
 function OrderHistory({ businessName, memberInfo, onBackToMenu, onExit, onOpenOrder }) {
   const [orders, setOrders] = useState(null);
   const [err, setErr] = useState("");
@@ -732,12 +770,14 @@ function App() {
   if (!ctx || !catalog || !memberInfo) return html`<div className="loading">Loading…</div>`;
 
   // Everything sits in the navigation's shell: the menu beside (or above, on a phone) the page
-  const current = view === "history" || view === "order" ? "orders" : view === "rewards" ? "rewards" : "menu";
+  const current = view === "history" || view === "order" ? "orders" : view === "rewards" ? "rewards" : view === "notifications" ? "notifications" : "menu";
   const shell = (content) => html`<div className="shell">
     <${CustomerNav} businessName=${ctx.businessName} locationName=${ctx.locationName} memberInfo=${memberInfo} current=${current}
-      onMenu=${() => setView("menu")} onOrders=${() => setView("history")} onRewards=${() => setView("rewards")} onExit=${signOut} />
+      onNotifications=${() => setView("notifications")} onMenu=${() => setView("menu")} onOrders=${() => setView("history")} onRewards=${() => setView("rewards")} onExit=${signOut} />
     <main className="page">${content}</main>
     ${active && !(view === "order" && openOrderId === active.id) && html`<${StatusIsland} order=${active} onOpen=${() => { setOpenOrderId(active.id); setView("order"); }} />`}</div>`;
+
+  if (view === "notifications") return shell(html`<${Notifications} />`);
 
   if (view === "history") return shell(html`
     <${OrderHistory} businessName=${ctx.businessName} memberInfo=${memberInfo}

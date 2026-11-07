@@ -36,6 +36,7 @@ BEGIN
             WHEN 'LoyaltyTransaction' THEN NULL
             WHEN 'InventoryTransaction' THEN 'INSERT'
             WHEN 'LowStockAlert' THEN 'INSERT'
+            WHEN 'OrderStatusAlert' THEN 'UPDATE (ReadAt)'
             WHEN 'ApprovalAction' THEN 'INSERT (ApprovalActionID, BusinessID, ActorEmployeeID, ApproverEmployeeID, LocationID, ActionType, TargetID, Payload)'
             WHEN 'NotificationQueue' THEN 'UPDATE (Status, Error, ProcessedAt)'
             WHEN 'PayPeriod' THEN 'UPDATE (Closed)'

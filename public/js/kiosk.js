@@ -3,7 +3,17 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 const IMG_ROTATION = [1,2,3,4,5,6];
-const productImg = (idx) => `/img/kiosk/product-${IMG_ROTATION[idx % 6]}.jpg`;
+const PRODUCT_IMAGES = {
+  americano: "/img/kiosk/americano.png",
+  latte: "/img/kiosk/product-2.jpg",
+  "chai latte": "/img/kiosk/chai-latte.png",
+  "blueberry muffin": "/img/kiosk/blueberry-muffin.png",
+  "house blend, whole bean": "/img/kiosk/coffee-beans.png",
+  "house blend 12 oz bag": "/img/kiosk/coffee-beans.png",
+  "bag of coffee beans": "/img/kiosk/coffee-beans.png",
+};
+const productImg = (product, idx) => PRODUCT_IMAGES[product.name.trim().toLowerCase()]
+  || `/img/kiosk/product-${IMG_ROTATION[idx % 6]}.jpg`;
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 const fmt = (iso, tz) => iso ? new Date(iso).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:tz }) : "";
 // crypto.randomUUID exists only on HTTPS or localhost; an iPad on plain http://<lan-ip> has just getRandomValues
@@ -499,7 +509,7 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
   const addItem = (item) => { onAddItem(item); setCustomizing(null); };
 
 
-  const customizeEl = customizing && html`<${Customize} product=${customizing} img=${customizing.hasPhoto ? `/api/customer/products/${customizing.id}/photo` : productImg(available.indexOf(customizing))}
+  const customizeEl = customizing && html`<${Customize} product=${customizing} img=${customizing.hasPhoto ? `/api/customer/products/${customizing.id}/photo` : productImg(customizing, available.indexOf(customizing))}
       onAdd=${addItem} onCancel=${() => setCustomizing(null)} />`;
   const checkoutEl = checkoutOpen && html`<${Checkout} businessName=${businessName} cart=${cart} memberInfo=${memberInfo} locationName=${locationName} payHere=${payHere}
       note=${note} onNoteChange=${setNote}
@@ -523,7 +533,7 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
               ${list.map((p) => html`
                 <article key=${p.id} className="tile">
                   <button className="pick" aria-label=${"Add " + p.name} onClick=${() => setCustomizing(p)}>
-                    <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(available.indexOf(p))} alt="" loading="lazy" />
+                    <img src=${p.hasPhoto ? `/api/customer/products/${p.id}/photo` : productImg(p, available.indexOf(p))} alt="" loading="lazy" />
                     <h3>${p.name}</h3>
                   </button>
                 </article>`)}

@@ -1,7 +1,6 @@
 // Reports: one page, a tab per report. Each tab has its filters, Run report, four summary cards, and a table with a Total row.
 const TABS = [["revenue", "Revenue"], ["top-sellers", "Top sellers"], ["labor", "Labor cost"], ["losses", "Stock losses"], ["customers", "Customers"]];
 const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "revenue"; };
-const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const weekday = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { weekday: "short", timeZone: "UTC" });
 const shortDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
 const query = (o) => new URLSearchParams(o).toString();
@@ -40,26 +39,35 @@ function BarChart({ title, bars, best, className = "" }) {
   </figure>`;
 }
 
-// A tab's filters and its last result. The report runs once on opening, then on Run report.
-// run(patch) changes filters and runs at once (a toggle); refresh() runs the last report again, not unsaved edits.
 function useReport(path, initial) {
   const [filters, setFilters] = useState(initial);
   const [report, setReport] = useState(null);
   const [msg, setMsg] = useState(null);
-  const [busy, setBusy] = useState(true); // the mount effect runs a report at once
-  const applied = useRef(initial);
+  const [busy, setBusy] = useState(false);
+  const applied = useRef(null);
   const go = useCallback(async (f) => {
-    applied.current = f;
     setBusy(true); setMsg(null);
-    try { setReport(await api(`/reports/${path}?${query(f)}`)); }
+    try {
+      const result = await api(`/reports/${path}?${query(f)}`);
+      applied.current = f;
+      setReport(result);
+    }
     catch (e) { setMsg({ kind: "error", text: e.message }); }
     setBusy(false);
   }, [path]);
-  useEffect(() => { go(initial); }, []);
-  const run = (patch) => { const f = { ...filters, ...patch }; if (patch) setFilters(f); return go(f); };
-  return { filters, set: (patch) => setFilters({ ...filters, ...patch }), report, msg, busy, run, refresh: useCallback(() => go(applied.current), [go]) };
+  const run = () => {
+    const validDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
+    let error;
+    if ("day" in filters && !validDate(filters.day)) error = "Enter a valid Day.";
+    else if ("from" in filters && (!validDate(filters.from) || !validDate(filters.to))) error = "Enter valid From and To dates.";
+    else if ("from" in filters && filters.from > filters.to) error = "From must not be later than To.";
+    else if ("period" in filters && !filters.period) error = "Select a pay period.";
+    if (error) { setMsg({ kind: "error", text: error }); return; }
+    return go({ ...filters });
+  };
+  return { filters, set: (patch) => setFilters({ ...filters, ...patch }), report, msg, busy, run,
+    refresh: useCallback(() => applied.current && go(applied.current), [go]) };
 }
-
 // From and To, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
 function Filters({ r, options, dates = true, first, children }) {
   return html`<${React.Fragment}>
@@ -70,9 +78,10 @@ function Filters({ r, options, dates = true, first, children }) {
       ${children}
       <button className="pbtn" type="submit" disabled=${r.busy}>Run report</button>
     </form>
-    ${r.msg && html`<${Message} msg=${r.msg} />`}<//>`;
+    ${r.msg && html`<${Message} msg=${r.msg} />`}
+    ${!r.report && !r.busy && html`<p className="sub" role="status">Enter report parameters and click Run report.</p>`}<//>`;
 }
-const lastWeek = (options) => ({ from: addDays(options.today, -6), to: options.today, location: options.location });
+const dateFilters = (options) => ({ from: "", to: "", location: options.location });
 const units = (n) => String(Math.round(n * 1000) / 1000);
 const percent = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
@@ -86,11 +95,10 @@ const NOTE = { hour: "Hours run from the first sale to the last.", day: "A live 
 const labelOf = (by, k) => (by === "hour" ? hourOf(k) : by === "day" ? `${weekday(k)} ${shortDay(k)}`
   : by === "month" ? new Date(`${k}-01T00:00:00Z`).toLocaleDateString([], { month: "short", year: "numeric", timeZone: "UTC" }) : k);
 
-// The group-by buttons: each runs the report at once
 function GroupBy({ r, options }) {
   return html`<div className="tabs thin" role="group" aria-label="Group by">
     ${options.map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${r.filters.by === k} disabled=${r.busy}
-      onClick=${() => r.run({ by: k })}>${l}</button>`)}</div>`;
+      onClick=${() => r.set({ by: k })}>${l}</button>`)}</div>`;
 }
 
 // Cards, chart and table for one report
@@ -126,7 +134,7 @@ function RevenueReport({ report, live }) {
 }
 
 function LiveSales({ options }) {
-  const r = useReport("revenue", { day: options.today, location: options.location, by: "hour" });
+  const r = useReport("revenue", { day: "", location: options.location, by: "hour" });
   const { report } = r;
   const live = report?.isToday;
   useEffect(() => {
@@ -145,7 +153,7 @@ function LiveSales({ options }) {
 }
 
 function RevenueHistory({ options }) {
-  const r = useReport("revenue", { from: addDays(options.today, -29), to: options.today, location: options.location, by: "day" });
+  const r = useReport("revenue", { from: "", to: "", location: options.location, by: "day" });
   const { report } = r;
   return html`<section className="pview report" aria-label="Revenue history">
     <${Filters} r=${r} options=${options} />
@@ -165,7 +173,7 @@ function Revenue({ options }) {
 
 // 2. Top sellers: one ranking, with Category as a column and a filter
 function TopSellers({ options }) {
-  const r = useReport("top-sellers", { ...lastWeek(options), category: "" });
+  const r = useReport("top-sellers", { ...dateFilters(options), category: "" });
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   const costs = report?.seesCosts;
@@ -205,12 +213,13 @@ const rateText = (x) => (!x.rates.length ? "—" : x.rates.length === 1 ? money(
 const LaborCost = ({ options }) => (options.seesLabor ? html`<${LaborReport} options=${options} />`
   : html`<p className="success" role="status">Labor cost needs permission to see team timecards.</p>`);
 function LaborReport({ options }) {
-  const r = useReport("labor", { period: options.payPeriod || "", location: options.location });
+  const r = useReport("labor", { period: "", location: options.location });
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   return html`<section className="pview report" aria-label="Labor cost">
     <${Filters} r=${r} options=${options} dates=${false} first=${html`<label className="pf"><b>Pay period</b>
       <select className="select" aria-label="Pay period" value=${r.filters.period} onChange=${(e) => r.set({ period: e.target.value })}>
+        <option value="">Select a pay period</option>
         ${options.payPeriods.map((p) => html`<option key=${p.id} value=${p.id}>${dayOf(p.start)} to ${dayOf(p.end)}${p.closed ? " (closed)" : ""}</option>`)}</select></label>`} />
     ${report && html`<${React.Fragment}>
       <${SubTabs} tabs=${[["summary", "Summary"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
@@ -234,7 +243,7 @@ function LaborReport({ options }) {
 
 // 4. Stock losses: by item and reason. Amounts are in each item's own unit, so only Reports and Cost have a total.
 function StockLosses({ options }) {
-  const r = useReport("losses", { ...lastWeek(options), reason: "" });
+  const r = useReport("losses", { ...dateFilters(options), reason: "" });
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   const costs = report?.seesCosts;
@@ -268,7 +277,7 @@ function StockLosses({ options }) {
 // The tip is CSS on the header's data-tip, not an element inside it: phone cards take their labels from the header's text.
 const SCORE_HEADS = [["Recency", "How recently they ordered (5 = most recent)"], ["Frequency", "How often they order (5 = most often)"], ["Spend", "How much they spend (5 = highest)"]];
 function Customers({ options }) {
-  const r = useReport("customers", { from: addDays(options.today, -89), to: options.today, location: options.location, tier: "" });
+  const r = useReport("customers", { from: "", to: "", location: options.location, tier: "" });
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const { report } = r;
   return html`<section className="pview report" aria-label="Customers">

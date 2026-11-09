@@ -60,7 +60,7 @@ function RefundView({ onExit, orderNumber, onDone }) {
     setBusy(false);
   };
 
-  // No manager at hand: the refund waits for one (it shows on their Needs attention page)
+  // No manager at hand: the refund waits for one (it shows on their Manager To-Do page)
   const ask = async () => {
     setBusy(true);
     try {
@@ -119,7 +119,7 @@ function RefundView({ onExit, orderNumber, onDone }) {
         <${ManagerFields} number=${number} pin=${pin} setNumber=${setNumber} setPin=${setPin} /></div>
       <${Message} msg=${msg} dashed />
       <button className="btn block" disabled=${busy || !found || !chosen.length || !reason.trim() || chosen.some((l) => qtyOf(l) < 1)} onClick=${ask}>Send to a manager</button>
-      <p className="sub">No manager here? Send it, and they approve it from Needs attention.</p>
+      <p className="sub">No manager here? Send it, and they approve it from Manager To-Do.</p>
       <div className="btns">
         <button className="btn primary" disabled=${busy || !found || !chosen.length || !reason.trim() || chosen.some((l) => qtyOf(l) < 1)} onClick=${complete}>Complete refund</button>
         <button className="btn" onClick=${onExit}>Cancel</button></div>

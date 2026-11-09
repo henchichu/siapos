@@ -118,7 +118,7 @@ function Team({ onNotice }) {
     const q = new URLSearchParams(filters).toString();
     return api(`/team/timecards?${q}`).then((d) => { setData(d); setDraft(d.selected); }).catch((e) => onNotice(e.message, "error"));
   }, []);
-  useEffect(() => { load({ status: "SUBMITTED", payPeriodId: new URLSearchParams(window.location.search).get("payPeriodId") || "" }); }, [load]); // ?payPeriodId= comes from Needs attention
+  useEffect(() => { load({ status: "SUBMITTED", payPeriodId: new URLSearchParams(window.location.search).get("payPeriodId") || "" }); }, [load]); // ?payPeriodId= comes from Manager To-Do
 
   const run = async (path, body, okText) => {
     try { const r = await api(path, body || {}); onNotice(okText ? okText(r) : r.message); }

@@ -49,6 +49,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.block { width: 100%; }
 .link:hover { text-decoration: underline; }
 .status { color: var(--ok); }
+.status.sale-done { display: flex; align-items: center; gap: 14px; margin: 12px 0; padding: 14px 18px; border: 1.5px solid #bfe3cb; border-left: 6px solid var(--ok); border-radius: 12px;
+  background: #eefaf2; color: #0f4d29; font-size: 18px; font-weight: 600; box-shadow: 0 4px 14px rgba(23, 112, 58, .12); animation: sale-in .25s ease-out; }
+.status.sale-done::before { content: "✓"; content: "✓" / ""; flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 18px; font-weight: 700; }
+@keyframes sale-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .status.sale-done { animation: none; } }
 
 /* Current order */
 .order { width: 360px; flex: none; display: flex; flex-direction: column; gap: 16px; padding: 24px; min-height: 0; overflow: hidden; animation: slide-in 0.25s ease-out;

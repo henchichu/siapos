@@ -60,3 +60,108 @@
   .table.fit.rfm th.r { white-space: normal; } /* Days since stacks; amounts below it never do */
   .table.fit.rfm td:first-child { overflow-wrap: anywhere; } /* only a customer's name may break mid-word */
 }
+
+/* Card figures stay on one line and shrink with the card (cqi: the card's own width); the ▲/▼ change sits under them */
+.rcard { container-type: inline-size; }
+.rcards .rcard b.fig { white-space: nowrap; overflow-wrap: normal; font-size: clamp(16px, 17cqi, 28px); }
+.rcards.wide { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+.change { font-size: 12px; font-weight: 600; color: var(--text-2); line-height: 1.3; }
+.change span { font-weight: 400; }
+.change.good { color: var(--ok); }
+.change.bad { color: var(--red); }
+.rcards:not(:has(> .dark)) > .rcard:first-child .change, .rcard.dark .change { color: #F3E6D8; }
+
+/* Breakdown panels: two columns on a laptop, one on a phone */
+.rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.rpanel figcaption { flex-wrap: wrap; }
+.rpanel .tabs { padding: 0; }
+.rpanel .note { margin: 0; font-size: 13px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--text-2); }
+.swatches i, .dlegend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; flex: none; }
+
+/* Horizontal bars: name and figure above, the bar under them, a second line of detail below */
+.hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name val" "track track" "extra extra"; gap: 4px 12px; width: 100%; padding: 6px 8px; border-radius: 8px; }
+.hrow.pick { border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.hrow.pick:hover, .hrow.pick:focus-visible { background: var(--hover); }
+.hrow.pick:focus-visible { outline: 2px solid var(--navy); outline-offset: 0; }
+.hname { grid-area: name; font-size: 14px; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.hval { grid-area: val; font-size: 14px; font-weight: 600; color: var(--navy); white-space: nowrap; }
+.htrack { grid-area: track; height: 12px; background: var(--hover); border-radius: 6px; overflow: hidden; }
+.hbar { display: flex; height: 100%; background: var(--navy); border-radius: 6px; }
+.hbar.neg { background: var(--red); }
+.hbar:has(.hpart) { background: none; }
+.hpart { flex-basis: 0; min-width: 0; }
+.hextra { grid-area: extra; font-size: 12px; color: var(--text-2); }
+
+/* Donut: the ring and its total, the legend beside it (under it on a narrow panel) */
+.donut { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.donut svg { width: 160px; height: 160px; flex: none; }
+.donut .dtotal { font-size: 5px; font-weight: 700; fill: var(--navy); }
+.donut .dcap { font-size: 3px; fill: var(--text-2); }
+.dlegend { list-style: none; margin: 0; padding: 0; flex: 1 1 200px; display: flex; flex-direction: column; gap: 8px; }
+.dlegend li { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; }
+.dlegend .hname { flex: 1 1 auto; }
+
+/* Waterfall: totals stand on the baseline, each step floats from the level before it */
+.wplot { display: flex; gap: 8px; height: 240px; }
+.wcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.wslot { flex: 1; position: relative; margin-top: 22px; border-bottom: 1px solid var(--border); }
+.wbar { position: absolute; left: 50%; transform: translateX(-50%); width: 70%; max-width: 72px; background: var(--navy); border-radius: 4px; }
+.wbar.off { background: var(--cyan); }
+.wval { position: absolute; left: 50%; transform: translateX(-50%); margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.wlbl { padding-top: 6px; min-height: 36px; font-size: 12px; color: var(--text-2); text-align: center; line-height: 1.25; }
+
+/* Top sellers: a product opens to show what goes into it */
+.rowopen { border: 0; background: none; padding: 0; font: inherit; color: var(--navy); font-weight: 600; text-align: left; cursor: pointer; }
+.rowopen:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; border-radius: 4px; }
+.table tr.ingr > td { background: var(--page); }
+.mini { width: 100%; max-width: 560px; border-collapse: collapse; font-size: 13px; }
+.mini th { text-align: left; font-weight: 600; color: var(--text-2); padding: 4px 8px; background: none; }
+.mini td { padding: 4px 8px; border-top: 1px solid var(--border); }
+.mini .r { text-align: right; }
+.mini tfoot td { font-weight: 600; }
+
+@media (max-width: 900px) { .rgrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .rcards.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wplot { gap: 4px; }
+  .wval { font-size: 11px; }
+  @media (max-width: 420px) { .wval { font-size: 10px; } }
+  .wlbl { font-size: 11px; }
+  .donut { justify-content: center; }
+  /* the ingredient list keeps its own table layout inside a phone's row card */
+  .table.fit.rowcards .mini, .table.fit.rowcards .mini tbody, .table.fit.rowcards .mini tfoot { display: table-row-group; }
+  .table.fit.rowcards .mini { display: table; }
+  .table.fit.rowcards .mini thead { position: static; width: auto; height: auto; overflow: visible; clip: auto; display: table-header-group; }
+  .table.fit.rowcards .mini tr { display: table-row; border: 0; padding: 0; margin: 0; background: none; }
+  .table.fit.rowcards .mini td, .table.fit.rowcards .mini th { display: table-cell; width: auto; padding: 4px 6px; text-align: left; border-top: 1px solid var(--border); }
+  .table.fit.rowcards .mini .r { text-align: right; }
+  .table.fit.rowcards .mini td::before { content: none; }
+}
+
+/* Customers: clickable donut slices, score strips, the segment chip and a customer's orders */
+.donut circle.pickable { cursor: pointer; }
+.dpick { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; width: 100%; padding: 4px 6px; border: 0; border-radius: 8px; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.dpick:hover, .dpick:focus-visible, .dpick[aria-pressed="true"] { background: var(--hover); }
+.dpick:focus-visible { outline: 2px solid var(--navy); }
+.dpick .hname { flex: 1 1 auto; }
+.strip { display: flex; flex-direction: column; gap: 6px; }
+.strip h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+.strip h4 .sub { font-weight: 400; font-size: 12px; }
+.sbars { display: flex; align-items: flex-end; gap: 2px; height: 72px; border-bottom: 1px solid var(--border); }
+.sbar { flex: 1 1 0; min-width: 3px; max-width: 40px; border-radius: 3px 3px 0 0; }
+.cuts { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-2); }
+.cuts b { flex-basis: 100%; font-weight: 600; }
+.cuts i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.chips { margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 14px; border: 1.5px solid var(--navy); border-radius: 999px; background: var(--card); color: var(--navy); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.chip:hover, .chip:focus-visible { background: var(--hover); }
+.table tr.sel > td { background: var(--hover); }
+.cdetail { display: flex; flex-direction: column; gap: 12px; }
+.cdetail .csum { margin: 0; font-size: 14px; }
+.cdetail h4 { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.cgrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.cgrid .mini { max-width: none; }
+.favs { margin: 0; padding-left: 20px; font-size: 13px; }
+@media (max-width: 900px) { .cgrid { grid-template-columns: minmax(0, 1fr); } }

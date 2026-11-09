@@ -59,6 +59,26 @@ test("every day in the range has a row, and the rows and cards agree", async () 
   assert.equal(all.rows.at(-1).runningNet, all.total.net);
 });
 
+test("every breakdown panel adds up to its card, to the cent", async () => {
+  const { today } = (await maya.call("/reports/options")).body;
+  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 13 * 864e5).toISOString().slice(0, 10);
+  for (const body of [await report(maya, { from, to: today }), await live(maya, { day: today })]) {
+    const { cards: c, breakdown: b } = body;
+    const sum = (list, k = "value") => list.reduce((a, x) => a + x[k], 0);
+    assert.equal(sum(b.channels), c.net, "net by channel");
+    assert.equal(sum(b.payments), c.net, "net by payment method");
+    assert.equal(sum(b.categories), c.gross, "gross by category");
+    assert.equal(sum(b.categories, "base") + sum(b.categories, "addons"), c.gross, "base plus add-ons");
+    assert.equal(sum(b.discounts), c.discounts, "discounts by promotion");
+    assert.equal(sum(b.refunds), c.refunds, "refunds by reason");
+    assert.equal(sum(b.ingredients), c.cost, "cost by ingredient");
+    assert.equal(sum(b.profit), c.profit, "profit by category");
+    assert.equal(sum(b.profit, "net"), c.net, "net by category");
+    assert.equal(c.avgOrder, c.orders ? Math.round(c.net / c.orders) : 0);
+    assert.ok(body.previous.cards && "net" in body.previous.cards, "the last period's cards");
+  }
+});
+
 const top = async (c, q) => { const r = await c.call(`/reports/top-sellers?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };
 
 test("Top sellers: one ranking by units sold, matching what was sold", async () => {
@@ -375,6 +395,15 @@ test("Customers: a partial refund lowers spend; refunded in full, the order stop
   await back(found.lines[0]);
   const part = await ava();
   assert.deepEqual([part.orders - before.orders, part.spend - before.spend], [1, 525], "one latte back");
+  // with a partial refund in it, her breakdowns and her drill-down still come to her row
+  const report = await customers(maya, q);
+  const bar = report.breakdown.byCustomer.find((c) => c.key === "cus-ava");
+  assert.equal(bar.value, part.spend);
+  assert.equal(bar.parts.reduce((a, p) => a + p.value, 0), part.spend, "her spend by category, the refund taken off");
+  const detail = (await maya.call(`/reports/customers/cus-ava?${new URLSearchParams(q)}`)).body;
+  assert.deepEqual([detail.totals.orders, detail.totals.spend], [part.orders, part.spend]);
+  assert.equal(detail.byCategory.reduce((a, c) => a + c.value, 0), part.spend);
+  assert.equal(detail.orders.find((o) => o.number === sale.body.orderNumber).refunded, 525);
   await back(found.lines[1]);
   const none = await ava();
   assert.deepEqual([none.orders, none.spend], [before.orders, before.spend], "as if it never happened");

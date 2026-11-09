@@ -422,7 +422,7 @@ function App() {
     body = html`
       <${React.Fragment}>
         <div style=${{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          ${notice && html`<p className="status" role="status" style=${{ paddingTop: 12 }}>${notice}</p>`}
+          ${notice && html`<p className="status sale-done" role="status">${notice}</p>`}
           <${Products} catalog=${catalog} selectedId=${selectedId} onPick=${pick} onCustomize=${(p) => setModal({ type: "customize", product: p })}
             search=${search} setSearch=${setSearch} category=${category} setCategory=${setCategory}
             showRefund=${!cart.length} onRefund=${() => go("refund")} onKiosk=${() => setModal({ type: "kiosk" })} />

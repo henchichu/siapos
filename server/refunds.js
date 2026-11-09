@@ -223,7 +223,7 @@ router.post("/refunds", async (req, res) => {
 
 // ---- asking a manager, and the manager's answer ----------------------------------------------------------------------
 
-// A cashier with no manager at hand asks instead: the refund waits, and shows on the manager's Needs attention page
+// A cashier with no manager at hand asks instead: the refund waits, and shows on the manager's Manager To-Do page
 router.post("/refunds/request", async (req, res) => {
   const { reason, wanted } = readRefundBody(req.body);
   const out = await pool.tx((conn) => recordRefund(conn, { session: req.session, orderId: req.body.orderId, wanted, reason, pending: true }));

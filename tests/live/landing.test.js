@@ -1,5 +1,5 @@
-// Needs the dev database. Each role opens to a page by what it holds: Needs attention if it can see it, else the page its
-// OpensTo names; the menu lists Needs attention first; and the menu's counts match the pages they stand for.
+// Needs the dev database. Each role opens to a page by what it holds: Manager To-Do if it can see it, else the page its
+// OpensTo names; the menu lists Manager To-Do first; and the menu's counts match the pages they stand for.
 process.env.RATE_LIMIT_SCALE = "50";
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -14,14 +14,14 @@ const at = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }
 test.before(async () => { env = await start(); });
 test.after(async () => { env.server.close(); await pool.end(); });
 
-test("managers open to Needs attention; servers to Register; baristas to Kitchen; the Home page is gone", async () => {
+test("managers open to Manager To-Do; servers to Register; baristas to Kitchen; the Home page is gone", async () => {
   const expect = { "10420001": "/attention.html", "10420002": "/attention.html", "10420006": "/attention.html", "10420003": "/register.html", "10420004": "/register.html", "10420005": "/kitchen.html" };
   for (const [number, page] of Object.entries(expect)) {
     const c = await signIn(number);
     const me = (await c.call("/session")).body;
     assert.deepEqual([c.redirect, me.home], [page, page], number);
     assert.equal((await at(c, "/")).headers.get("location"), page, "the root goes there too");
-    if (me.nav.includes("Needs attention")) assert.equal(me.nav[0], "Needs attention", "and it is first in the menu");
+    if (me.nav.includes("Manager To-Do")) assert.equal(me.nav[0], "Manager To-Do", "and it is first in the menu");
   }
   assert.equal((await at(await signIn("10420001"), "/home.html")).status, 404);
 });
@@ -46,11 +46,11 @@ test("the menu's counts match what the pages list, and a role only gets the coun
     const q = (await maya.call("/kitchen/tickets")).body.queues;
     assert.equal(m.kitchen, q.new.length + q.preparing.length + q.ready.length, "Kitchen: every ticket not yet picked up");
     const a = (await maya.call("/attention")).body;
-    assert.equal(m.attention, ["losses", "reorder", "timecards", "refunds"].reduce((n, k) => n + (a[k]?.count || 0), 0), "Needs attention: the sum of its panels");
+    assert.equal(m.attention, ["losses", "reorder", "timecards", "refunds"].reduce((n, k) => n + (a[k]?.count || 0), 0), "Manager To-Do: the sum of its panels");
 
     const s = (await sam.call("/nav-counts")).body;
     assert.equal(s.register, pending);
-    assert.equal("attention" in s, false, "a server has no Needs attention");
+    assert.equal("attention" in s, false, "a server has no Manager To-Do");
     const j = (await jordan.call("/nav-counts")).body;
     assert.equal("register" in j, false, "a barista has no Register");
     assert.equal(typeof j.kitchen, "number");

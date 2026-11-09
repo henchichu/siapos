@@ -18,7 +18,7 @@ const VISITS = [2, 3, 4, 5]; // PAID without refunded: an order refunded in full
 const REFUND_DONE = 2;
 const SALE = 2;
 const TIPPED = [2, 3, 5]; // authorized, completed, refunded payments: not pending or failed
-// The stock losses staff report, under the names Needs attention uses. Count corrections and adjustments aren't losses.
+// The stock losses staff report, under the names Manager To-Do uses. Count corrections and adjustments aren't losses.
 const REASONS = { broken: 5, spoiled: 6, stolen: 7 }; // the same keys the Inventory page sends
 const MAX_DAYS = 366, MAX_REVENUE_DAYS = 3660; // Revenue history may span years
 

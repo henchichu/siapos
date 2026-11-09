@@ -23,7 +23,7 @@ const ask = (s, who = sam, extra = {}) => who.call("/refunds/request", { orderId
 test.before(async () => { env = await start(); await topUp("stk-croissant", 60, "loc-downtown"); manager = await signIn("10420001", "111111"); sam = await signIn("10420003", "333333"); jordan = await signIn("10420005", "555555"); maya = await signIn("10420001", "111111"); });
 test.after(async () => { env.server.close(); await pool.end(); });
 
-test("only roles with something to act on see Needs attention", async () => {
+test("only roles with something to act on see Manager To-Do", async () => {
   assert.equal((await sam.call("/attention")).status, 403);
   assert.equal((await jordan.call("/attention")).status, 403);
   assert.equal((await page(sam, "/attention.html")).headers.get("location"), "/register.html");

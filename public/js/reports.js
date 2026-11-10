@@ -247,6 +247,8 @@ function Breakdown({ report, className, onCategory }) {
 
 // Cards, chart and table for one report
 function RevenueReport({ report, live, onCategory }) {
+  const [expanded, setExpanded] = useState({});
+  const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   const [sub, setSub] = useState("summary"); // the part of the report a phone shows
   const costs = report.seesCosts;
   const by = report.by, unit = UNIT[by];
@@ -272,9 +274,16 @@ function RevenueReport({ report, live, onCategory }) {
       <div className="tscroll"><table className="table mg fit rowcards" aria-label=${`${unit} by ${unit.toLowerCase()}`}>
         <thead><tr><th>${unit}</th><th className="r">Orders</th><th className="r">Gross</th><th className="r">Discounts</th><th className="r">Refunds</th>
           <th className="r">Net sales</th>${costs && html`<${React.Fragment}><th className="r">Cost</th><th className="r">Profit</th><//>`}<th className="r">Running net</th></tr></thead>
-        <tbody>${report.rows.map((x) => html`<tr key=${x.key}>
-          <td>${label(x.key)}</td><td className="r">${x.orders}</td>${cell(x, "gross")}${cell(x, "discounts")}${cell(x, "refunds")}${cell(x, "net")}
-          ${costs && html`<${React.Fragment}>${cell(x, "cost")}${cell(x, "profit")}<//>`}${cell(x, "runningNet")}</tr>`)}
+        <tbody>${report.rows.map((x) => html`<${React.Fragment} key=${x.key}><tr className=${x.orderDetails?.length ? "revenue-toggle" : ""}
+            onClick=${x.orderDetails?.length ? () => toggle(`${by}:${x.key}`) : undefined}>
+          <td>${x.orderDetails?.length ? html`<button type="button" className="link" aria-expanded=${!!expanded[`${by}:${x.key}`]}
+            onClick=${(e) => { e.stopPropagation(); toggle(`${by}:${x.key}`); }}>${label(x.key)}</button>` : label(x.key)}</td><td className="r">${x.orders}</td>${cell(x, "gross")}${cell(x, "discounts")}${cell(x, "refunds")}${cell(x, "net")}
+          ${costs && html`<${React.Fragment}>${cell(x, "cost")}${cell(x, "profit")}<//>`}${cell(x, "runningNet")}</tr>
+          ${(expanded[`${by}:${x.key}`] ? x.orderDetails || [] : []).map((o) => html`<tr key=${o.id} className="revenue-order">
+            <td>Order #${o.number}${!o.orders && html`<span className="sub"> · Refund only</span>`}</td><td className="r">${o.orders}</td>
+            ${cell(o, "gross")}${cell(o, "discounts")}${cell(o, "refunds")}${cell(o, "net")}
+            ${costs && html`<${React.Fragment}>${cell(o, "cost")}${cell(o, "profit")}<//>`}<td></td></tr>`)}
+        <//>`)}
           ${!report.rows.length && html`<tr><td colSpan=${costs ? 9 : 7}>No sales yet.</td></tr>`}</tbody>
         <tfoot><tr><td>Total</td><td className="r">${report.total.orders}</td>${cell(report.total, "gross")}${cell(report.total, "discounts")}${cell(report.total, "refunds")}
           ${cell(report.total, "net")}${costs && html`<${React.Fragment}>${cell(report.total, "cost")}${cell(report.total, "profit")}<//>`}<td></td></tr></tfoot>

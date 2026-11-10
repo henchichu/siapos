@@ -165,3 +165,10 @@
 .cgrid .mini { max-width: none; }
 .favs { margin: 0; padding-left: 20px; font-size: 13px; }
 @media (max-width: 900px) { .cgrid { grid-template-columns: minmax(0, 1fr); } }
+
+.table tr.revenue-order > td { background: var(--page); }
+.table tr.revenue-order > td:first-child { padding-left: 28px; }
+.table tr.revenue-toggle { cursor: pointer; }
+.table tr.revenue-toggle:hover > td, .table tr.revenue-toggle:focus-within > td { background: var(--hover); }
+.revenue-toggle button::after { content: ' ▸'; }
+.revenue-toggle button[aria-expanded=true]::after { content: ' ▾'; }

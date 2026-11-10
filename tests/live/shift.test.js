@@ -24,7 +24,7 @@ test("the menu and the pages a role may open follow its role, fixed at sign-in",
   const menus = {
     jordan: ["Kitchen", "My shift"],
     sam: ["Register", "Kitchen", "Rewards", "Products", "My shift"],
-    leo: ["Manager To-Do", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "Reports", "My shift"],
+    leo: ["Manager's To-Do List", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "Reports", "My shift"],
   };
   const jordan = await signIn("10420005", "555555"), sam = await signIn("10420003", "333333"), leo = await signIn("10420002", "222222"), maya = await signIn("10420001", "111111");
   assert.deepEqual((await jordan.call("/session")).body.nav, menus.jordan);

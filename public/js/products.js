@@ -298,8 +298,13 @@ function PromotionsTab({ data, reload }) {
   const show = (f) => { setForm(f); setMsg(null); setNote(""); setOpen(true); };
   const rows = data.promotions.filter((p) => showEnded || p.status !== "Ended");
   const off = (p) => (p.kind === "percent" ? `${p.value}% off` : `$${p.value.toFixed(2)} off`);
+  const cheapest = data.products.filter((p) => form.productIds.includes(p.id) && p.minPrice != null)
+    .sort((a, b) => Number(a.minPrice) - Number(b.minPrice))[0];
+  const tooMuch = form.kind === "amount" && cheapest && Math.round(Number(form.value) * 100) > Math.round(Number(cheapest.minPrice) * 100);
+  const valueError = tooMuch ? `The discount can't exceed $${Number(cheapest.minPrice).toFixed(2)}, the lowest size price of ${cheapest.name}.` : "";
 
   const save = async () => {
+    if (tooMuch) { setMsg({ kind: "error", text: valueError }); return; }
     try {
       await api(form.id ? `/promotions/${form.id}` : "/promotions", { name: form.name, kind: form.kind, value: form.value, starts: form.starts, ends: form.ends, productIds: form.productIds });
       setNote(`Saved ${form.name.trim()}.`); close(); await reload();
@@ -332,8 +337,9 @@ function PromotionsTab({ data, reload }) {
       <div className="row2"><label className="pf grow"><b>Starts</b><input className="field date" type="date" value=${form.starts} onChange=${(e) => setForm({ ...form, starts: e.target.value })} /></label>
         <label className="pf grow"><b>Ends</b><input className="field date" type="date" value=${form.ends} onChange=${(e) => setForm({ ...form, ends: e.target.value })} /></label></div>
       <div className="pf"><b>Applies to products</b><${Multi} options=${data.products} value=${form.productIds} onChange=${(v) => setForm({ ...form, productIds: v })} empty="[one or more products]" /></div>
+      ${tooMuch && html`<p className="status" role="alert">${valueError}</p>`}
       <${Message} msg=${msg} dashed />
-      <div className="pactions"><button className="pbtn" onClick=${save}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
+      <div className="pactions"><button className="pbtn" disabled=${!!tooMuch} onClick=${save}>Save</button><button className="pbtn outline" onClick=${close}>Clear</button></div>
     <//>`}
   </div>`;
 }

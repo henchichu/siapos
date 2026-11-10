@@ -166,6 +166,20 @@ test("promotions: validate, add, edit, end, show ended", async () => {
   assert.equal((await promo({ productIds: [] })).status, 400);
   assert.equal((await promo({ productIds: ["prd-nope"] })).status, 404);
   assert.equal((await sam.call("/promotions", {})).status, 403);
+  const excessive = await promo({ kind: "amount", value: "3.76" });
+  assert.equal(excessive.status, 400, "fixed discount cannot exceed the cheapest active size");
+  assert.match(excessive.body.error, /3\.75/);
+  const exact = await promo({ kind: "amount", value: "3.75" });
+  assert.equal(exact.status, 200, "a discount equal to the item price is allowed");
+  created.promotions.push(exact.body.id);
+  const tooLargeEdit = await leo.call(`/promotions/${exact.body.id}`, {
+    name: `Test boundary ${stamp}`, kind: "amount", value: "3.76", starts: today, ends: week, productIds: [global.productId, "prd-latte"]
+  });
+  assert.equal(tooLargeEdit.status, 400, "every selected product must cover the fixed discount");
+  const unchanged = (await leo.call("/promotions")).body.promotions.find((p) => p.id === exact.body.id);
+  assert.equal(unchanged.value, 3.75, "a rejected edit leaves the saved value unchanged");
+  assert.deepEqual(unchanged.productIds, [global.productId]);
+  assert.equal((await leo.call(`/promotions/${exact.body.id}/end`, {})).status, 200);
 
   const running = await promo({});
   const scheduled = await promo({ name: `Test later ${stamp}`, kind: "amount", value: "2.50", starts: later, ends: later2 });

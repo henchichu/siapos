@@ -1293,6 +1293,42 @@ CREATE TABLE IF NOT EXISTS Payment (
     INDEX IX_Payment_TipLockedAt (TipLockedAt)
 ) ENGINE=InnoDB;
 
+-- Application logic must keep total allocations within the available payment tip,
+-- accounting for tip refunds, and allocate only successfully collected tips.
+CREATE TABLE IF NOT EXISTS TipAllocation (
+    PaymentID CHAR(36) NOT NULL,
+    OrderID CHAR(36) NOT NULL,
+    BusinessID CHAR(36) NOT NULL,
+    EmployeeID CHAR(36) NOT NULL,
+    Amount DECIMAL(10,2) NOT NULL,
+
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (PaymentID, EmployeeID),
+
+    CONSTRAINT FK_TipAllocation_Payment
+        FOREIGN KEY (PaymentID, OrderID)
+        REFERENCES Payment(PaymentID, OrderID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TipAllocation_Order
+        FOREIGN KEY (OrderID, BusinessID)
+        REFERENCES Orders(OrderID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_TipAllocation_Employee
+        FOREIGN KEY (EmployeeID, BusinessID)
+        REFERENCES Employee(EmployeeID, BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT CK_TipAllocation_Amount
+        CHECK (Amount > 0),
+
+    INDEX IX_TipAllocation_EmployeeID (EmployeeID)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS InventoryTransactionType (
     TransactionTypeCode TINYINT UNSIGNED NOT NULL,
     Description VARCHAR(100) NOT NULL,
@@ -1757,7 +1793,8 @@ CREATE TABLE IF NOT EXISTS Refund (
     ReturnID CHAR(36) NULL,
     OrderID CHAR(36) NOT NULL,
     BusinessID CHAR(36) NOT NULL,
-    Amount DECIMAL(10,2) NOT NULL,             -- total paid back, tax included
+    Amount DECIMAL(10,2) NOT NULL,             -- total refunded, including tax and any refunded tip
+    TipAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     TaxAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,  -- the part of Amount that is tax
     RefundDateTime DATETIME NULL,
     Reason VARCHAR(255) NOT NULL,
@@ -1805,8 +1842,8 @@ CREATE TABLE IF NOT EXISTS Refund (
     CONSTRAINT CK_Refund_Amount
         CHECK (Amount > 0),
 
-    CONSTRAINT CK_Refund_TaxAmount
-        CHECK (TaxAmount >= 0 AND TaxAmount <= Amount),
+    CONSTRAINT CK_Refund_TipAndTaxAmount
+        CHECK (TipAmount >= 0 AND TaxAmount >= 0 AND TipAmount + TaxAmount <= Amount),
 
     CONSTRAINT FK_Refund_Status
         FOREIGN KEY (RefundStatusCode)

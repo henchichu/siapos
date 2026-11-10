@@ -3,7 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 // Menu items with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Manager To-Do": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Manager's To-Do List": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -17,7 +17,7 @@ function useMe() {
 
 // The numbers on the menu's badges (server/counts.js): polled every 10 seconds, and fetched again when the tab regains focus
 // or this page saves something. The sidebar and any page showing one share the poll.
-const COUNT_KEY = { "Manager To-Do": "attention", Register: "register", Kitchen: "kitchen" };
+const COUNT_KEY = { "Manager's To-Do List": "attention", Register: "register", Kitchen: "kitchen" };
 const countsStore = { value: {}, subs: new Set(), timer: null };
 const loadCounts = () => api("/nav-counts").then((v) => { countsStore.value = v; countsStore.subs.forEach((f) => f(v)); }).catch(() => {});
 function useCounts() {
@@ -61,7 +61,7 @@ const ICONS = {
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
 };
 const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
-const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Manager To-Do": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
+const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Manager's To-Do List": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
   Reports: "chart", "My shift": "clock" };
 
 // The small icon in a summary card's corner, picked from its label

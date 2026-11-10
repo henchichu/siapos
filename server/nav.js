@@ -1,10 +1,10 @@
-const PAGE_PERMISSIONS = { "Manager To-Do": [14,17,3], Register: [1], Kitchen: [5], Orders: [16], Rewards: [9], Products: [11], Inventory: [14], Reports: [20], "My shift": [] };
-const PATHS = { "Manager To-Do": '/attention.html', Register: '/register.html', Kitchen: '/kitchen.html', 'My shift': '/shift.html' };
-// A role that can see Manager To-Do opens to it; any other role opens to the page its OpensTo names (else its first page)
+const PAGE_PERMISSIONS = { "Manager's To-Do List": [14,17,3], Register: [1], Kitchen: [5], Orders: [16], Rewards: [9], Products: [11], Inventory: [14], Reports: [20], "My shift": [] };
+const PATHS = { "Manager's To-Do List": '/attention.html', Register: '/register.html', Kitchen: '/kitchen.html', 'My shift': '/shift.html' };
+// A role that can see Manager's To-Do List opens to it; any other role opens to the page its OpensTo names (else its first page)
 function access(emp, destinations, granted) {
  const nav = Object.entries(PAGE_PERMISSIONS).filter(([, codes]) => !codes.length || codes.some(c => granted.includes(c))).map(([name]) => name);
  const available = nav.map(n => PATHS[n]).filter(Boolean);
  const own = destinations[emp.OpensTo];
- return { nav, home: nav.includes('Manager To-Do') ? PATHS['Manager To-Do'] : available.includes(own) ? own : available[0] || '/shift.html' };
+ return { nav, home: nav.includes("Manager's To-Do List") ? PATHS["Manager's To-Do List"] : available.includes(own) ? own : available[0] || '/shift.html' };
 }
 module.exports = { access, PAGE_PERMISSIONS };

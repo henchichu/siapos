@@ -1,0 +1,65 @@
+/* Inventory. Spacing and type from the ClockIt wireframes (nodes 178:2309, 178:3391, 178:3567); tabs, tables and buttons come from shift.css and products.css */
+.pfilters.wrap { flex-wrap: wrap; }
+.pview .pfilters .select { width: auto; min-width: 144px; }
+.table td.low { color: var(--error); }
+.table td.state { white-space: nowrap; }
+.table td.r { white-space: nowrap; } /* an amount never stacks, e.g. the delivery form's six-decimal unit cost $0.012208 */
+.wide-form { width: 638px; max-width: 100%; flex: none; }
+.w210 { width: 210px; max-width: 100%; }
+.pactions.left { justify-content: flex-start; } .pactions.left .pbtn { flex: none; }
+.field.cell { height: 40px; min-height: 40px; padding: 8px 10px; width: 80px; border-radius: 8px; }
+.dlines td { overflow: visible; }
+.stockcount .phead { align-items: center; }
+.stockcount .pf > b { font-weight: 500; }
+
+/* The three totals under a stock count */
+.totals { display: flex; gap: 16px; flex-wrap: wrap; }
+.totals .box { flex: 1 1 180px; display: flex; flex-direction: column; gap: 6px; } /* the card look is theme.css */
+.totals .box span { font-size: 14px; }
+.totals .box b { font-size: 28px; }
+
+@media print { .nav, .tabs, .noprint, .pform { display: none !important; } .app { display: block; height: auto; padding: 0; } .main.scrolls { overflow: visible; } }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) { .wide-form { width: 100%; } }
+
+.inline { display: flex; gap: 8px; align-items: stretch; }
+.inline .select { flex: 1; min-width: 0; }
+@media (max-width: 760px) { .inline { flex-wrap: wrap; } .inline .select { flex: 1 1 100%; } } /* the chosen supplier's name gets the whole row on a phone */
+.newsupplier { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.split > .delivery-dashboard { min-width: 448px; } /* room for the pending table beside the form; below that it moves under the form */
+.pending-deliveries td { vertical-align: top; }
+.pending-deliveries td .sub { margin-top: 4px; }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .split > .delivery-dashboard { flex-basis: 100%; min-width: 0; }
+}
+
+/* Keep both delivery panels compact beside the receiving form. */
+.delivery-panel .phead { align-items: center; flex-wrap: wrap; gap: 8px; }
+.delivery-expand { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.delivery-expand svg { flex: none; transition: transform 150ms ease; }
+.delivery-list { overflow-x: auto; }
+.delivery-list.expanded { max-height: 300px; overflow-y: auto; }
+.delivery-list.expanded thead { position: sticky; top: 0; background: var(--surface, #fff); z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .delivery-expand svg { transition: none; } }
+
+.inventory-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.inventory-toolbar .tabs { align-self: auto; }
+.inventory-toolbar > .select { width: auto; max-width: 100%; }
+@media print { .inventory-toolbar { display: none !important; } }
+
+.delivery-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+/* Fitting any width. Each table sizes its own columns (shift.css, "fit") and scrolls sideways in its own box only when its content
+   cannot fit, never the page. */
+.tscroll { max-width: 100%; overflow-x: auto; }
+.tscroll .table td, .delivery-list .table td { overflow-wrap: break-word; }
+.t-pending .act { white-space: normal; text-align: center; } /* "Assign supplier" on two lines rather than cut off */
+/* A panel is never wider than the page, and the form column moves under the list when both no longer fit side by side
+   (the stock table's 700px plus its card's padding, the gap and the 278px form) */
+.inv-split { container-type: inline-size; }
+.inv-split > * { max-width: 100%; }
+@container (max-width: 1049px) { .inv-split > .pside { width: 100%; } }
+/* a container creates a box for fixed children, which would trap a phone's full-screen sheet inside the list; phones don't need it */
+/* register.css turns .split into a column at this width, where align-items: flex-start would shrink the panel to its content */
+@media (max-width: 760px), (max-aspect-ratio: 1/1) { .inv-split { align-items: stretch; } }
+@media (max-width: 760px) { .inv-split { container-type: normal; } .delivery-dashboard:not(:has(.subpanel.on)) { display: none; } }

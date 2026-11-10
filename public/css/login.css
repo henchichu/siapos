@@ -1,0 +1,37 @@
+/* Staff sign-in: the business's name on a full brand-colored page. Colors are theme.css tokens */
+body { min-height: 100vh; display: grid; place-items: center; padding: 40px 16px; overflow-x: hidden;
+  font-family: "IBM Plex Sans", sans-serif; color: #fff; background: var(--navy); }
+/* faint cyan rings in two corners */
+body::before, body::after { content: ""; position: fixed; z-index: -1; border-radius: 50%; pointer-events: none; }
+body::before { width: 360px; height: 360px; left: -200px; top: -200px; border: 20px solid rgba(207, 167, 127, 0.14); }
+body::after { width: 620px; height: 620px; right: -320px; bottom: -340px; border: 36px solid rgba(207, 167, 127, 0.18); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+.signin { display: flex; flex-direction: column; align-items: center; gap: 24px; width: min(420px, 100%); text-align: center; }
+.signin p, .signin h1, .signin h2 { margin: 0; }
+/* the business's name */
+.brand { min-height: 34px; font: 700 28px/1.2 "IBM Plex Sans", sans-serif; overflow-wrap: anywhere; }
+.eyebrow { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #E8D9CC; } /* 7.6:1 on navy */
+.prompt { font-size: 18px; font-weight: 600; color: #fff; }
+
+/* The form: two labelled fields and a button on navy */
+.signform { display: flex; flex-direction: column; gap: 16px; width: 100%; text-align: left; }
+.signform label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #E8D9CC; }
+.signform input { padding: 12px 14px; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.45); background: rgba(255, 255, 255, 0.06);
+  color: #fff; font: inherit; font-size: 16px; }
+.signform input:hover:not(:disabled) { border-color: #fff; }
+.signform input:focus-visible { border-color: var(--cyan); outline-offset: 2px; }
+.signform input:disabled { opacity: 0.5; }
+.signbtn { padding: 13px 16px; border-radius: 10px; border: 0; background: var(--cyan); color: var(--navy-dark); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+.signbtn:hover:not(:disabled) { filter: brightness(1.08); }
+.signbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Messages: a soft coral note for a wrong entry, a solid coral bar for a lockout */
+.messages { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
+.error { padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--coral); background: rgba(243, 90, 71, 0.16); color: #FFD6D0; font-size: 14px; font-weight: 600; } /* 9:1 */
+.lockout { display: flex; align-items: center; gap: 8px; padding: 8px 15px 8px 13px; border-radius: 10px; background: var(--coral); color: var(--navy-dark); font-size: 14px; font-weight: 600; } /* 4.7:1 */
+.lock { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.newhere { font-size: 14px; color: #E8D9CC; }
+.newhere a { color: #fff; font-weight: 600; }

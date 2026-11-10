@@ -10,6 +10,7 @@ RUN npm ci --omit=dev
 
 COPY --chown=node:node public ./public
 COPY --chown=node:node server ./server
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 
 USER node
 

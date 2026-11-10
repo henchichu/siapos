@@ -1,0 +1,93 @@
+// Starts the real app on a free port against the running dev database (docker compose ... docker-compose.dev.yaml).
+const path = require("path");
+const root = path.resolve(__dirname, "../..");
+process.env.DB_PASSWORD_FILE ??= path.join(root, "sql/secrets/app_user_password.txt");
+process.env.MOCK_PAY ??= "1"; // the tests pay with the mock processor's test cards
+const fs = require("fs");
+const app = require("../../server/server");
+const pool = require("../../server/database/connection");
+
+const start = () => new Promise((resolve) => { const s = app.listen(0, () => resolve({ server: s, base: `http://127.0.0.1:${s.address().port}` })); });
+
+// Small client that keeps the session cookie
+function client(base, headers = {}) {
+  const jar = new Map(); // a browser keeps every cookie it is given (session, device...), not just the last
+  const cookie = () => [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+  const call = async (path, body) => {
+    const res = await fetch(base + "/api" + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { "content-type": "application/json", cookie: cookie(), ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    for (const set of res.headers.getSetCookie()) { const [pair] = set.split(";"); const i = pair.indexOf("="); jar.set(pair.slice(0, i), pair.slice(i + 1)); }
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  };
+  return { call, cookie };
+}
+
+// Sign-in is email + password. The dev shop's six people by employee number (the number and PIN still sign off approvals).
+const DEV_LOGINS = { "10420001": "maya", "10420002": "leo", "10420003": "sam", "10420004": "priya", "10420005": "jordan", "10420006": "ana" };
+const creds = (number) => { const n = DEV_LOGINS[number]; if (!n) throw new Error(`no dev login for ${number}`); return { email: `${n}@brewbean.example.com`, password: `${n}-dev-pass` }; };
+
+// A wrong-PIN test must not leave an account locked for the next run
+const unlock = (employeeId) => pool.query("UPDATE EmployeeCredential SET FailedPinAttempts = 0, LockedUntil = NULL WHERE EmployeeID = ?", [employeeId]);
+
+// Hand-over is the kitchen's last step; refunds need a completed order, so tests that refund finish the order directly
+const pickUp = (orderNumber) => pool.query("UPDATE Orders SET OrderStatusCode = 5, CompletedAt = UTC_TIMESTAMP() WHERE OrderNumber = ? AND OrderStatusCode = 2", [orderNumber]);
+
+// Products, option groups and promotions made by a test run are removed afterwards, so the demo catalog stays as it was.
+// They are removed in dependency order and only by id, never by name.
+async function removeCatalog({ products = [], groups = [], promotions = [] }) {
+  if (promotions.length) { await pool.query("DELETE FROM PromotionProduct WHERE PromotionID IN (?)", [promotions]); await pool.query("DELETE FROM Promotion WHERE PromotionID IN (?)", [promotions]); }
+  if (products.length) {
+    await pool.query("DELETE FROM PromotionProduct WHERE ProductID IN (?)", [products]);
+    await pool.query("DELETE FROM VariantRecipe WHERE VariantID IN (SELECT VariantID FROM ProductVariant WHERE ProductID IN (?))", [products]);
+    await pool.query("DELETE FROM ProductVariant WHERE ProductID IN (?)", [products]);
+    await pool.query("DELETE FROM ProductModifierGroup WHERE ProductID IN (?)", [products]);
+    await pool.query("DELETE FROM Product WHERE ProductID IN (?)", [products]);
+    const dir = path.join(process.env.UPLOAD_DIR || path.join(root, "uploads"), "products"); // their uploaded pictures
+    if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (products.some((p) => f.startsWith(`${p}.`))) fs.rmSync(path.join(dir, f));
+  }
+  if (groups.length) {
+    const mods = "(SELECT ModifierID FROM Modifier WHERE ModifierGroupID IN (?))";
+    await pool.query(`DELETE FROM ModifierAddition WHERE ModifierID IN ${mods}`, [groups]);
+    await pool.query(`DELETE FROM ModifierSubstitution WHERE ModifierID IN ${mods}`, [groups]);
+    await pool.query("DELETE FROM ProductModifierGroup WHERE ModifierGroupID IN (?)", [groups]);
+    await pool.query("DELETE FROM Modifier WHERE ModifierGroupID IN (?)", [groups]);
+    await pool.query("DELETE FROM ModifierGroup WHERE ModifierGroupID IN (?)", [groups]);
+  }
+}
+
+// Test sales use up demo stock for good (oat milk goes fastest), so a test that sells it first tops it up at Downtown
+async function topUp(stockItemId, atLeast, locationId = "loc-downtown") {
+  const [[row]] = await pool.query("SELECT Quantity AS qty, AverageUnitCost AS cost FROM Inventory WHERE LocationID = ? AND StockItemID = ?", [locationId, stockItemId]);
+  if (Number(row.qty) >= atLeast) return;
+  await pool.query(
+    `INSERT INTO InventoryTransaction (InventoryTransactionID, BusinessID, StockItemID, LocationID, EmployeeID, QuantityChange, UnitCost, TransactionTypeCode, Note)
+     VALUES (UUID(), 'biz-brewbean', ?, ?, 'emp-leo', ?, ?, 1, 'test top-up')`,
+    [stockItemId, locationId, atLeast - Number(row.qty), row.cost]);
+}
+
+// The mock processor (server/mockpay.js) approves this one; its expiry is far enough ahead not to age out
+const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "12/49", cvc: "123" };
+
+
+// Everything a sign-up (and these tests) can put in a business, children first
+// A business made by a sign-up test, with everything in it
+async function removeBusiness(id) {
+  const [emps] = await pool.query("SELECT EmployeeID AS id FROM Employee WHERE BusinessID = ?", [id]);
+  const [locs] = await pool.query("SELECT LocationID AS id FROM Location WHERE BusinessID = ?", [id]);
+  const e = emps.map((r) => r.id), l = locs.map((r) => r.id);
+  for (const t of ["LoyaltyAccount", "Customer", "VariantRecipe", "ProductModifierGroup", "ProductVariant", "Product", "Category", "MembershipTier", "PayPeriod", "EmployeeLocation", "EmployeePayRate"])
+    await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+  if (e.length) await pool.query("DELETE FROM EmployeeCredential WHERE EmployeeID IN (?)", [e]);
+  for (const t of ["Employee", "LocationTaxRate"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+  if (l.length) await pool.query("DELETE FROM Register WHERE LocationID IN (?)", [l]);
+  for (const t of ["Location", "TaxCategory", "RolePermission", "Role", "Business"]) await pool.query(`DELETE FROM ${t} WHERE BusinessID = ?`, [id]);
+}
+
+// Root, for setting up what app_user may not write (loyalty points, pay periods): the same SQL a business owner would run
+const admin = require("mysql2/promise").createPool({ host: process.env.DB_HOST || "127.0.0.1", port: Number(process.env.DB_PORT) || 3306, database: process.env.DB_NAME || "miniworld", user: "root",
+  password: fs.readFileSync(process.env.DB_ROOT_PASSWORD_FILE || path.join(root, "sql/secrets/root_password.txt"), "utf8").trim(), timezone: "Z" });
+
+module.exports = { admin, start, client, pool, creds, unlock, pickUp, removeCatalog, topUp, TEST_CARD, removeBusiness };

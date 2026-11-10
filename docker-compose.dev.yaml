@@ -1,0 +1,14 @@
+# Development only: adds the demo shop and the known dev sign-ins to a fresh database.
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+name: siapos
+
+services:
+  mysql-db:
+    environment:
+      SIAPOS_DEV: "1"
+    volumes:
+      - ./sql/dev:/sql-dev:ro
+
+  pos-api:
+    environment:
+      MOCK_PAY: "1"   # the kiosk offers Card, Apple Pay and Google Pay through the mock processor; no money moves

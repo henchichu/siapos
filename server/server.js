@@ -35,7 +35,7 @@ app.get(Object.keys(LIVE), async (req, res, next) => {
 });
 
 // Each page opens only for a role that has it in its menu; anyone else goes back to their own home
-const PAGE_NAV = { "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Manager To-Do", "/orders.html": "Orders", "/order.html": "Orders" };
+const PAGE_NAV = { "/register.html": "Register", "/kitchen.html": "Kitchen", "/shift.html": "My shift", "/products.html": "Products", "/inventory.html": "Inventory", "/attention.html": "Manager's To-Do List", "/orders.html": "Orders", "/order.html": "Orders" };
 app.use((req, res, next) => {
   const need = PAGE_NAV[req.path];
   if (need === undefined) return next();

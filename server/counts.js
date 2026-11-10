@@ -20,7 +20,7 @@ router.get("/nav-counts", async (req, res) => {
   if (await hasPermission(pool, employeeId, PERM_SEE_KITCHEN))
     // every ticket the kitchen screen lists: new, preparing or ready, none yet picked up
     out.kitchen = await count("SELECT COUNT(*) AS n FROM Orders WHERE LocationID = ? AND OrderStatusCode IN (2, 3, 4)", [locationId]);
-  // shortcut: this runs the whole Manager To-Do page's queries to add up its panels; give it COUNT queries if it gets slow
+  // shortcut: this runs the whole Manager's To-Do List page's queries to add up its panels; give it COUNT queries if it gets slow
   const attention = await attentionFor(req.session);
   if (attention) out.attention = ["losses", "reorder", "timecards", "refunds"].reduce((n, k) => n + (attention[k]?.count || 0), 0);
   res.json(out);

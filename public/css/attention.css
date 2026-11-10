@@ -1,4 +1,4 @@
-/* Manager To-Do. Spacing and type from the ClockIt wireframe (node 167:402); tables and buttons come from shift.css and products.css */
+/* Manager's To-Do List. Spacing and type from the ClockIt wireframe (node 167:402); tables and buttons come from shift.css and products.css */
 .heading { padding: 0 0 8px; align-items: flex-end; }
 .attention { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .panel { padding: 24px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; min-width: 0; }

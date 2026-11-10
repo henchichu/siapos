@@ -65,11 +65,11 @@ function App() {
     timecards && ["timecards", "Timecards", timecards.count], refunds && ["refunds", "Refunds", refunds.count]].filter(Boolean);
   const shown = tabs.some(([k]) => k === tab) ? tab : tabs[0]?.[0];
   return html`<div className="app kitchen">
-    <${Sidebar} me=${me} current="Manager To-Do" />
-    <section className="main scrolls" aria-label="Manager To-Do">
+    <${Sidebar} me=${me} current="Manager's To-Do List" />
+    <section className="main scrolls" aria-label="Manager's To-Do List">
       ${error ? html`<p className="success" role="alert">${error}</p>` : !data ? html`<p className="success">Loading…</p>` : html`<${React.Fragment}>
-        <header className="phead heading"><${PageTitle}>Manager To-Do<//><span className="sub">${data.location} · today</span></header>
-        <${SubTabs} tabs=${tabs} value=${shown} onChange=${setTab} label="Manager To-Do sections" />
+        <header className="phead heading"><${PageTitle}>Manager's To-Do List<//><span className="sub">${data.location} · today</span></header>
+        <${SubTabs} tabs=${tabs} value=${shown} onChange=${setTab} label="Manager's To-Do List sections" />
         <div className="attention">
           ${losses && html`<${Panel} title="Stock losses reported today" className=${panelOf("losses", shown)} count=${losses.count} empty="No losses reported today."
             action=${html`<a className="pbtn outline" href="/inventory.html">Open inventory</a>`}>

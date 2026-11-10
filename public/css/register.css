@@ -48,7 +48,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.slim { padding: 8px 16px; }
 .btn.block { width: 100%; }
 .link:hover { text-decoration: underline; }
-.status { color: var(--ok); }
+.status { color: var(--red); }
 .status.sale-done { display: flex; align-items: center; gap: 14px; margin: 12px 0; padding: 14px 18px; border: 1.5px solid #bfe3cb; border-left: 6px solid var(--ok); border-radius: 12px;
   background: #eefaf2; color: #0f4d29; font-size: 18px; font-weight: 600; box-shadow: 0 4px 14px rgba(23, 112, 58, .12); animation: sale-in .25s ease-out; }
 .status.sale-done::before { content: "✓"; content: "✓" / ""; flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 18px; font-weight: 700; }

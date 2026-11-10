@@ -796,39 +796,6 @@ router.get("/reports/revenue", async (req, res) => {
       GROUP BY k`,
     [businessId, ids, REFUND_DONE, ...near, from, day]
   );
-  const details = new Map();
-  if (by !== "hour") {
-    const [entries] = await pool.query(
-      `SELECT ${bucket("o.OrderDateTime")} AS k, o.OrderID AS id, o.OrderNumber AS number, 1 AS sold,
-              SUM(oi.NetAmount + oi.DiscountAmount) AS gross, SUM(oi.DiscountAmount) AS discounts, 0 AS refunds, SUM(oi.LineCost) AS cost
-         FROM Orders o JOIN Location l ON l.LocationID = o.LocationID JOIN OrderItem oi ON oi.OrderID = o.OrderID
-        WHERE o.BusinessID = ? AND o.LocationID IN (?) AND o.OrderStatusCode IN (?)
-          AND o.OrderDateTime >= ? AND o.OrderDateTime < ?
-          AND DATE_FORMAT(${local("o.OrderDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
-        GROUP BY k, o.OrderID, o.OrderNumber
-       UNION ALL
-       SELECT ${bucket("r.RefundDateTime")} AS k, o.OrderID AS id, o.OrderNumber AS number, 0 AS sold,
-              0 AS gross, 0 AS discounts, SUM(r.Amount - r.TaxAmount) AS refunds, 0 AS cost
-         FROM Refund r JOIN Orders o ON o.OrderID = r.OrderID JOIN Location l ON l.LocationID = o.LocationID
-        WHERE r.BusinessID = ? AND o.LocationID IN (?) AND r.RefundStatusCode = ?
-          AND r.RefundDateTime >= ? AND r.RefundDateTime < ?
-          AND DATE_FORMAT(${local("r.RefundDateTime")}, '%Y-%m-%d') BETWEEN ? AND ?
-        GROUP BY k, o.OrderID, o.OrderNumber`,
-      [businessId, ids, PAID, ...near, from, day, businessId, ids, REFUND_DONE, ...near, from, day]
-    );
-    for (const e of entries) {
-      const key = String(e.k);
-      if (!details.has(key)) details.set(key, new Map());
-      const orders = details.get(key);
-      if (!orders.has(e.id)) orders.set(e.id, { id: e.id, number: e.number, orders: 0, gross: 0, discounts: 0, refunds: 0, rawCost: 0 });
-      const order = orders.get(e.id);
-      order.orders += Number(e.sold);
-      order.gross += cents(e.gross);
-      order.discounts += cents(e.discounts);
-      order.refunds += cents(e.refunds);
-      order.rawCost += Number(e.cost || 0);
-    }
-  }
   // Tips ride on the payment, never in the sale; they count with the order they were left on.
   // A refund never gives a tip back, so a refunded payment's tip still counts.
   const [[tips]] = await pool.query(
@@ -854,14 +821,7 @@ router.get("/reports/revenue", async (req, res) => {
     const gross = cents(s.gross), discounts = cents(s.discounts), refundCents = cents(refunds.find((x) => String(x.k) === String(k))?.refunds);
     const net = gross - discounts - refundCents, cost = cents(s.cost);
     running += net;
-    const orders = [...(details.get(String(k))?.values() || [])].sort((a, b) => a.number - b.number);
-    const allocated = costs ? apportion(orders.map((o) => o.rawCost), cost) : [];
-    const orderDetails = orders.map(({ rawCost, ...o }, i) => {
-      const net = o.gross - o.discounts - o.refunds;
-      return { ...o, net, ...(costs && { cost: allocated[i], profit: net - allocated[i] }) };
-    });
-    return { key: k, orders: Number(s.orders || 0), gross, discounts, refunds: refundCents, net, ...(costs && { cost, profit: net - cost }), runningNet: running,
-      ...(by !== "hour" && { orderDetails }) };
+    return { key: k, orders: Number(s.orders || 0), gross, discounts, refunds: refundCents, net, ...(costs && { cost, profit: net - cost }), runningNet: running };
   });
   const sum = (f) => rows.reduce((a, r) => a + r[f], 0);
   const total = { orders: sum("orders"), gross: sum("gross"), discounts: sum("discounts"), refunds: sum("refunds"), net: sum("net"), ...(costs && { cost: sum("cost"), profit: sum("profit") }) };

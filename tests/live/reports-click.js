@@ -35,7 +35,7 @@ async function open(base, number, pin) {
     type: async (el, v) => { set(w.HTMLInputElement, el, v); el.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80); },
     choose: async (el, v) => { set(w.HTMLSelectElement, el, v); el.dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(150); },
     heads: () => $$("section.report table thead th").map((t) => t.textContent),
-    rows: () => $$("section.report table tbody tr:not(.revenue-order)").filter((r) => r.querySelectorAll("td").length > 1),
+    rows: () => $$("section.report table tbody tr").filter((r) => r.querySelectorAll("td").length > 1),
     foot: () => [...($("section.report table tfoot tr")?.querySelectorAll("td") || [])].map((c) => c.textContent),
     cards: () => $$(".rcard").map((c) => [c.querySelector("span").textContent, c.querySelector("b").textContent]),
     bars: () => $$(".chart .col"),
@@ -53,13 +53,13 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
     && m.$$("[aria-label='Revenue views'] .tab").map((t) => t.textContent).join("|") === "Live|History");
   const { today } = await (await m.w.fetch("/api/reports/options")).json();
   check("Live sales filters: a blank Day and no Location list", m.field("Day")?.value === "" && !m.field("From") && !m.field("Location"));
-  check("Live starts without output or refresh", m.cards().length === 0 && ![...m.w.timers.values()].some((t) => t.ms === 60000));
+  check("Live starts without output or refresh", m.cards().length === 0 && m.w.timers.size === 0);
   await m.type(m.field("Day"), today);
   await m.click(m.byText("button", "Run report"), 700);
   check("nine cards, Net sales so far in black", m.cards().map(([k]) => k).join("|") === "Gross sales|Discounts|Refunds|Net sales so far|Cost of goods|Profit|Tips|Orders|Avg order"
     && m.$$(".rcard")[3].className.includes("dark"), m.cards().join());
   const hHeads = () => m.$$("section[aria-label='Live sales'] table thead th").map((t) => t.textContent);
-  const hRows = () => m.$$("section[aria-label='Live sales'] table tbody tr:not(.revenue-order)").filter((r) => r.querySelectorAll("td").length > 1).map((r) => [...r.children].map((c) => c.textContent));
+  const hRows = () => m.$$("section[aria-label='Live sales'] table tbody tr").filter((r) => r.querySelectorAll("td").length > 1).map((r) => [...r.children].map((c) => c.textContent));
   const hFoot = () => [...m.$("section[aria-label='Live sales'] table tfoot tr").children].map((c) => c.textContent);
   check("Hour by hour columns", m.$("section[aria-label='Live sales'] .tablewrap h3").textContent === "Hour by hour"
     && hHeads().join("|") === "Hour|Orders|Gross|Discounts|Refunds|Net sales|Cost|Profit|Running net", hHeads().join("|"));
@@ -95,13 +95,6 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   await m.click(m.byText("button", "Run report"), 700);
   check("every figure Live shows", m.cards().map(([k]) => k).join("|") === "Gross sales|Discounts|Refunds|Net sales|Cost of goods|Profit|Tips|Orders|Avg order" && m.$$(".rcard")[3].className.includes("dark"), m.cards().join());
   check("one bar per day, last 30 days", m.bars().length === 30 && m.rows().length === 30);
-  check("period orders start collapsed", m.$$(".revenue-order").length === 0);
-  const period = m.$(".revenue-toggle");
-  await m.click(period);
-  check("clicking a period total expands its orders", period.querySelector("button").getAttribute("aria-expanded") === "true"
-    && m.$$(".revenue-order").length > 0 && m.$(".revenue-order td").textContent.startsWith("Order #"));
-  await m.click(period.querySelector("button"));
-  check("the date button collapses its orders", period.querySelector("button").getAttribute("aria-expanded") === "false" && m.$$(".revenue-order").length === 0);
   check("table columns", m.heads().join("|") === "Day|Orders|Gross|Discounts|Refunds|Net sales|Cost|Profit|Running net", m.heads().join("|"));
   const sumNet = m.rows().reduce((a, r) => a + dollars(r.children[5].textContent), 0);
   check("the Total row adds up and matches Net sales", m.foot()[0] === "Total" && Math.abs(dollars(m.foot()[5]) - sumNet) < 0.005 && m.foot()[5] === m.cards()[3][1], m.foot().join("|"));

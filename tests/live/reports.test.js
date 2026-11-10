@@ -119,8 +119,6 @@ test("Top sellers and Stock losses leave out costs for a role that can't see the
     const now = await live(leo, {});
     assert.deepEqual([now.cards.cost, now.cards.profit], [null, null]);
     assert.ok(now.rows.every((r) => !("cost" in r) && !("profit" in r)));
-    const daily = await live(leo, { by: "day" });
-    assert.ok(daily.rows.every((r) => r.orderDetails.every((o) => !("cost" in o) && !("profit" in o) && !("rawCost" in o))));
     const lost = await losses(leo, {});
     assert.deepEqual([lost.seesCosts, lost.cards.lost, lost.cards.lostPct], [false, null, null]);
     assert.ok(lost.rows.every((r) => !("cost" in r)) && !("cost" in lost.total));
@@ -281,30 +279,6 @@ test("Revenue: live today hour by hour, or Monday to today, and history by day, 
   assert.equal((await leo.call("/reports/revenue?location=all")).status, 403);
 });
 
-test("Revenue period order details reconcile with every day, month and year", async () => {
-  const options = await maya.call("/reports/options");
-  assert.equal(options.status, 200, JSON.stringify(options.body));
-  const { today } = options.body;
-  for (const by of ["day", "month", "year"]) {
-    const body = await report(maya, { from: `${today.slice(0, 4)}-01-01`, to: today, by });
-    assert.ok(body.rows.some((r) => r.orderDetails.length));
-    for (const row of body.rows) {
-      assert.equal(new Set(row.orderDetails.map((o) => o.id)).size, row.orderDetails.length);
-      for (const key of ["orders", "gross", "discounts", "refunds", "net", "cost", "profit"])
-        assert.equal(row.orderDetails.reduce((sum, o) => sum + o[key], 0), row[key], `${by} ${row.key}: ${key}`);
-      for (const order of row.orderDetails) {
-        assert.ok(order.id && Number.isInteger(order.number));
-        assert.equal(order.net, order.gross - order.discounts - order.refunds);
-        assert.equal(order.profit, order.net - order.cost);
-        assert.equal("rawCost" in order, false);
-      }
-    }
-  }
-  const week = await live(maya, { day: today, by: "day" });
-  assert.ok(week.rows.every((r) => Array.isArray(r.orderDetails)));
-  const hours = await live(maya, { day: today });
-  assert.ok(hours.rows.every((r) => !("orderDetails" in r)));
-});
 test("a sale counts today, and its refund comes off today", async () => {
   const { today } = (await maya.call("/reports/options")).body;
   const q = { from: today, to: today, location: "loc-downtown" };
@@ -332,16 +306,6 @@ test("a sale counts today, and its refund comes off today", async () => {
   const end = rowFor(back, today);
   assert.deepEqual([end.orders - before.orders, end.refunds - before.refunds, end.net - before.net], [1, 525, 0], "still an order, but the money went back");
   assert.equal((await live(maya, { location: "loc-downtown" })).cards.tips - tipsBefore, 100, "a refund never takes the tip back");
-  const detail = end.orderDetails.find((o) => o.id === found.orderId);
-  assert.deepEqual([detail.orders, detail.gross, detail.refunds, detail.net], [1, 525, 525, 0]);
-  const [[original]] = await pool.query("SELECT OrderDateTime FROM Orders WHERE OrderID = ?", [found.orderId]);
-  try {
-    await pool.query("UPDATE Orders SET OrderDateTime = UTC_TIMESTAMP() - INTERVAL 1 YEAR WHERE OrderID = ?", [found.orderId]);
-    const later = rowFor(await report(maya, q), today).orderDetails.find((o) => o.id === found.orderId);
-    assert.deepEqual([later.orders, later.gross, later.discounts, later.refunds, later.net, later.cost], [0, 0, 0, 525, -525, 0]);
-  } finally {
-    await pool.query("UPDATE Orders SET OrderDateTime = ? WHERE OrderID = ?", [original.OrderDateTime, found.orderId]);
-  }
 });
 
 const customers = async (c, q) => { const r = await c.call(`/reports/customers?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };

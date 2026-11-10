@@ -365,7 +365,9 @@ router.get("/promotions", edit, async (req, res) => {
     [locationId, businessId]
   );
   const [links] = await pool.query("SELECT PromotionID AS promotionId, ProductID AS productId FROM PromotionProduct WHERE BusinessID = ?", [businessId]);
-  const [products] = await pool.query("SELECT ProductID AS id, Name AS name FROM Product WHERE BusinessID = ? AND Active ORDER BY Name", [businessId]);
+  const [products] = await pool.query(`SELECT p.ProductID AS id, p.Name AS name,
+    (SELECT MIN(v.Price) FROM ProductVariant v WHERE v.ProductID = p.ProductID AND v.Active) AS minPrice
+    FROM Product p WHERE p.BusinessID = ? AND p.Active ORDER BY p.Name`, [businessId]);
   res.json({
     products,
     promotions: rows.map((r) => ({ ...r, active: !!r.active, kind: r.type === PERCENT ? "percent" : "amount", value: Number(r.value), productIds: links.filter((l) => l.promotionId === r.id).map((l) => l.productId) })),
@@ -388,6 +390,16 @@ async function savePromotion(req, res, promotionId) {
 
   const saved = await pool.tx(async (conn) => {
     for (const p of productIds) await owns(conn, "SELECT 1 AS ok FROM Product WHERE ProductID = ? AND BusinessID = ?", [p, businessId], "Choose products from the list.");
+    if (type === FIXED) {
+      const [[cheapest]] = await conn.query(
+        `SELECT p.Name AS name, v.Price AS price FROM ProductVariant v
+          JOIN Product p ON p.ProductID = v.ProductID
+          WHERE p.BusinessID = ? AND p.ProductID IN (?) AND v.Active
+          ORDER BY v.Price LIMIT 1`, [businessId, productIds]
+      );
+      if (cheapest && Math.round(value * 100) > Math.round(Number(cheapest.price) * 100))
+        throw new HttpError(400, `The discount can't exceed $${Number(cheapest.price).toFixed(2)}, the lowest size price of ${cheapest.name}.`);
+    }
     const [[{ tz }]] = await conn.query("SELECT TimeZone AS tz FROM Location WHERE LocationID = ?", [locationId]);
     // runs from the start of the first day to the end of the last, café time
     const at = (d, time) => [`${d} ${time}`, tz];

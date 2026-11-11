@@ -709,7 +709,7 @@ async function breakdowns(businessId, ids, from, to, cards, costs) {
   if (!costs) return out;
 
   // Cost of goods by stock item, from the ingredients each line used at the cost when it was sold (the same rows LineCost is
-  // summed from). The card rounds hour by hour or day by day, so the cents are fitted to it; gap is how far apart they were.
+  // summed from). The card rounds day by day, so the cents are fitted to it; gap is how far apart they were.
   const [items] = await pool.query(
     `SELECT s.StockItemID AS id, s.Name AS name, SUM(cp.QuantityUsed * cp.UnitCost) AS cost
        ${SOLD} JOIN OrderItemComponent cp ON cp.OrderItemID = oi.OrderItemID JOIN StockItem s ON s.StockItemID = cp.StockItemID
@@ -754,8 +754,8 @@ async function breakdowns(businessId, ids, from, to, cards, costs) {
   return out;
 }
 
-// Revenue. Live: one day so far, hour by hour, or each day of its week so far. History (From and To given): each hour
-// of the day (all the days added together), day, month or year in the dates. Same measures either way, plus cost of goods, profit and tips.
+// Revenue. Without a From: each day of the chosen day's week so far. With From and To: each day, month or year in the dates.
+// Same measures either way, plus cost of goods, profit and tips.
 // The page asks again every minute while a live day is today.
 router.get("/reports/revenue", async (req, res) => {
   const { chosen } = await scope(req);
@@ -763,19 +763,19 @@ router.get("/reports/revenue", async (req, res) => {
   let day, from, by;
   if (history) {
     ({ from, to: day } = await range(req, chosen[0].timeZone, MAX_REVENUE_DAYS));
-    by = ["hour", "month", "year"].includes(req.query.by) ? req.query.by : "day";
+    by = ["month", "year"].includes(req.query.by) ? req.query.by : "day";
   } else {
     day = req.query.day ? String(req.query.day) : await today(chosen[0].timeZone);
     if (!isDate(day)) throw new HttpError(400, "Choose a day.");
-    by = req.query.by === "day" ? "day" : "hour";
-    from = by === "day" ? mondayOf(day) : day;
+    by = "day";
+    from = mondayOf(day);
   }
   const costs = await hasPermission(pool, req.session.employeeId, PERM_COSTS);
   const { businessId } = req.session;
   const ids = chosen.map((l) => l.id);
   const near = [addDays(from, -1), addDays(day, 2)];
   const FORMAT = { day: "%Y-%m-%d", month: "%Y-%m", year: "%Y" };
-  const bucket = (col) => (by === "hour" ? `HOUR(${local(col)})` : `DATE_FORMAT(${local(col)}, '${FORMAT[by]}')`);
+  const bucket = (col) => `DATE_FORMAT(${local(col)}, '${FORMAT[by]}')`;
 
   const [sales] = await pool.query(
     `SELECT ${bucket("o.OrderDateTime")} AS k, COUNT(DISTINCT o.OrderID) AS orders, SUM(oi.NetAmount + oi.DiscountAmount) AS gross,
@@ -836,16 +836,13 @@ router.get("/reports/revenue", async (req, res) => {
     [businessId, ids, PAID, TIPPED, ...near, from, day]
   );
 
-  // By hour: every hour from the first sale or refund to the last, the quiet ones too. By day, month and year: every one
-  // in the dates, the quiet ones too (a live week starts on Monday).
-  const hours = [...sales, ...refunds].map((r) => Number(r.k));
+  // Every day, month or year in the dates, the quiet ones too (a week starts on Monday).
   const months = [];
   for (let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)); `${y}-${String(m).padStart(2, "0")}` <= day.slice(0, 7); m === 12 ? (y++, m = 1) : m++)
     months.push(`${y}-${String(m).padStart(2, "0")}`);
   const keys = by === "day" ? Array.from({ length: daysBetween(from, day) + 1 }, (_, i) => addDays(from, i))
     : by === "month" ? months
-    : by === "year" ? Array.from({ length: Number(day.slice(0, 4)) - Number(from.slice(0, 4)) + 1 }, (_, i) => String(Number(from.slice(0, 4)) + i))
-    : hours.length ? Array.from({ length: Math.max(...hours) - Math.min(...hours) + 1 }, (_, i) => Math.min(...hours) + i) : [];
+    : Array.from({ length: Number(day.slice(0, 4)) - Number(from.slice(0, 4)) + 1 }, (_, i) => String(Number(from.slice(0, 4)) + i));
   let running = 0;
   const rows = keys.map((k) => {
     const s = sales.find((x) => String(x.k) === String(k)) || {};

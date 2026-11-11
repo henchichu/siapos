@@ -243,18 +243,8 @@ test("hours past 40 in a Monday to Sunday week are overtime at 1.5x", async () =
 
 const live = async (c, q) => { const r = await c.call(`/reports/revenue?${new URLSearchParams(q)}`); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body; };
 
-test("Revenue: live today hour by hour, or Monday to today, and history by day, month and year, all agreeing", async () => {
+test("Revenue: live Monday to today, and history by day, month and year, all agreeing", async () => {
   const { today } = (await maya.call("/reports/options")).body;
-  const hours = await live(maya, { location: "loc-downtown" });
-  assert.deepEqual([hours.day, hours.by, hours.isToday], [today, "hour", true]);
-  assert.ok(hours.rows.length > 0);
-  hours.rows.forEach((r, i) => i && assert.equal(r.key, hours.rows[i - 1].key + 1, "every hour from the first sale to the last"));
-  let running = 0;
-  for (const r of hours.rows) { running += r.net; assert.equal(r.runningNet, running); assert.equal(r.profit, r.net - r.cost); }
-  const same = await report(maya, { from: today, to: today, location: "loc-downtown" });
-  for (const k of ["orders", "gross", "discounts", "refunds", "net"]) assert.equal(hours.total[k], same.total[k], k);
-  assert.equal(hours.cards.net, hours.total.net);
-
   const week = await live(maya, { location: "loc-downtown", by: "day" });
   assert.equal(week.rows[0].key, mondayOf(today));
   assert.equal(week.rows.at(-1).key, today);
@@ -302,8 +292,6 @@ test("Revenue period order details reconcile with every day, month and year", as
   }
   const week = await live(maya, { day: today, by: "day" });
   assert.ok(week.rows.every((r) => Array.isArray(r.orderDetails)));
-  const hours = await live(maya, { day: today });
-  assert.ok(hours.rows.every((r) => !("orderDetails" in r)));
 });
 test("a sale counts today, and its refund comes off today", async () => {
   const { today } = (await maya.call("/reports/options")).body;

@@ -20,6 +20,14 @@
 /* The right-hand column is only mounted while an action needs it, and slides in as the register's order panel does */
 .pside { width: 278px; flex: none; animation: slide-in 0.25s ease-out; }
 .pside.wide { width: 440px; }
+/* Sizes: the column is not a card itself; the size form and the recipe form each are one, shown one at a time */
+.pside.sheet.bare { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pform .back { align-self: flex-start; }
+/* Option group form: each option is a row (name and price, its stock effect under them, Remove at the right) so nothing outgrows the column */
+.optlist { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.optlist li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.optmain { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+.optmain .sub { grid-column: 1 / -1; font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .pside { animation: none; } }
 .status { padding: 0 24px; }
 

@@ -120,6 +120,7 @@ function SizesTab({ products }) {
   const [msg, setMsg] = useState(null);
   const [recipeMsg, setRecipeMsg] = useState(null);
   const [panel, setPanel] = useState(false); // the right column is only there while adding or editing a size
+  const [step, setStep] = useState("size"); // what the column shows: the size form, or that size's recipe (Edit recipe / Back)
 
   // Only the newest request may fill the table, so switching products quickly can't show the old product's sizes
   const latest = useRef(0);
@@ -128,15 +129,15 @@ function SizesTab({ products }) {
     const n = ++latest.current;
     return api(`/products/${productId}/sizes`).then((d) => { if (n === latest.current) setData(d); });
   }, [productId]);
-  useEffect(() => { setPanel(false); setSize(null); setLines([]); setForm(BLANK_SIZE); setMsg(null); setRecipeMsg(null); load().catch((e) => setMsg({ kind: "error", text: e.message })); }, [load]);
+  useEffect(() => { setPanel(false); setStep("size"); setSize(null); setLines([]); setForm(BLANK_SIZE); setMsg(null); setRecipeMsg(null); load().catch((e) => setMsg({ kind: "error", text: e.message })); }, [load]);
 
   const stock = data?.stock || [];
   const stockOf = (id) => stock.find((s) => s.id === id);
   const cost = lines.reduce((a, l) => a + (stockOf(l.stockItemId)?.unitCost || 0) * Number(l.quantity || 0), 0);
 
-  const closePanel = () => { setPanel(false); setForm(BLANK_SIZE); setSize(null); setLines([]); setMsg(null); setRecipeMsg(null); };
+  const closePanel = () => { setPanel(false); setStep("size"); setForm(BLANK_SIZE); setSize(null); setLines([]); setMsg(null); setRecipeMsg(null); };
   const pickSize = async (s) => {
-    setPanel(true); setSize(s); setForm({ ...s, price: String(s.price) }); setMsg(null); setRecipeMsg(null);
+    setPanel(true); setStep("size"); setSize(s); setForm({ ...s, price: String(s.price) }); setMsg(null); setRecipeMsg(null);
     const r = await api(`/sizes/${s.id}/recipe`);
     setLines(r.lines.map((l) => ({ ...l, quantity: String(l.quantity) })));
   };
@@ -174,8 +175,8 @@ function SizesTab({ products }) {
           ${data && !data.sizes.length && html`<tr><td colSpan="6">No sizes yet.</td></tr>`}</tbody>
       </table></div>
     </section>
-    ${panel && html`<${Sheet} popup wide title=${form.id ? "Edit size" : "Add size"} onClose=${closePanel}>
-      <section className="pform" aria-label=${form.id ? "Edit size" : "Add size"}>
+    ${panel && html`<${Sheet} popup wide className="bare wide" title=${step === "recipe" ? "Edit recipe" : form.id ? "Edit size" : "Add size"} onClose=${closePanel}>
+      ${step === "size" && html`<section className="pform" aria-label=${form.id ? "Edit size" : "Add size"}>
         <h3>${form.id ? "Edit size" : "Add size"}</h3>
         <div className="row2"><label className="pf grow"><b>Size name</b><input className="field" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label className="pf w200"><b>SKU</b><input className="field" value=${form.sku} onChange=${(e) => setForm({ ...form, sku: e.target.value })} /></label></div>
@@ -184,9 +185,12 @@ function SizesTab({ products }) {
             <option value="">Choose…</option>${(data?.taxCategories || []).map((t) => html`<option key=${t.id} value=${t.id}>${t.name}</option>`)}</select></label></div>
         <label className="check"><input type="checkbox" checked=${form.restock} onChange=${(e) => setForm({ ...form, restock: e.target.checked })} /> Goes back into stock when returned</label>
         <${Message} msg=${msg} dashed />
-        <div className="pactions"><button className="pbtn" onClick=${saveSize}>Save size</button><button className="pbtn outline" onClick=${closePanel}>Clear</button></div>
-      </section>
-      ${size && html`<section className="pform recipe" aria-label="Recipe">
+        <div className="pactions"><button className="pbtn" onClick=${saveSize}>Save size</button>
+          ${size && html`<button className="pbtn outline" onClick=${() => setStep("recipe")}>Edit recipe</button>`}
+          <button className="pbtn outline" onClick=${closePanel}>Clear</button></div>
+      </section>`}
+      ${step === "recipe" && size && html`<section className="pform recipe" aria-label="Recipe">
+        <button type="button" className="act back" onClick=${() => setStep("size")}>‹ Back to size</button>
         <h2>Recipe for ${size.name}</h2>
         <div className="tscroll"><table className="table mg fit rowcards">
           <thead><tr><th>Stock item</th><th className="r">Quantity</th><th>Unit</th><th></th></tr></thead>
@@ -256,18 +260,18 @@ function OptionsTab({ data, reload }) {
           <td><button className="act" onClick=${() => show({ id: g.id, name: g.name, min: String(g.min), max: g.max == null ? "" : String(g.max), options: g.options, productIds: g.productIds })}>Edit</button></td></tr>`)}</tbody>
       </table></div>
     </section>
-    ${open && html`<${Sheet} popup wide title=${form.id ? "Edit group" : "Add group"} onClose=${close}>
+    ${open && html`<${Sheet} popup wide className="wide" title=${form.id ? "Edit group" : "Add group"} onClose=${close}>
       <h2>${form.id ? "Edit group" : "Add group"}</h2>
       <div className="row2"><label className="pf grow"><b>Group name</b><input className="field" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
         <label className="pf w200"><b>Fewest choices</b><input className="field" inputMode="numeric" value=${form.min} onChange=${(e) => setForm({ ...form, min: e.target.value.replace(/\D/g, "") })} /></label></div>
       <label className="pf"><b>Most choices (blank = no limit)</b><input className="field" inputMode="numeric" value=${form.max} onChange=${(e) => setForm({ ...form, max: e.target.value.replace(/\D/g, "") })} /></label>
       <h3>Options</h3>
-      <div className="tscroll"><table className="table mg fit rowcards">
-        <thead><tr><th>Option</th><th className="r">Price change</th><th>Effect on stock</th><th></th></tr></thead>
-        <tbody>${form.options.map((o, i) => html`<tr key=${o.id || `new-${i}`}><td>${o.name}</td><td className="r">${plus(o.priceDelta)}</td><td>${effectText(o.effect)}</td>
-          <td><button className="act" onClick=${() => setForm({ ...form, options: form.options.filter((x) => x !== o) })}>Remove</button></td></tr>`)}
-          ${!form.options.length && html`<tr><td colSpan="4">No options yet.</td></tr>`}</tbody>
-      </table></div>
+      <ul className="optlist">
+        ${form.options.map((o, i) => html`<li key=${o.id || `new-${i}`}>
+          <div className="optmain"><b>${o.name}</b><span className="r">${plus(o.priceDelta)}</span><span className="sub">${effectText(o.effect)}</span></div>
+          <button className="act" onClick=${() => setForm({ ...form, options: form.options.filter((x) => x !== o) })}>Remove</button></li>`)}
+        ${!form.options.length && html`<li className="sub">No options yet.</li>`}
+      </ul>
       <div className="addrow wrap">
         <input className="field w126" aria-label="New option" placeholder="New option" value=${opt.name} onChange=${(e) => setOpt({ ...opt, name: e.target.value })} />
         <input className="field w74" aria-label="Price change" placeholder="+0.00" inputMode="decimal" value=${opt.priceDelta} onChange=${(e) => setOpt({ ...opt, priceDelta: e.target.value.replace(/[^\d.-]/g, "") })} />

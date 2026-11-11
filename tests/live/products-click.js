@@ -112,7 +112,10 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   await m.choose(m.$("select[aria-label=Product]"), "prd-latte");
   check("choosing a product lists its sizes", mrows().filter((r) => /oz/.test(r.textContent)).length === 2 && /Missing|items/.test(m.text()));
   await m.click(mrows().find((r) => /Small/.test(r.textContent)).querySelector("button.act"), 700);
-  check("Edit shows the size's recipe and fills the size form", /Recipe for Small 12 oz/.test(m.text()) && m.$("section[aria-label='Edit size'] input.field").value === "Small 12 oz");
+  check("Edit shows only the size form, filled in, as a card of its own", !/Recipe for/.test(m.text()) && m.$("section[aria-label='Edit size'] input.field").value === "Small 12 oz"
+    && m.$(".pside.bare") && !m.$(".pside .pside") && !!m.byText(".pform .pbtn", "Edit recipe"));
+  await m.click(m.byText(".pform .pbtn", "Edit recipe"), 200);
+  check("Edit recipe swaps the column to that size's recipe, with a way back", /Recipe for Small 12 oz/.test(m.text()) && !m.$("section[aria-label='Edit size']") && !!m.byText(".pform .back", "‹ Back to size"));
   const costOf = () => parseFloat(/Cost to make one\s*\$([\d.]+)/.exec(m.text())[1]);
   const before = costOf();
   await m.choose(m.$("select[aria-label='Stock item']"), "stk-vanilla");
@@ -121,6 +124,8 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("adding a recipe line raises the cost at once", costOf() > before && /Vanilla syrup/.test(m.text()), `${before} -> ${costOf()}`);
   await m.click(m.$$(".recipe tbody tr").find((r) => /Vanilla/.test(r.textContent)).querySelector("button.act"), 200);
   check("Remove takes it off again", costOf() === before);
+  await m.click(m.byText(".pform .back", "‹ Back to size"), 200);
+  check("Back to size returns to the size form", !m.$("section[aria-label='Recipe']") && m.$("section[aria-label='Edit size'] input.field").value === "Small 12 oz");
 
   await m.click(m.byText(".tab", "Option groups"), 800);
   check("Option groups tab lists groups, no form yet", !m.$(".pform") && /Milk/.test(m.text()) && /up to 1/.test(m.text()) && /any number/.test(m.text()) && /\d products/.test(m.text()));

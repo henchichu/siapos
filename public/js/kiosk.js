@@ -154,10 +154,10 @@ const NAV_ICONS = {
   signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
   signin: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17-5-5 5-5M5 12h12"/>',
   cup: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
-  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
   receipt: '<path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h6"/>',
   check: '<path d="m5 12 5 5 9-10"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M16 13h.01"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/>',
 };
 const NavIcon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: NAV_ICONS[name] }}></svg>`;
@@ -169,7 +169,7 @@ function CustomerNav({ businessName, locationName, memberInfo, current, onMenu, 
   const [tip, setTip] = useState(null);
   const navRef = useRef(null), burger = useRef(null), closer = useRef(null);
   const folded = navKind === "rail" || (navKind === "full" && collapsed);
-  const items = [["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ["notifications", "Notifications", "bell", onNotifications], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
+  const items = [["notifications", "Notifications", "bell", onNotifications], ["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
   const label = items.find(([k]) => k === current)?.[1] || "Menu";
 
   useEffect(() => {
@@ -609,10 +609,12 @@ function OrderAlerts({ onOpen }) {
     };
   }, []);
   const alert = queue[0];
+  // Pressing Dismiss or View order is remembered on the server (marked read), so the same update isn't shown again at the next sign-in
+  const remember = () => { post(`/customer/notifications/${alert.id}/read`, {}).catch(() => {}); };
   return html`<div className="order-alerts" aria-live="polite" aria-atomic="true">
     ${alert && html`<${OrderAlertCard} key=${alert.id} alert=${alert}
-      onOpen=${() => onOpen(alert.orderId)}
-      onDismiss=${() => setQueue((q) => q.slice(1))} />`}
+      onOpen=${() => { remember(); onOpen(alert.orderId); }}
+      onDismiss=${() => { remember(); setQueue((q) => q.slice(1)); }} />`}
   </div>`;
 }
 
@@ -624,6 +626,7 @@ function OrderAlertCard({ alert, onOpen, onDismiss }) {
     return () => clearTimeout(timer);
   }, [alert.id, expanded]);
   const status = ALERT_STATUS[alert.status] || alert.status;
+  const finished = ["COMPLETED", "CANCELLED", "REFUNDED"].includes(alert.status); // an order still in progress can't be dismissed
   return html`<section className=${"island order-toast" + (expanded ? " expanded" : " compact") + (alert.status === "READY" ? " s4" : "")} aria-label="Order status update">
     <button className="toast-open" onClick=${() => setExpanded((value) => !value)} aria-expanded=${expanded}
       aria-label=${(expanded ? "Collapse update for order #" : "Expand update for order #") + (alert.orderNumber || alert.orderId) + ": " + status}>
@@ -632,7 +635,7 @@ function OrderAlertCard({ alert, onOpen, onDismiss }) {
       <span className="mini" aria-hidden="true">${["CONFIRMED", "PREPARING", "READY", "COMPLETED"].map((step, i, steps) => html`<i key=${step} className=${i <= (alert.status === "REFUNDED" ? 3 : steps.indexOf(alert.status)) ? "on" : ""}></i>`)}</span>
     </button>
     <button className="toast-view" onClick=${() => { setExpanded(false); onOpen(); }}>View order</button>
-    <button className="dismiss" aria-label="Dismiss order update" onClick=${onDismiss}><${NavIcon} name="close" /></button>
+    ${finished && html`<button className="dismiss" aria-label="Dismiss order update" onClick=${onDismiss}><${NavIcon} name="close" /></button>`}
   </section>`;
 }
 

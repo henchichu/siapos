@@ -200,7 +200,7 @@ const dateFilters = (options) => ({ from: "", to: "", location: options.location
 const units = (n) => String(Math.round(n * 1000) / 1000);
 const percent = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
-// Revenue: a From and To, grouped by day, month or year.
+// Revenue: a From and To, grouped by hour of the day, day, month or year.
 const hourOf = (h) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
 const UNIT = { hour: "Hour", day: "Day", month: "Month", year: "Year" };
 const NOTE = { hour: "Hours run from the first sale to the last.", day: "A live week runs from Monday.",
@@ -262,7 +262,7 @@ function RevenueReport({ report, live, onCategory }) {
     html`<${Change} now=${report.cards[k]} before=${was[k]} vs=${vs} lower=${opts.lower} />`];
   return html`<${React.Fragment}>
     <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["breakdown", "Breakdown"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
-    <p className="sub">${report.location} · ${by === "hour" ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
+    <p className="sub">${report.location} · ${report.from === report.day ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
     <${Cards} className=${`wide ${panelOf("summary", sub)}`} cards=${[card("Gross sales", "gross"), card("Discounts", "discounts", { lower: true }), card("Refunds", "refunds", { lower: true }),
       card(live ? "Net sales so far" : "Net sales", "net", { dark: true }),
       ...(costs ? [card("Cost of goods", "cost", { lower: true }), card("Profit", "profit")] : []), card("Tips", "tips"),
@@ -300,7 +300,7 @@ function RevenueHistory({ options, onCategory }) {
   const { report } = r;
   return html`<section className="pview report" aria-label="Revenue history">
     <${Filters} r=${r} options=${options} />
-    <div className="livebar"><${GroupBy} r=${r} options=${[["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
+    <div className="livebar"><${GroupBy} r=${r} options=${[["hour", "Hourly"], ["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
     ${report && html`<${RevenueReport} report=${report} onCategory=${onCategory} />`}
   </section>`;
 }

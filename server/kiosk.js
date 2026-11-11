@@ -179,7 +179,7 @@ router.get("/customer/orders/:id", async (req, res) => {
     `SELECT o.OrderID AS id, o.OrderNumber AS orderNumber, o.OrderDateTime AS placedAt, o.Total AS total,
             o.CompletedAt AS completedAt, o.CustomerNote AS note, o.OrderStatusCode AS statusCode, st.Description AS status, l.TimeZone AS tz
        FROM Orders o JOIN OrderStatus st ON st.OrderStatusCode = o.OrderStatusCode JOIN Location l ON l.LocationID = o.LocationID
-      WHERE o.OrderID = ? AND o.ChannelCode = ? AND o.CustomerID = ?`, [String(req.params.id), KIOSK, req.customer.customerId]);
+      WHERE o.OrderID = ? AND o.ChannelCode = ? AND o.CustomerID = ? AND o.BusinessID = ?`, [String(req.params.id), KIOSK, req.customer.customerId, req.customer.businessId]);
   if (!o) throw new HttpError(404, "No such order.");
   const [items] = await pool.query(
     `SELECT oi.Quantity AS qty, oi.LineTotal AS line, p.Name AS product, v.Name AS size,
@@ -203,7 +203,7 @@ router.get("/customer/my-orders", async (req, res) => {
             COALESCE((SELECT SUM(lt.PointsChange) FROM LoyaltyTransaction lt
                        WHERE lt.OrderID = o.OrderID AND lt.LoyaltyTransactionTypeCode = 1), 0) AS earned
        FROM Orders o JOIN OrderStatus st ON st.OrderStatusCode = o.OrderStatusCode JOIN Location l ON l.LocationID = o.LocationID
-      WHERE o.CustomerID = ? AND o.ChannelCode = ? ORDER BY o.OrderDateTime DESC LIMIT 50`, [req.customer.customerId, KIOSK]);
+      WHERE o.CustomerID = ? AND o.ChannelCode = ? AND o.BusinessID = ? ORDER BY o.OrderDateTime DESC LIMIT 50`, [req.customer.customerId, KIOSK, req.customer.businessId]);
   res.json({ orders: rows.map((o) => ({ id: o.id, orderNumber: o.orderNumber, placedAt: o.placedAt, tz: o.tz, total: Number(o.total), status: statusLabel(o.status), earned: Number(o.earned) })) });
 });
 

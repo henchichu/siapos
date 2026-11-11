@@ -385,7 +385,7 @@
 .customer { --sidebar-width: 248px; }
 .customer.nav-collapsed { --sidebar-width: 76px; }
 .customer .shell { display: flex; min-height: 100dvh; }
-.customer .page { flex: 1; min-width: 0; }
+.customer .page { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100dvh; }
 .customer .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .customer .nav { position: sticky; top: 0; flex: none; width: var(--sidebar-width); height: 100dvh; display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
   padding: 24px 14px 20px; background: var(--accent); color: #fff; overflow: hidden auto; transition: width 0.2s ease; }
@@ -461,13 +461,38 @@
 @keyframes island-in { from { opacity: 0; transform: translate(-50%, 12px); } }
 @keyframes island-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .customer .island, .customer .island .pulse { animation: none; } }
-@media (max-width: 900px) {
-  .customer.has-island .cart-bar { bottom: calc(88px + env(safe-area-inset-bottom)); }
-  .customer.has-island .menu-body { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
-}
 
 /* Customer order status notifications */
 .notifications .notification { width: 100%; box-sizing: border-box; text-align: left; gap: 16px; }
 .notifications .notification.unread { border-left: 4px solid #285e4c; }
 .notifications .notification > button { flex-shrink: 0; padding: 10px 14px; border: 1px solid #bbb; border-radius: 8px; background: white; cursor: pointer; }
 @media (max-width: 600px) { .notifications .notification { flex-wrap: wrap; } }
+
+/* A slim status banner above the menu keeps every category reachable. */
+.customer .order-alerts { flex-shrink: 0; background: var(--bg); }
+.customer .order-toast { position: relative; inset: auto; width: 100%; margin: 0; transform: none; z-index: 1; padding: 4px 16px; gap: 0; border-radius: 0; box-shadow: none; animation: order-toast-in .25s ease-out; }
+.customer .page > .screen { flex: 1; min-height: 0; height: auto; }
+@keyframes order-toast-in { from { opacity: 0; transform: translateY(-8px); } }
+@media (max-width: 760px), (max-aspect-ratio: 1/1) { .customer .page { height: calc(100dvh - 56px); } }
+.customer .order-toast .toast-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 56px; padding: 8px; background: transparent; border: 0; color: #fff; text-align: left; border-radius: 8px; transition: min-height .2s ease; }
+.customer .order-toast .txt { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.customer .order-toast .toast-heading { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.customer .order-toast .toast-status { font-size: 14px; }
+.customer .order-toast .toast-view { flex-shrink: 0; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: #fff; font-size: 12px; text-decoration: underline; }
+.customer .order-toast .dismiss { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: #fff; }
+.customer .order-toast button:hover { background: #ffffff18; }
+.customer .order-toast button:focus-visible { outline-color: #fff; }
+.customer .order-toast .dismiss .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* After 5 seconds, keep the order number and progress bars in a thinner bar. */
+.customer .order-toast.compact { padding: 0 16px; }
+.customer .order-toast.compact .toast-open { min-height: 44px; }
+.customer .order-toast.compact .txt b { font-size: 13px; }
+.customer .order-toast.compact .toast-heading, .customer .order-toast.compact .toast-view, .customer .order-toast.compact .toast-status { display: none; }
+.customer .order-toast.compact .mini { display: flex; }
+.customer .order-toast.compact .pulse { animation: none; }
+@media (max-width: 600px) {
+  .customer .order-toast { padding-inline: 8px; }
+  .customer .order-toast .toast-heading { flex-basis: 100%; }
+  .customer .order-toast .mini { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .customer .order-toast { animation: none; } .customer .order-toast .toast-open { transition: none; } }

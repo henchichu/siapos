@@ -3,7 +3,7 @@ const html = htm.bind(React.createElement);
 const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
 // Menu items with a page of their own; every other one opens the generic section page
-const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Manager's To-Do List": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
+const PAGES = { Register: "/register.html", Kitchen: "/kitchen.html", "My shift": "/shift.html", Products: "/products.html", Inventory: "/inventory.html", Orders: "/orders.html", "Manager's To-Do": "/attention.html", Reports: "/reports.html", Rewards: "/rewards.html" };
 const hrefOf = (name) => PAGES[name] || `/section.html#${encodeURIComponent(name)}`;
 
 // The signed-in employee and what their role may open. The server already refuses pages the role lacks (server.js).
@@ -17,7 +17,7 @@ function useMe() {
 
 // The numbers on the menu's badges (server/counts.js): polled every 10 seconds, and fetched again when the tab regains focus
 // or this page saves something. The sidebar and any page showing one share the poll.
-const COUNT_KEY = { "Manager's To-Do List": "attention", Register: "register", Kitchen: "kitchen" };
+const COUNT_KEY = { "Manager's To-Do": "attention", Register: "register", Kitchen: "kitchen" };
 const countsStore = { value: {}, subs: new Set(), timer: null };
 const loadCounts = () => api("/nav-counts").then((v) => { countsStore.value = v; countsStore.subs.forEach((f) => f(v)); }).catch(() => {});
 function useCounts() {
@@ -61,8 +61,10 @@ const ICONS = {
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
 };
 const Icon = ({ name }) => html`<svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.chart }}></svg>`;
-const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Manager's To-Do List": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
+const MENU_ICONS = { Register: "register", Kitchen: "kitchen", "Manager's To-Do": "bell", Orders: "receipt", Rewards: "star", Products: "cup", Inventory: "box",
   Reports: "chart", "My shift": "clock" };
+// Shorter names for the menu only, so a link's count fits; the page keeps its full title
+const MENU_LABELS = { "Manager's To-Do": "To-Do" };
 
 // The small icon in a summary card's corner, picked from its label
 const CARD_ICONS = [[/hour|today|week|period/i, "clock"], [/%|tax|discount/i, "percent"], [/refund|lost|loss|differ/i, "alert"],
@@ -173,7 +175,7 @@ function Sidebar({ me, current, onSignOut = signOut }) {
           <span className="full">${me?.businessName || "Home"}</span><${Mark} name=${me?.businessName} />
         </a></h1>
         <ul>${(me?.nav || []).map((n) => html`<li key=${n}>
-          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${n}</span><${Count} n=${counts[COUNT_KEY[n]]} /></a></li>`)}</ul>
+          <a className="link" href=${hrefOf(n)} aria-current=${n === current ? "page" : undefined} onClick=${closeAfter} ...${tipFor(n)}><${Icon} name=${MENU_ICONS[n]} /><span className="label">${MENU_LABELS[n] || n}</span><${Count} n=${counts[COUNT_KEY[n]]} /></a></li>`)}</ul>
       </div>
       <div className="foot">
         ${mode === "full" && html`<button className="navtoggle" aria-expanded=${!collapsed} aria-controls="main-nav" aria-label=${collapsed ? "Expand navigation" : "Collapse navigation"}

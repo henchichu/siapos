@@ -1,4 +1,4 @@
-// Drives the real Manager's To-Do List page in jsdom, and answers two waiting refunds from its Review dialog.
+// Drives the real Manager's To-Do page in jsdom, and answers two waiting refunds from its Review dialog.
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
@@ -40,9 +40,9 @@ const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") +
   const panel = (title) => $(`section.panel[aria-label='${title}']`);
   const count = (title) => Number(panel(title).querySelector(".count").textContent);
 
-  check("heading and where and when", /Manager's To-Do List/.test($(".heading").textContent) && /Brewbean Downtown · today/.test($(".heading").textContent));
+  check("heading and where and when", /Manager's To-Do/.test($(".heading").textContent) && /Brewbean Downtown · today/.test($(".heading").textContent));
   check("four panels, as in the wireframe", $$("section.panel h3").map((h) => h.textContent).join("|") === "Stock losses reported today|Stock to reorder|Timecards waiting for approval|Refunds waiting for an override");
-  check("menu: Manager's To-Do List is current, with all nine links for a manager", byText(".nav a.link", "Manager's To-Do List")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 9);
+  check("menu: Manager's To-Do is current, with all nine links for a manager", byText(".nav a.link", "To-Do")?.getAttribute("aria-current") === "page" && $$(".nav a.link").length === 9);
   check("both stock panels open Inventory", panel("Stock losses reported today").querySelector("a").getAttribute("href") === "/inventory.html" && panel("Stock to reorder").querySelector("a").getAttribute("href") === "/inventory.html");
   const review = panel("Timecards waiting for approval").querySelector("a");
   check("Review timecards opens the team page at the waiting card's pay period", count("Timecards waiting for approval") === 0 || /^\/shift\.html\?payPeriodId=.+#team$/.test(review.getAttribute("href")), review.getAttribute("href"));

@@ -175,7 +175,12 @@ function useReport(path, initial) {
     if (error) { setMsg({ kind: "error", text: error }); return; }
     return go({ ...filters });
   };
-  return { filters, set: (patch) => setFilters({ ...filters, ...patch }), report, msg, busy, run,
+  // Change a filter and, once a report has been run, run it again with that change
+  const rerun = (patch) => {
+    setFilters({ ...filters, ...patch });
+    if (applied.current) go({ ...applied.current, ...patch });
+  };
+  return { filters, set: (patch) => setFilters({ ...filters, ...patch }), rerun, report, msg, busy, run,
     refresh: useCallback(() => applied.current && go(applied.current), [go]) };
 }
 // From and To, then whatever else the tab filters on, then Run report. A tab without dates puts its own first.
@@ -195,9 +200,7 @@ const dateFilters = (options) => ({ from: "", to: "", location: options.location
 const units = (n) => String(Math.round(n * 1000) / 1000);
 const percent = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
-// Revenue: Live (one day so far by hour, or its week by day; asked for again every minute while it is today) and History
-// (a From and To by day, month or year). Both show the same figures.
-const REFRESH_MS = 60 * 1000;
+// Revenue: a From and To, grouped by hour of the day, day, month or year.
 const hourOf = (h) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
 const UNIT = { hour: "Hour", day: "Day", month: "Month", year: "Year" };
 const NOTE = { hour: "Hours run from the first sale to the last.", day: "A live week runs from Monday.",
@@ -208,7 +211,7 @@ const labelOf = (by, k) => (by === "hour" ? hourOf(k) : by === "day" ? `${weekda
 function GroupBy({ r, options }) {
   return html`<div className="tabs thin" role="group" aria-label="Group by">
     ${options.map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${r.filters.by === k} disabled=${r.busy}
-      onClick=${() => r.set({ by: k })}>${l}</button>`)}</div>`;
+      onClick=${() => r.rerun({ by: k })}>${l}</button>`)}</div>`;
 }
 
 // What the last period is: live, the same day (or week) a week earlier; history, the same number of days just before
@@ -259,7 +262,7 @@ function RevenueReport({ report, live, onCategory }) {
     html`<${Change} now=${report.cards[k]} before=${was[k]} vs=${vs} lower=${opts.lower} />`];
   return html`<${React.Fragment}>
     <${SubTabs} tabs=${[["summary", "Summary"], ["chart", "Chart"], ["breakdown", "Breakdown"], ["table", "Table"]]} value=${sub} onChange=${setSub} label="Report parts" />
-    <p className="sub">${report.location} · ${by === "hour" ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
+    <p className="sub">${report.location} · ${report.from === report.day ? dayOf(report.day) : `${dayOf(report.from)} to ${dayOf(report.day)}`}</p>
     <${Cards} className=${`wide ${panelOf("summary", sub)}`} cards=${[card("Gross sales", "gross"), card("Discounts", "discounts", { lower: true }), card("Refunds", "refunds", { lower: true }),
       card(live ? "Net sales so far" : "Net sales", "net", { dark: true }),
       ...(costs ? [card("Cost of goods", "cost", { lower: true }), card("Profit", "profit")] : []), card("Tips", "tips"),
@@ -292,42 +295,18 @@ function RevenueReport({ report, live, onCategory }) {
     </div><//>`;
 }
 
-function LiveSales({ options, onCategory }) {
-  const r = useReport("revenue", { day: "", location: options.location, by: "hour" });
-  const { report } = r;
-  const live = report?.isToday;
-  useEffect(() => {
-    if (!live) return undefined;
-    const t = setInterval(r.refresh, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [live, r.refresh]);
-  return html`<section className="pview report" aria-label="Live sales">
-    <${Filters} r=${r} options=${options} dates=${false} first=${html`<${DateField} label="Day" value=${r.filters.day} onChange=${(v) => r.set({ day: v })} />`} />
-    <div className="livebar">
-      <${GroupBy} r=${r} options=${[["hour", "By hour"], ["day", "By day"]]} />
-      ${report && html`<span className="sub" role="status">${live ? "Updated" : "As of"} ${clock(report.updatedAt, report.timeZone)}${live ? " · refreshes every minute" : ""}</span>`}
-    </div>
-    ${report && html`<${RevenueReport} report=${report} live=${live} onCategory=${onCategory} />`}
-  </section>`;
-}
-
 function RevenueHistory({ options, onCategory }) {
   const r = useReport("revenue", { from: "", to: "", location: options.location, by: "day" });
   const { report } = r;
   return html`<section className="pview report" aria-label="Revenue history">
     <${Filters} r=${r} options=${options} />
-    <div className="livebar"><${GroupBy} r=${r} options=${[["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
+    <div className="livebar"><${GroupBy} r=${r} options=${[["hour", "Hourly"], ["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
     ${report && html`<${RevenueReport} report=${report} onCategory=${onCategory} />`}
   </section>`;
 }
 
 function Revenue({ options, onCategory }) {
-  const [view, setView] = useState("live");
-  return html`<${React.Fragment}>
-    <div className="tabs thin" role="group" aria-label="Revenue views">
-      ${[["live", "Live"], ["history", "History"]].map(([k, l]) => html`<button key=${k} type="button" className="tab small" aria-pressed=${view === k} onClick=${() => setView(k)}>${l}</button>`)}</div>
-    ${view === "live" ? html`<${LiveSales} options=${options} onCategory=${onCategory} />` : html`<${RevenueHistory} options=${options} onCategory=${onCategory} />`}
-  <//>`;
+  return html`<${RevenueHistory} options=${options} onCategory=${onCategory} />`;
 }
 
 // 2. Top sellers: one ranking, with Category as a column and a filter. preset: a category and dates sent from Revenue, run at once.

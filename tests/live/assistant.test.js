@@ -32,7 +32,7 @@ test.after(async () => { await reject(); env.server.close(); await pool.end(); }
 test("Ana signs in as an assistant manager with the manager menu", async () => {
   const me = (await ana.call("/session")).body;
   assert.deepEqual([me.employeeName, me.roleName, me.locationName], ["Ana Torres", "Assistant manager", "Brewbean Downtown"]);
-  assert.deepEqual(me.nav, ["Manager's To-Do List", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "My shift"], "the manager menu without Reports and Employees");
+  assert.deepEqual(me.nav, ["Manager's To-Do", "Register", "Kitchen", "Orders", "Rewards", "Products", "Inventory", "My shift"], "the manager menu without Reports and Employees");
 });
 
 test("her menu has Orders, a server's doesn't", async () => {
@@ -43,7 +43,7 @@ test("her menu has Orders, a server's doesn't", async () => {
 test("Reports are closed to her: no menu item, the page goes home, the API says 403", async () => {
   const me = (await ana.call("/session")).body;
   assert.ok(!me.nav.includes("Reports"));
-  assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/attention.html", "she opens to Manager's To-Do List");
+  assert.equal((await page(ana, "/reports.html")).headers.get("location"), "/attention.html", "she opens to Manager's To-Do");
   assert.equal((await ana.call("/reports/options")).status, 403);
   assert.equal((await ana.call("/reports/revenue")).status, 403);
 });
@@ -79,7 +79,7 @@ test("a café she no longer works at can't be searched, refunded or stocked from
   }
 });
 
-test("Manager's To-Do List: stock and timecards, but not refunds waiting for an override", async () => {
+test("Manager's To-Do: stock and timecards, but not refunds waiting for an override", async () => {
   const r = await ana.call("/attention");
   assert.equal(r.status, 200);
   for (const k of ["losses", "reorder", "timecards"]) assert.ok(r.body[k] && Array.isArray(r.body[k].rows), k);

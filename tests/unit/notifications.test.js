@@ -5,7 +5,8 @@ const customer = require('../../server/customer');
 const pool = require('../../server/database/connection');
 const { handleErrors } = require('../../server/errors');
 let server, base;
-const alerts = [{ id: 1, customerId: 'owner', readAt: null }];
+const alerts = [{ id: 1, customerId: 'owner', channelCode: 3, readAt: null },
+  { id: 2, customerId: 'owner', channelCode: 1, readAt: null }];
 const originalQuery = pool.query;
 const cookies = {};
 test.before(async () => {
@@ -16,7 +17,8 @@ test.before(async () => {
       if (alert) alert.readAt ||= '2026-11-07T19:00:00Z';
       return [{ affectedRows: alert ? 1 : 0 }];
     }
-    return [alerts.filter((a) => a.customerId === params[0]).map((a) => ({ ...a }))];
+    assert.match(sql, /o\.ChannelCode = 3/);
+    return [alerts.filter((a) => a.customerId === params[0] && a.channelCode === 3).map((a) => ({ ...a }))];
   };
   for (const id of ['owner', 'other']) customer.create({ cookie: (name, value) => { cookies[id] = `${name}=${value}`; } }, { customerId: id });
   const app = express();
@@ -31,7 +33,7 @@ test('anonymous requests are rejected', async () => {
   assert.equal((await request('anonymous')).status, 401);
   assert.equal((await request('anonymous', '/1/read', 'POST')).status, 401);
 });
-test('customers only list their own alerts', async () => {
+test('customers only list their own customer-app alerts, excluding register orders', async () => {
   assert.equal((await (await request('owner')).json()).alerts.length, 1);
   assert.deepEqual((await (await request('other')).json()).alerts, []);
 });

@@ -154,6 +154,7 @@ const NAV_ICONS = {
   signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
   signin: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17-5-5 5-5M5 12h12"/>',
   cup: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
   receipt: '<path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h6"/>',
   check: '<path d="m5 12 5 5 9-10"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M16 13h.01"/>',
@@ -168,7 +169,7 @@ function CustomerNav({ businessName, locationName, memberInfo, current, onMenu, 
   const [tip, setTip] = useState(null);
   const navRef = useRef(null), burger = useRef(null), closer = useRef(null);
   const folded = navKind === "rail" || (navKind === "full" && collapsed);
-  const items = [["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ["notifications", "Notifications", "receipt", onNotifications], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
+  const items = [["menu", "Menu", "cup", onMenu], ["orders", "Your Orders", "receipt", onOrders], ["notifications", "Notifications", "bell", onNotifications], ...(memberInfo.member ? [["rewards", "Rewards", "star", onRewards]] : [])];
   const label = items.find(([k]) => k === current)?.[1] || "Menu";
 
   useEffect(() => {
@@ -571,6 +572,70 @@ function Menu({ businessName, memberInfo, openOrder, locationName, payHere, prod
 
 //  Order history 
 const ALERT_STATUS = { PENDING_PAYMENT: "Waiting for payment", CONFIRMED: "Confirmed", PREPARING: "Preparing", READY: "Ready for pickup", COMPLETED: "Picked up", CANCELLED: "Cancelled", REFUNDED: "Refunded" };
+// Mounted in the shell so alerts arrive on every customer screen, including
+// unread updates received while the customer was signed out.
+function OrderAlerts({ onOpen }) {
+  const [queue, setQueue] = useState([]);
+  const seen = useRef(null);
+  useEffect(() => {
+    let stopped = false, pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const { alerts } = await api("/customer/notifications");
+        if (stopped) return;
+        const firstFetch = seen.current === null;
+        if (firstFetch) seen.current = new Set();
+        // The API returns newest first. Keep history in the tab, but never
+        // show an outdated status when a newer update for that order exists.
+        const latest = new Map();
+        alerts.forEach((a) => { if (!latest.has(a.orderId)) latest.set(a.orderId, a); });
+        const fresh = [...latest.values()].filter((a) => !seen.current.has(String(a.id)) && (!firstFetch || !a.readAt)).reverse();
+        alerts.forEach((a) => seen.current.add(String(a.id)));
+        setQueue((previous) => [
+          ...previous.filter((a) => !latest.has(a.orderId) || String(latest.get(a.orderId).id) === String(a.id)),
+          ...fresh,
+        ]);
+      } catch (_) { /* Retry on the next poll without interrupting ordering. */ }
+      finally { pending = false; }
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      stopped = true; clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  const alert = queue[0];
+  return html`<div className="order-alerts" aria-live="polite" aria-atomic="true">
+    ${alert && html`<${OrderAlertCard} key=${alert.id} alert=${alert}
+      onOpen=${() => onOpen(alert.orderId)}
+      onDismiss=${() => setQueue((q) => q.slice(1))} />`}
+  </div>`;
+}
+
+function OrderAlertCard({ alert, onOpen, onDismiss }) {
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const timer = setTimeout(() => setExpanded(false), 5000);
+    return () => clearTimeout(timer);
+  }, [alert.id, expanded]);
+  const status = ALERT_STATUS[alert.status] || alert.status;
+  return html`<section className=${"island order-toast" + (expanded ? " expanded" : " compact") + (alert.status === "READY" ? " s4" : "")} aria-label="Order status update">
+    <button className="toast-open" onClick=${() => setExpanded((value) => !value)} aria-expanded=${expanded}
+      aria-label=${(expanded ? "Collapse update for order #" : "Expand update for order #") + (alert.orderNumber || alert.orderId) + ": " + status}>
+      <span className="pulse"></span>
+      <span className="txt"><span className="toast-heading">Order status update</span><b>Order #${alert.orderNumber || alert.orderId}</b><span className="toast-status">${status}</span></span>
+      <span className="mini" aria-hidden="true">${["CONFIRMED", "PREPARING", "READY", "COMPLETED"].map((step, i, steps) => html`<i key=${step} className=${i <= (alert.status === "REFUNDED" ? 3 : steps.indexOf(alert.status)) ? "on" : ""}></i>`)}</span>
+    </button>
+    <button className="toast-view" onClick=${() => { setExpanded(false); onOpen(); }}>View order</button>
+    <button className="dismiss" aria-label="Dismiss order update" onClick=${onDismiss}><${NavIcon} name="close" /></button>
+  </section>`;
+}
+
 function Notifications() {
   const [alerts, setAlerts] = useState(null);
   const [err, setErr] = useState("");
@@ -661,7 +726,7 @@ function OrderDetails({ businessName, orderId, memberInfo, onBackToHistory, onBa
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState("");
   const load = useCallback(() => {
-    api(`/customer/orders/${orderId}`).then(setOrder).catch((e) => setErr(e.message));
+    api(`/customer/orders/${orderId}`).then((data) => { setOrder(data); setErr(""); }).catch((e) => setErr(e.message));
   }, [orderId]);
   useEffect(() => {
     load();
@@ -693,17 +758,6 @@ function OrderDetails({ businessName, orderId, memberInfo, onBackToHistory, onBa
     </div>`;
 }
 
-// A floating card for the customer's order that is still in progress: its number and status, and a tap opens it
-const ISLAND_WORDS = { 1: "Waiting for payment", 2: "Confirmed", 3: "Being prepared", 4: "Ready for pickup" };
-function StatusIsland({ order, onOpen }) {
-  const idx = STEP_OF[order.statusCode] ?? -1;
-  return html`<button className=${"island s" + order.statusCode} onClick=${onOpen} aria-live="polite">
-    <span className="pulse"></span>
-    <span className="txt"><b>Order #${order.orderNumber}</b><span>${ISLAND_WORDS[order.statusCode] || order.status}</span></span>
-    <span className="mini">${STATUS_STEPS.map((s, i) => html`<i key=${s} className=${i <= idx ? "on" : ""}></i>`)}</span>
-  </button>`;
-}
-
 //  App shell 
 // A shared screen: with no touches for IDLE_MS (30 seconds once an order has been placed) the customer is signed out.
 // The server ends the session itself after 15 minutes without a touch (server/customer.js).
@@ -731,7 +785,6 @@ function App() {
     document.addEventListener("visibilitychange", refreshActive);
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", refreshActive); };
   }, []);
-  useEffect(() => { document.body.classList.toggle("has-island", !!active); }, [active]);
 
   const idleLimit = useRef(IDLE_MS);
   const signOut = async () => {
@@ -774,8 +827,11 @@ function App() {
   const shell = (content) => html`<div className="shell">
     <${CustomerNav} businessName=${ctx.businessName} locationName=${ctx.locationName} memberInfo=${memberInfo} current=${current}
       onNotifications=${() => setView("notifications")} onMenu=${() => setView("menu")} onOrders=${() => setView("history")} onRewards=${() => setView("rewards")} onExit=${signOut} />
-    <main className="page">${content}</main>
-    ${active && !(view === "order" && openOrderId === active.id) && html`<${StatusIsland} order=${active} onOpen=${() => { setOpenOrderId(active.id); setView("order"); }} />`}</div>`;
+    <main className="page">
+      <${OrderAlerts} onOpen=${(id) => { setOpenOrderId(id); setView("order"); }} />
+      ${content}
+    </main>
+    </div>`;
 
   if (view === "notifications") return shell(html`<${Notifications} />`);
 

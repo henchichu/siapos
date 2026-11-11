@@ -128,7 +128,8 @@ router.get("/customer/me", requireCustomer, async (req, res) => {
   });
 });
 
-// Return notifications belonging to the signed-in customer.
+// Return only customer-app order notifications belonging to the signed-in customer.
+// Channel 3 is used by this app when placing pickup orders; POS is channel 1.
 router.get("/customer/notifications", requireCustomer, async (req, res) => {
   const [alerts] = await pool.query(
     `SELECT a.AlertID AS id,
@@ -141,7 +142,7 @@ router.get("/customer/notifications", requireCustomer, async (req, res) => {
        JOIN Orders o ON o.OrderID = a.OrderID
        JOIN OrderStatus s
          ON s.OrderStatusCode = a.OrderStatusCode
-      WHERE a.CustomerID = ?
+      WHERE a.CustomerID = ? AND o.ChannelCode = 3
       ORDER BY a.CreatedAt DESC, a.AlertID DESC
       LIMIT 100`,
     [req.customer.customerId]

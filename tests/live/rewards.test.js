@@ -1,5 +1,5 @@
 // Needs the dev database. Enrolls test members (last name "Member <run number>") and removes them afterwards; a test sale made for
-// one stays in the database as a walk-in sale, as the other tests' sales do. Diego is enrolled and then put back as he was.
+// one stays in the database as a walk-in sale, as the other tests' sales do. Ben and Diego start the run as customers without accounts (the case of an existing customer being enrolled) and are made members again afterwards.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { start, client, pool, admin, pickUp, topUp, TEST_CARD, creds } = require("./env");
@@ -30,8 +30,9 @@ test.before(async () => {
   // the tests find Chloe as an active member; whatever she was before is put back afterwards
   [[chloe]] = await pool.query("SELECT Active AS active FROM LoyaltyAccount WHERE CustomerID = 'cus-chloe'");
   await pool.query("UPDATE LoyaltyAccount SET Active = TRUE WHERE CustomerID = 'cus-chloe'");
+  await pool.query("DELETE FROM LoyaltyAccount WHERE CustomerID IN ('cus-ben', 'cus-diego')");
 });
-// Everything this run enrolled goes, found by its last name; Ben and Diego go back to being customers without accounts
+// Everything this run enrolled goes, found by its last name; Ben and Diego are made members again, as every customer is
 test.after(async () => {
   try {
     const [rows] = await pool.query("SELECT CustomerID AS id FROM Customer WHERE LastName = ? AND BusinessID = 'biz-brewbean'", [surname]);
@@ -44,6 +45,7 @@ test.after(async () => {
       await pool.query("DELETE FROM Customer WHERE CustomerID IN (?)", [ids]);
     }
     await pool.query("DELETE FROM LoyaltyAccount WHERE CustomerID IN ('cus-ben', 'cus-diego')");
+    await pool.query("INSERT INTO LoyaltyAccount (LoyaltyAccountID, CustomerID, TierID, BusinessID) VALUES ('loy-ben', 'cus-ben', 'tier-bean', 'biz-brewbean'), ('loy-diego', 'cus-diego', 'tier-bean', 'biz-brewbean')");
     await pool.query("UPDATE Customer SET Email = NULL, Phone = '312-555-0142' WHERE CustomerID = 'cus-ben'");
     await pool.query("UPDATE Customer SET Email = 'diego@example.com', Phone = NULL WHERE CustomerID = 'cus-diego'");
     if (chloe) await pool.query("UPDATE LoyaltyAccount SET Active = ? WHERE CustomerID = 'cus-chloe'", [chloe.active]);

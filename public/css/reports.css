@@ -72,7 +72,9 @@
 .rcards:not(:has(> .dark)) > .rcard:first-child .change, .rcard.dark .change { color: #F3E6D8; }
 
 /* Breakdown panels: two columns on a laptop, one on a phone */
-.rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+/* Masonry: cards flow down two columns with no gaps; under about 800px they stack in one */
+.rgrid { display: block; columns: 2 380px; column-gap: 16px; }
+.rgrid > * { break-inside: avoid; margin-bottom: 16px; }
 .rpanel figcaption { flex-wrap: wrap; }
 .rpanel .tabs { padding: 0; }
 .rpanel .note { margin: 0; font-size: 13px; }
@@ -122,7 +124,6 @@
 .mini .r { text-align: right; }
 .mini tfoot td { font-weight: 600; }
 
-@media (max-width: 900px) { .rgrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
   .rcards.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wplot { gap: 4px; }

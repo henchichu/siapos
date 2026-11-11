@@ -11,6 +11,13 @@ UPDATE Orders o JOIN (SELECT OrderID, ROW_NUMBER() OVER (PARTITION BY BusinessID
    SET o.OrderNumber = r.rn;
 UPDATE Business b SET LastOrderNumber = COALESCE((SELECT MAX(OrderNumber) FROM Orders o WHERE o.BusinessID = b.BusinessID), 0), UpdatedAt = UpdatedAt;
 
+-- Every customer is a member: seeded customers join at the lowest tier, as a sign-up does (server/customer.js).
+INSERT INTO LoyaltyAccount (LoyaltyAccountID, CustomerID, TierID, BusinessID)
+SELECT UUID(), c.CustomerID, (SELECT t.TierID FROM MembershipTier t WHERE t.BusinessID = c.BusinessID ORDER BY t.MinimumPoints, t.Name LIMIT 1), c.BusinessID
+  FROM Customer c
+ WHERE NOT EXISTS (SELECT 1 FROM LoyaltyAccount la WHERE la.CustomerID = c.CustomerID)
+   AND EXISTS (SELECT 1 FROM MembershipTier t WHERE t.BusinessID = c.BusinessID);
+
 -- Run after demo seeds too, so new rows with no subsequent stock movement are covered.
 INSERT INTO LowStockAlert (InventoryID)
 SELECT InventoryID FROM Inventory WHERE ReorderThreshold > 0 AND Quantity <= ReorderThreshold

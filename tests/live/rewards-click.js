@@ -61,7 +61,7 @@ async function open(base, number, pin, at = "/rewards.html") {
 
   check("the sidebar has Rewards, marked as this page", m.$(".nav [aria-current=page]")?.textContent === "Rewards");
   check("table columns from the wireframe", m.$$("table[aria-label=Members] thead th").map((t) => t.textContent).join("|") === "Name|Contact|Tier|Points|Status|Actions");
-  check("members only: Ava and Chloe, not the customers Ben and Diego", !!m.row("Ava Nguyen") && !!m.row("Chloe Moreau") && !m.row("Ben") && !m.row("Diego"));
+  check("every customer is a member: Ava, Ben, Chloe and Diego", !!m.row("Ava Nguyen") && !!m.row("Ben Carter") && !!m.row("Chloe Moreau") && !!m.row("Diego Ramos"));
   check("a row: name, email (phone under it), tier, points, status, actions", m.cells(m.row("Chloe Moreau")).slice(0, 2).join("|") === "Chloe Moreau|chloe@example.com312-555-0177"
     && m.cells(m.row("Chloe Moreau"))[2] === "Bean" && m.cells(m.row("Chloe Moreau"))[4] === "Active" && m.cells(m.row("Chloe Moreau"))[5] === "EditHistoryDeactivate", m.cells(m.row("Chloe Moreau")).join("|"));
   check("the form column starts closed", !m.$(".pform") && !!m.byText("button", "Add new member"));

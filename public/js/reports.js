@@ -200,12 +200,11 @@ const dateFilters = (options) => ({ from: "", to: "", location: options.location
 const units = (n) => String(Math.round(n * 1000) / 1000);
 const percent = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
-// Revenue: a From and To, grouped by hour of the day, day, month or year.
-const hourOf = (h) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
-const UNIT = { hour: "Hour", day: "Day", month: "Month", year: "Year" };
-const NOTE = { hour: "Hours run from the first sale to the last.", day: "A live week runs from Monday.",
+// Revenue: a From and To, grouped by day, month or year.
+const UNIT = { day: "Day", month: "Month", year: "Year" };
+const NOTE = { day: "A live week runs from Monday.",
   month: "Months with no sales show as zero.", year: "Years with no sales show as zero." };
-const labelOf = (by, k) => (by === "hour" ? hourOf(k) : by === "day" ? `${weekday(k)} ${shortDay(k)}`
+const labelOf = (by, k) => (by === "day" ? `${weekday(k)} ${shortDay(k)}`
   : by === "month" ? new Date(`${k}-01T00:00:00Z`).toLocaleDateString([], { month: "short", year: "numeric", timeZone: "UTC" }) : k);
 
 function GroupBy({ r, options }) {
@@ -218,10 +217,7 @@ function GroupBy({ r, options }) {
 function versus(report) {
   const p = report.previous;
   if (p.days) return `vs. previous ${p.days} day${p.days > 1 ? "s" : ""}`;
-  if (report.by === "day") return "vs. last week";
-  if (!p.until) return `vs. last ${weekday(p.to)}`;
-  const [h, m] = p.until.split(":").map(Number);
-  return `vs. last ${weekday(p.to)} to ${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  return "vs. last week";
 }
 
 // The breakdown grid: what makes up each card. Clicking a category opens Top sellers for it.
@@ -268,7 +264,7 @@ function RevenueReport({ report, live, onCategory }) {
       ...(costs ? [card("Cost of goods", "cost", { lower: true }), card("Profit", "profit")] : []), card("Tips", "tips"),
       card("Orders", "orders", { fmt: String }), card("Avg order", "avgOrder")]} />
     <${Waterfall} cards=${report.cards} costs=${costs} className=${panelOf("summary", sub)} />
-    <${BarChart} className=${panelOf("chart", sub)} title=${`Net sales by ${unit.toLowerCase()}`} best=${by === "hour" ? undefined : `Best ${unit.toLowerCase()}`}
+    <${BarChart} className=${panelOf("chart", sub)} title=${`Net sales by ${unit.toLowerCase()}`} best=${`Best ${unit.toLowerCase()}`}
       bars=${report.rows.map((x, i) => ({ key: x.key, value: x.net, tip: label(x.key),
         label: report.rows.length <= 14 || i % Math.ceil(report.rows.length / 10) === 0 ? label(x.key) : "" }))} />
     <${Breakdown} report=${report} className=${panelOf("breakdown", sub)} onCategory=${onCategory} />
@@ -291,7 +287,7 @@ function RevenueReport({ report, live, onCategory }) {
         <tfoot><tr><td>Total</td><td className="r">${report.total.orders}</td>${cell(report.total, "gross")}${cell(report.total, "discounts")}${cell(report.total, "refunds")}
           ${cell(report.total, "net")}${costs && html`<${React.Fragment}>${cell(report.total, "cost")}${cell(report.total, "profit")}<//>`}<td></td></tr></tfoot>
       </table></div>
-      <p className="sub">Net sales are before tax and tips. A refund comes off the ${by === "hour" ? "hour" : "day"} it was paid back. ${NOTE[by]}</p>
+      <p className="sub">Net sales are before tax and tips. A refund comes off the day it was paid back. ${NOTE[by]}</p>
     </div><//>`;
 }
 
@@ -300,7 +296,7 @@ function RevenueHistory({ options, onCategory }) {
   const { report } = r;
   return html`<section className="pview report" aria-label="Revenue history">
     <${Filters} r=${r} options=${options} />
-    <div className="livebar"><${GroupBy} r=${r} options=${[["hour", "Hourly"], ["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
+    <div className="livebar"><${GroupBy} r=${r} options=${[["day", "Daily"], ["month", "Monthly"], ["year", "Yearly"]]} /></div>
     ${report && html`<${RevenueReport} report=${report} onCategory=${onCategory} />`}
   </section>`;
 }

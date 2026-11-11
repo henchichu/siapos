@@ -234,8 +234,10 @@ const dollars = (s) => Number(s.replace(/[$,]/g, "").replace("−", "-"));
   check("the Membership filter lists the tiers, All by default", [...(m.field("Membership")?.options || [])].map((o) => o.textContent).join("|") === "All memberships|Bean|Gold|No membership" && m.field("Membership").value === "");
   check("the breakdown has every group, adding up to the card", mRows().map((r) => r[0]).join("|") === "Bean|Gold|No membership" && String(mRows().reduce((a, r) => a + Number(r[1]), 0)) === m.cards()[0][1], mRows().join());
   check("the minimum gaps are in the note under the cards", /At risk until 30 days after their last order, or Lapsed until 60 days/.test(m.$(".rcards").nextElementSibling?.textContent || ""), m.$(".rcards").nextElementSibling?.textContent);
+  await pool.query("UPDATE LoyaltyAccount SET Active = FALSE WHERE CustomerID = 'cus-ava'"); // every customer is a member, so close one account to have a non-member
   await m.choose(m.field("Membership"), "none");
   await m.click(m.byText("button", "Run report"), 700);
+  await pool.query("UPDATE LoyaltyAccount SET Active = TRUE WHERE CustomerID = 'cus-ava'");
   check("the Membership filter narrows the table and breakdown", cRows().length > 0 && cRows().every((r) => r[1] === "No membership") && mRows().length === 1 && mRows()[0][0] === "No membership", cRows().join());
   check("the long note under the table is gone", !m.$(cTable).closest(".tablewrap").querySelector("p"));
 

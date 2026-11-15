@@ -153,4 +153,35 @@ ON DUPLICATE KEY UPDATE
     Description = VALUES(Description),
     Active = VALUES(Active);
 
+-- The one business, its one café and its roles: the same on every install. sql/provision/provision.sql fills in the real
+-- name, details and address; sql/dev/05-dev-seed.sql adds the demo data. Server ids (server/customer.js) name role-customer.
+INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
+VALUES ('biz-brewbean', 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7)
+ON DUPLICATE KEY UPDATE BusinessID = BusinessID;
+
+INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
+VALUES ('loc-downtown', 'biz-brewbean', 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', 'America/Chicago')
+ON DUPLICATE KEY UPDATE LocationID = LocationID;
+
+-- OpensTo is the page shown after sign-in
+INSERT INTO Role (RoleID, BusinessID, Name, OpensTo)
+VALUES
+    ('role-gm',       'biz-brewbean', 'General manager',   'REGISTER'),
+    ('role-manager',  'biz-brewbean', 'Manager',           'REGISTER'),
+    ('role-asst',     'biz-brewbean', 'Assistant manager', 'REGISTER'),
+    ('role-server',   'biz-brewbean', 'Server',            'REGISTER'),
+    ('role-barista',  'biz-brewbean', 'Chef / barista',    'KITCHEN'),
+    ('role-customer', 'biz-brewbean', 'Customer',          'KIOSK')   -- no permissions: customers have their own session and the kiosk routes
+ON DUPLICATE KEY UPDATE Name = VALUES(Name), OpensTo = VALUES(OpensTo);
+
+-- Managers add 3 (refund overrides), 18 (approve timecards) and 20 (reports): only the general manager and managers see Reports
+INSERT IGNORE INTO RolePermission (RoleID, BusinessID, PermissionCode)
+SELECT r.RoleID, 'biz-brewbean', p.PermissionCode
+  FROM Role r JOIN Permission p
+    ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
+    OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
+    OR (r.RoleID = 'role-gm'      AND p.PermissionCode BETWEEN 1 AND 20)
+    OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
+    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
+
 COMMIT;

@@ -6,6 +6,7 @@ const { requirePermission } = require("./session");
 const { hasPermission } = require("./pin");
 const { label } = require("./labels");
 const check = require("./validate");
+const { CUSTOMER_ROLE_ID } = require("./customer");
 
 const PERM_LOOK_UP = 9; // look up and enroll members
 const PERM_EDIT = 10; // edit and deactivate members
@@ -246,8 +247,8 @@ router.post("/rewards/members", async (req, res) => {
       return { id: h.id, message: `${nameOf(h)} is already a customer; enrolled as a member.` };
     }
     const id = crypto.randomUUID();
-    await conn.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, LastName, Email, Phone) VALUES (?, ?, ?, ?, ?, ?)",
-      [id, businessId, f.firstName, f.lastName || null, f.email, f.phone]);
+    await conn.query("INSERT INTO Customer (CustomerID, BusinessID, RoleID, FirstName, LastName, Email, Phone) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, businessId, CUSTOMER_ROLE_ID, f.firstName, f.lastName || null, f.email, f.phone]);
     await conn.query("INSERT INTO LoyaltyAccount (LoyaltyAccountID, CustomerID, TierID, BusinessID) VALUES (UUID(), ?, ?, ?)", [id, tier.id, businessId]);
     return { id, message: `Enrolled ${nameOf(f)}.` };
   });

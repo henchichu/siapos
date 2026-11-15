@@ -1,7 +1,7 @@
 echo "--- customer order status alerts ---"
 t "business" ok "INSERT INTO Business (BusinessID,Name) VALUES ('B1','Cafe');"
 s "location" ok "INSERT INTO Location (LocationID,BusinessID,Name,TimeZone) VALUES ('L1','B1','Main','America/Chicago');"
-t "customers" ok "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('C1','B1','one@example.com'),('C2','B1','two@example.com');"
+t "customers" ok "INSERT INTO Role (RoleID,BusinessID,Name,OpensTo) VALUES ('RC1','B1','Customer','KIOSK'); INSERT INTO Customer (CustomerID,BusinessID,RoleID,Email) VALUES ('C1','B1','RC1','one@example.com'),('C2','B1','RC1','two@example.com');"
 t "new customer order" ok "INSERT INTO Orders (OrderID,LocationID,BusinessID,CustomerID,ChannelCode) VALUES ('O1','L1','B1','C1',3);"
 a "initial status alert" "SELECT CONCAT(CustomerID,':',OrderStatusCode,':',ReadAt IS NULL) FROM OrderStatusAlert WHERE OrderID='O1';" 'C1:1:1'
 t "unchanged status and note" ok "UPDATE Orders SET OrderStatusCode=1, CustomerNote='Please wait' WHERE OrderID='O1';"

@@ -1,4 +1,4 @@
--- Sets up a real business: one business, its first café and registers, roles, and the first employee.
+-- Sets up a real business: names the seeded business and café, adds registers and the first employee.
 -- Edit the values in the first block, then run it ONCE against an empty database (see README, "Setting up a business"):
 --   docker compose exec -T mysql-db sh -c 'MYSQL_PWD=$(cat /run/secrets/db_root_password) mysql -uroot' < sql/provision/provision.sql
 -- Nothing in the app creates or edits these rows afterwards: use sql/provision/maintenance.sql for the changes you will need.
@@ -34,17 +34,17 @@ SET @pin_hash        = 'PASTE-THE-OUTPUT-OF-hash-pin.js-HERE';
 SET @first_period_start = '2026-01-05';          -- the first day of the first two-week pay period
 -- ---------------------------------------------------------------------------------------------------------------------
 
-SET @biz  = UUID();
-SET @loc  = UUID();
+SET @biz  = 'biz-brewbean';   -- the business, café and roles come from 02-seed.sql; this fills in their details
+SET @loc  = 'loc-downtown';
 SET @emp  = UUID();
 SET @t_std = UUID();
 SET @t_ex  = UUID();
 
-INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, PricesIncludeTax)
-VALUES (@biz, @business_name, @contact_email, @contact_phone, @prices_include_tax);
+UPDATE Business SET Name = @business_name, ContactEmail = @contact_email, ContactPhone = @contact_phone, PricesIncludeTax = @prices_include_tax
+ WHERE BusinessID = @biz;
 
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
-VALUES (@loc, @biz, @location_name, @location_addr, @location_phone, @time_zone);
+UPDATE Location SET Name = @location_name, Address = @location_addr, Phone = @location_phone, TimeZone = @time_zone
+ WHERE LocationID = @loc;
 
 INSERT INTO Register (RegisterID, LocationID, Name) VALUES (UUID(), @loc, 'Counter');   -- add more rows for more registers
 
@@ -54,27 +54,8 @@ VALUES (@t_std, @biz, 'Standard'), (@t_ex, @biz, 'Exempt');
 INSERT INTO LocationTaxRate (LocationID, TaxCategoryID, BusinessID, Rate)
 VALUES (@loc, @t_std, @biz, @rate_standard), (@loc, @t_ex, @biz, @rate_exempt);
 
--- Roles. Permission codes are the Permission table's (02-seed.sql); OpensTo is the page shown after sign-in.
-SET @r_gm = UUID(); SET @r_mgr = UUID(); SET @r_asst = UUID(); SET @r_srv = UUID(); SET @r_cook = UUID();
-INSERT INTO Role (RoleID, BusinessID, Name, OpensTo)
-VALUES (@r_gm,   @biz, 'General manager',   'REGISTER'),
-       (@r_mgr,  @biz, 'Manager',           'REGISTER'),
-       (@r_asst, @biz, 'Assistant manager', 'REGISTER'),
-       (@r_srv,  @biz, 'Server',            'REGISTER'),
-       (@r_cook, @biz, 'Chef / barista',    'KITCHEN');
-
-INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
-SELECT r.RoleID, @biz, p.PermissionCode
-  FROM Role r JOIN Permission p
-    ON (r.RoleID = @r_gm   AND p.PermissionCode BETWEEN 1 AND 20)
-    OR (r.RoleID = @r_mgr  AND p.PermissionCode BETWEEN 1 AND 20)
-    OR (r.RoleID = @r_asst AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
-    OR (r.RoleID = @r_srv  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
-    OR (r.RoleID = @r_cook AND p.PermissionCode IN (5, 6, 8))
- WHERE r.BusinessID = @biz;
-
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
-VALUES (@emp, @biz, @first_name, @last_name, @first_email, @first_number, @r_gm);
+VALUES (@emp, @biz, @first_name, @last_name, @first_email, @first_number, 'role-gm');
 INSERT INTO EmployeeCredential (EmployeeID, PasswordHash, PinHash) VALUES (@emp, @password_hash, @pin_hash);
 INSERT INTO EmployeeLocation (EmployeeID, LocationID, BusinessID) VALUES (@emp, @loc, @biz);
 

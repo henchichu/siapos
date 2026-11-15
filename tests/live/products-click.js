@@ -157,6 +157,8 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   await m.click(m.byText(".pform .pbtn", "Save"), 700);
   check("Rename changes it in the list", mrows().some((r) => cells(r)[0] === `Click ${stamp} renamed`));
   check("the list has an Actions column, buttons grouped in it", m.$$("thead th").map((t) => t.textContent).join("|") === "Category|Products|Actions" && m.$$("td .acts button").length >= 2);
+  await m.click(mrows().find((r) => cells(r)[0] === "Coffee").querySelector("button.danger"), 700);
+  check("a category with active products can't be deactivated, and says why", /Move or deactivate its \d+ products? first/.test(m.text()) && !!mrows().find((r) => cells(r)[0] === "Coffee").querySelector("button.danger"));
   await m.click(mrows().find((r) => cells(r)[0].startsWith(`Click ${stamp}`)).querySelector("button.danger"), 700);
   check("Deactivate hides it from the list", !mrows().some((r) => /Click /.test(r.textContent)));
   await m.click(m.$("section[aria-label=Categories] .check input"), 300);

@@ -67,6 +67,33 @@ test("categories: only roles that edit products manage them; add, rename, deacti
   assert.equal((await leo.call("/categories/nope", { name: "x" })).status, 404);
 });
 
+test("categories: not deactivated while products are active in them; an inactive product may keep it", async () => {
+  const cat = (await leo.call("/categories", { name: `Cat B ${stamp}` })).body.id;
+  created.categories.push(cat);
+  const made = await leo.call("/products", { name: `Cat product ${stamp}`, categoryId: cat, active: true });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const pid = made.body.id;
+  created.products.push(pid);
+  const isActive = async () => (await leo.call("/categories")).body.categories.find((c) => c.id === cat).active;
+
+  const refused = await leo.call(`/categories/${cat}/active`, { active: false });
+  assert.equal(refused.status, 409);
+  assert.match(refused.body.error, /Move or deactivate its 1 product first/);
+  assert.equal(await isActive(), true, "still active");
+
+  assert.equal((await leo.call(`/products/${pid}/active`, { active: false })).status, 200);
+  assert.equal((await leo.call(`/categories/${cat}/active`, { active: false })).status, 200, "no active products left");
+
+  const keep = { name: `Cat product ${stamp}`, categoryId: cat };
+  assert.equal((await leo.call(`/products/${pid}`, { ...keep, active: false })).status, 200, "an inactive product can be saved with its deactivated category");
+  assert.equal((await leo.call(`/products/${pid}`, { ...keep, active: true })).status, 409, "an active one can't");
+  assert.match((await leo.call(`/products/${pid}/active`, { active: true })).body.error, /category is deactivated/);
+  assert.equal((await leo.call("/products", { name: `Cat other ${stamp}`, categoryId: cat })).status, 409, "and it isn't offered for a new product");
+
+  assert.equal((await leo.call(`/categories/${cat}/active`, { active: true })).status, 200);
+  assert.equal((await leo.call(`/products/${pid}/active`, { active: true })).status, 200, "back once its category is");
+});
+
 test("products: add, edit, deactivate, photo", async () => {
   const name = `Test cookie ${stamp}`;
   assert.equal((await leo.call("/products", { name: "  ", categoryId: "cat-bakery" })).status, 400);

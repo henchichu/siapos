@@ -48,9 +48,11 @@ const owns = async (db, sql, params, message) => {
   return row;
 };
 
-async function categoryOrNull(businessId, id) {
+// An active product needs an active category (or none). A product that is switched off may keep a category deactivated since: keep is its current one.
+async function categoryOrNull(businessId, id, { keep = null, active = true } = {}) {
   if (!id) return null;
-  await owns(pool, "SELECT 1 AS ok FROM Category WHERE CategoryID = ? AND BusinessID = ? AND Active", [String(id), businessId], "Choose a category from the list.");
+  const row = await owns(pool, "SELECT Active FROM Category WHERE CategoryID = ? AND BusinessID = ?", [String(id), businessId], "Choose a category from the list.");
+  if (!row.Active && (active || String(id) !== keep)) throw new HttpError(409, "That category is deactivated. Choose an active one.");
   return String(id);
 }
 
@@ -109,10 +111,10 @@ router.get("/products/list", see, async (req, res) => {
   });
 });
 
-const productFields = async (req) => ({
+const productFields = async (req, keep = null) => ({
   name: text(req.body.name, "name", 150),
   description: check.note(req.body.description, "description", 5000) || null, // may run to several lines
-  categoryId: await categoryOrNull(req.session.businessId, req.body.categoryId),
+  categoryId: await categoryOrNull(req.session.businessId, req.body.categoryId, { keep, active: req.body.active !== false }),
   active: req.body.active !== false,
 });
 
@@ -125,7 +127,8 @@ router.post("/products", edit, async (req, res) => {
 });
 
 router.post("/products/:id", edit, async (req, res) => {
-  const f = await productFields(req);
+  const [[current]] = await pool.query("SELECT CategoryID FROM Product WHERE ProductID = ? AND BusinessID = ?", [req.params.id, req.session.businessId]);
+  const f = await productFields(req, current?.CategoryID);
   const [r] = await pool.query("UPDATE Product SET Name = ?, Description = ?, CategoryID = ?, Active = ? WHERE ProductID = ? AND BusinessID = ?",
     [f.name, f.description, f.categoryId, f.active, req.params.id, req.session.businessId]);
   if (!r.affectedRows) throw new HttpError(404, "Product not found.");
@@ -154,8 +157,12 @@ router.post("/categories/:id", edit, async (req, res) => {
   res.json({ id: req.params.id });
 });
 
-// Products in a deactivated category keep it; it just isn't offered for new choices
+// A category can be deactivated once none of its products is active, so no live product is ever left without its category
 router.post("/categories/:id/active", edit, async (req, res) => {
+  if (!req.body.active) {
+    const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM Product WHERE CategoryID = ? AND BusinessID = ? AND Active", [req.params.id, req.session.businessId]);
+    if (n) throw new HttpError(409, `Move or deactivate its ${n} product${n === 1 ? "" : "s"} first.`);
+  }
   const [r] = await pool.query("UPDATE Category SET Active = ? WHERE CategoryID = ? AND BusinessID = ?",
     [req.body.active ? 1 : 0, req.params.id, req.session.businessId]);
   if (!r.affectedRows) throw new HttpError(404, "Category not found.");
@@ -163,6 +170,10 @@ router.post("/categories/:id/active", edit, async (req, res) => {
 });
 
 router.post("/products/:id/active", edit, async (req, res) => {
+  if (req.body.active) {
+    const [[c]] = await pool.query("SELECT c.Active AS active FROM Product p JOIN Category c ON c.CategoryID = p.CategoryID WHERE p.ProductID = ? AND p.BusinessID = ?", [req.params.id, req.session.businessId]);
+    if (c && !c.active) throw new HttpError(409, "Its category is deactivated. Choose an active category first.");
+  }
   const [r] = await pool.query("UPDATE Product SET Active = ? WHERE ProductID = ? AND BusinessID = ?",
     [req.body.active ? 1 : 0, req.params.id, req.session.businessId]);
   if (!r.affectedRows) throw new HttpError(404, "Product not found.");

@@ -95,7 +95,8 @@ function ProductsTab({ data, reload }) {
       <label className="pf"><b>Description</b><input className="field" value=${form.description || ""} onChange=${(e) => set({ description: e.target.value })} /></label>
       <label className="pf"><b>Category</b>
         <select className="select" value=${form.categoryId} onChange=${(e) => set({ categoryId: e.target.value })}>
-          <option value="">No category</option>${data.categories.map((c) => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}</select></label>
+          <option value="">No category</option>${data.categories.map((c) => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}
+          ${form.categoryId && !data.categories.some((c) => c.id === form.categoryId) && html`<option value=${form.categoryId}>${form.category} (deactivated)</option>`}</select></label>
       <div className="pf"><b>Photo</b>
         <input ref=${fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange=${(e) => setPhoto(e.target.files[0] || null)} />
         <button className="pbtn upload" onClick=${() => fileRef.current.click()}>Upload Photo</button>
@@ -353,13 +354,14 @@ function CategoriesTab({ data, reload, reloadProducts }) {
   const [form, setForm] = useState(null); // { id, name } while the side form is open
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null); // a refused Deactivate, shown above the list (the side form isn't open then)
   const [showOff, setShowOff] = useState(false); // deactivated categories are hidden until asked for
   const rows = data.categories.filter((c) => showOff || c.active);
   const close = () => { setForm(null); setMsg(null); };
   const run = async (fn, closing) => {
-    setBusy(true);
+    setBusy(true); setNote(null);
     try { await fn(); if (closing) close(); await Promise.all([reload(), reloadProducts()]); }
-    catch (e) { setMsg({ kind: "error", text: e.message }); }
+    catch (e) { (closing ? setMsg : setNote)({ kind: "error", text: e.message }); }
     setBusy(false);
   };
   return html`<div className="split">
@@ -367,6 +369,7 @@ function CategoriesTab({ data, reload, reloadProducts }) {
       <header className="phead"><h2>Categories</h2>
         <${Filters} popup active=${showOff ? 1 : 0}><div className="pfilters"><label className="check"><input type="checkbox" checked=${showOff} onChange=${(e) => setShowOff(e.target.checked)} /> Show deactivated</label></div><//>
         <div className="cardtools"><button className="pbtn" onClick=${() => { setMsg(null); setForm({ id: null, name: "" }); }}>Add category</button><span className="filterslot"></span></div></header>
+      <${Message} msg=${note} dashed />
       <div className="tscroll"><table className="table mg fit rowcards">
         <thead><tr><th>Category</th><th className="r">Products</th><th>Actions</th></tr></thead>
         <tbody>${rows.map((c) => html`<tr key=${c.id} className=${`${c.active ? "" : "off"}${form?.id === c.id ? " sel" : ""}`}>
@@ -375,7 +378,6 @@ function CategoriesTab({ data, reload, reloadProducts }) {
             <button className=${c.active ? "act danger" : "act"} disabled=${busy} onClick=${() => run(() => api(`/categories/${c.id}/active`, { active: !c.active }))}>${c.active ? "Deactivate" : "Reactivate"}</button></div></td></tr>`)}
           ${!rows.length && html`<tr><td colSpan="3">${data.categories.length ? "No active categories." : "No categories yet."}</td></tr>`}</tbody>
       </table></div>
-      <p className="sub">Products in a deactivated category keep it. It just isn't offered when choosing a category.</p>
     </section>
     ${form && html`<${Sheet} popup title=${form.id ? "Rename category" : "Add category"} onClose=${close}>
       <h2>${form.id ? "Rename category" : "Add category"}</h2>

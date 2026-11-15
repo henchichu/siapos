@@ -72,10 +72,10 @@ test("signing in as the other kind ends the first session on that browser", asyn
 });
 
 test("an email is unique across customers, and an employee's email always signs in as the employee", async () => {
-  await assert.rejects(admin.query("INSERT INTO Customer (CustomerID, BusinessID, Email) VALUES ('cus-dup', 'biz-brewbean', 'AVA@EXAMPLE.COM')"), { code: "ER_DUP_ENTRY" });
+  await assert.rejects(admin.query("INSERT INTO Customer (CustomerID, BusinessID, RoleID, Email) VALUES ('cus-dup', 'biz-brewbean', 'role-customer', 'AVA@EXAMPLE.COM')"), { code: "ER_DUP_ENTRY" });
 
   const id = `cus-test-${Date.now()}`;
-  await admin.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, 'biz-brewbean', 'Imposter', 'maya@brewbean.example.com')", [id]);
+  await admin.query("INSERT INTO Customer (CustomerID, BusinessID, RoleID, FirstName, Email) VALUES (?, 'biz-brewbean', 'role-customer', 'Imposter', 'maya@brewbean.example.com')", [id]);
   await admin.query("INSERT INTO CustomerCredential (CustomerID, PasswordHash) VALUES (?, ?)", [id, hashSecret("customer-pass-1")]);
   try {
     assert.equal((await login(client(env.base), creds("10420001"))).body.redirect, "/attention.html");

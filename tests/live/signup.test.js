@@ -37,7 +37,7 @@ test("a new customer is created, signed in, and sent to the kiosk; they can sign
 test("an email already used by a customer (with or without a password) or an employee is refused", async () => {
   const taken = "That email is already registered. Sign in instead.";
   const staffEntered = email("walkin");
-  await admin.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, 'biz-brewbean', 'Walk', ?)", [`cus-${staffEntered}`.slice(0, 36), staffEntered]);
+  await admin.query("INSERT INTO Customer (CustomerID, BusinessID, RoleID, FirstName, Email) VALUES (?, 'biz-brewbean', 'role-customer', 'Walk', ?)", [`cus-${staffEntered}`.slice(0, 36), staffEntered]);
   made.push(staffEntered);
   for (const e of ["ava@example.com", "AVA@example.com", staffEntered, "maya@brewbean.example.com"]) {
     const r = await signup(client(env.base), { email: e });

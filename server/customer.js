@@ -12,6 +12,7 @@ const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const SESSION_MS = 2 * 60 * 60 * 1000;
 const IDLE_MS = 15 * 60 * 1000;
+const CUSTOMER_ROLE_ID = "role-customer"; // 02-seed.sql
 
 // shortcut: in memory like staff sessions, so a restart signs customers out; move to a table with more than one server
 const sessions = new Map();
@@ -95,7 +96,7 @@ router.post("/signup", rateLimit(5, 60 * 60 * 1000, { ban: true }), async (req, 
     await pool.tx(async (conn) => {
       const [[e]] = await conn.query("SELECT EXISTS (SELECT 1 FROM Employee WHERE Email = ?) AS taken", [email]);
       if (e.taken) throw new HttpError(409, TAKEN);
-      await conn.query("INSERT INTO Customer (CustomerID, BusinessID, FirstName, Email) VALUES (?, ?, ?, ?)", [customerId, b.id, firstName, email]);
+      await conn.query("INSERT INTO Customer (CustomerID, BusinessID, RoleID, FirstName, Email) VALUES (?, ?, ?, ?, ?)", [customerId, b.id, CUSTOMER_ROLE_ID, firstName, email]);
       await conn.query("INSERT INTO CustomerCredential (CustomerID, PasswordHash) VALUES (?, ?)", [customerId, hash]);
       // Auto-enroll: every new sign-up joins rewards at the lowest tier, the same way staff enroll a member (server/rewards.js)
       const [[tier]] = await conn.query("SELECT TierID AS id FROM MembershipTier WHERE BusinessID = ? ORDER BY MinimumPoints, Name LIMIT 1", [b.id]);
@@ -167,4 +168,4 @@ router.post("/customer/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router, authenticate, create, destroy, fromRequest, requireCustomer };
+module.exports = { CUSTOMER_ROLE_ID, router, authenticate, create, destroy, fromRequest, requireCustomer };

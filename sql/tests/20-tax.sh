@@ -95,7 +95,7 @@ t "refund it, then cancel"     ok   "UPDATE Payment SET PaymentStatusCode=5 WHER
 t "failed attempt still logged" ok  "INSERT INTO Payment (PaymentID,OrderID,PaymentMethodCode,Amount,PaymentStatusCode) VALUES ('PO7C','O7',2,1.00,4);"
 echo "--- loyalty balance ---"
 LT="INSERT INTO LoyaltyTransaction (LoyaltyTransactionID,LoyaltyAccountID,CustomerID,LoyaltyTransactionTypeCode,PointsChange) VALUES"
-s "member earns 10"            ok   "INSERT INTO Customer (CustomerID,BusinessID,Email) VALUES ('CU1','B1','m@x.y'); INSERT INTO MembershipTier (TierID,BusinessID,Name) VALUES ('TI1','B1','Basic'); INSERT INTO LoyaltyAccount (LoyaltyAccountID,CustomerID,TierID,BusinessID) VALUES ('LA1','CU1','TI1','B1'); $LT ('LE1','LA1','CU1',1,10);"
+s "member earns 10"            ok   "INSERT INTO Role (RoleID,BusinessID,Name,OpensTo) VALUES ('RC1','B1','Customer','KIOSK'); INSERT INTO Customer (CustomerID,BusinessID,RoleID,Email) VALUES ('CU1','B1','RC1','m@x.y'); INSERT INTO MembershipTier (TierID,BusinessID,Name) VALUES ('TI1','B1','Basic'); INSERT INTO LoyaltyAccount (LoyaltyAccountID,CustomerID,TierID,BusinessID) VALUES ('LA1','CU1','TI1','B1'); $LT ('LE1','LA1','CU1',1,10);"
 s "redeem 10"                  ok   "$LT ('LR1','LA1','CU1',2,-10);"
 t "delete the earning"         fail "DELETE FROM LoyaltyTransaction WHERE LoyaltyTransactionID='LE1';"
 t "shrink the earning to 5"    fail "UPDATE LoyaltyTransaction SET PointsChange=5 WHERE LoyaltyTransactionID='LE1';"

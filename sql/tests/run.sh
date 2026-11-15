@@ -18,6 +18,8 @@ for f in "${@:-[0-9]*.sh}"; do
     }
     # One business per database is a unique index. The other rules are checked with two businesses, to keep the cross-business keys
     # honest, so the index is dropped here, except for the script that tests it.
+    # 02-seed.sql's business, café and roles are cleared: the fixtures make their own
+    echo "DELETE FROM $DB.RolePermission; DELETE FROM $DB.Role; DELETE FROM $DB.Location; DELETE FROM $DB.Business;" | root
     [ "$g" = 40-one-business.sh ] || echo "ALTER TABLE $DB.Business DROP INDEX UQ_Business_OnlyOne;" | root
     out=$(cat lib.sh "$g" | sed "s/@DB@/$DB/g" | docker exec -i posdb sh)
     echo "$out"

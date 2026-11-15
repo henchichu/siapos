@@ -868,6 +868,7 @@ CREATE TABLE IF NOT EXISTS Customer (
     Phone VARCHAR(30),
     -- The last 10 digits of Phone however it was typed, so a phone can be looked up by index
     PhoneDigits VARCHAR(10) GENERATED ALWAYS AS (RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 10)) STORED,
+    RoleID CHAR(36) NOT NULL,                  -- the business's "Customer" role; a label only, no code reads it for permissions
     Active BOOLEAN NOT NULL DEFAULT TRUE,
     
     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -882,6 +883,11 @@ CREATE TABLE IF NOT EXISTS Customer (
     CONSTRAINT FK_Customer_Business
         FOREIGN KEY (BusinessID)
         REFERENCES Business(BusinessID)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT FK_Customer_Role
+        FOREIGN KEY (RoleID, BusinessID)
+        REFERENCES Role(RoleID, BusinessID)
         ON DELETE RESTRICT,
     
     CONSTRAINT CK_Customer_Contactable

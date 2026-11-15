@@ -41,7 +41,7 @@ The app has no screens for creating a business, cafés, roles, employees, tax ra
    ```sh
    docker compose exec -T mysql-db sh -c 'MYSQL_PWD=$(cat /run/secrets/db_root_password) mysql -uroot' < sql/provision/provision.sql
    ```
-   It creates the business, one café with a register, five roles, the first employee (every permission, signs in at `/login.html` with their email and password) and a year of two-week pay periods.
+   It names the business and café (their rows and the five roles come from `sql/init_scripts/02-seed.sql`), adds a register, the first employee (every permission, signs in at `/login.html` with their email and password) and a year of two-week pay periods.
 4. Add products and stock in the app (Products, Inventory), and the rest of the team with `sql/provision/maintenance.sql`.
 
 `sql/provision/maintenance.sql` holds the statements for everything else: adding or switching off an employee, new passwords and PINs, unlocking an account, raises, roles and permissions, a second café (with its tax rates), refund limits, categories and more pay periods. Pay periods run out after a year, and nobody can clock in once they have. A timecard may be approved by the person who owns it, and so may a discount or refund override: anyone holding the permission can sign.

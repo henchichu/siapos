@@ -14,14 +14,7 @@ SET @D = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', @tz));    -- today, café lo
 -- ---------------------------------------------------------------------------
 -- Business, locations, tax
 -- ---------------------------------------------------------------------------
--- Refund rules: a manager signs any refund over $25 or on an order older than 7 days
-INSERT INTO Business (BusinessID, Name, ContactEmail, ContactPhone, RefundOverrideAmount, RefundOverrideDays)
-VALUES (@biz, 'Brewbean Coffee', 'hello@brewbean.example.com', '312-555-0100', 25.00, 7);
-
-INSERT INTO Location (LocationID, BusinessID, Name, Address, Phone, TimeZone)
-VALUES
-    ('loc-downtown', @biz, 'Brewbean Downtown', '120 Example St, Chicago, IL', '312-555-0101', @tz);
-
+-- The business and its café are in 02-seed.sql
 INSERT INTO TaxCategory (TaxCategoryID, BusinessID, Name)
 VALUES
     ('tax-prepared', @biz, 'Prepared food and drink'),
@@ -44,26 +37,7 @@ VALUES
 -- ---------------------------------------------------------------------------
 -- Staff, pay, shifts
 -- ---------------------------------------------------------------------------
--- The default roles from the blueprint's access levels screen; the general manager holds every permission
-INSERT INTO Role (RoleID, BusinessID, Name, OpensTo)
-VALUES
-    ('role-gm',      @biz, 'General manager',   'REGISTER'),
-    ('role-manager', @biz, 'Manager',           'REGISTER'),
-    ('role-asst',    @biz, 'Assistant manager', 'REGISTER'),
-    ('role-server',  @biz, 'Server',            'REGISTER'),
-    ('role-barista', @biz, 'Chef / barista',    'KITCHEN');
-
--- Codes are 02-seed.sql's Permission rows; managers add 3 (refund overrides), 18 (approve timecards)
--- and 20 (reports): only the general manager and managers see Reports
-INSERT INTO RolePermission (RoleID, BusinessID, PermissionCode)
-SELECT r.RoleID, @biz, p.PermissionCode
-  FROM Role r JOIN Permission p
-    ON (r.RoleID = 'role-barista' AND p.PermissionCode IN (5, 6, 8))
-    OR (r.RoleID = 'role-server'  AND p.PermissionCode IN (1, 2, 5, 7, 9, 11))
-    OR (r.RoleID = 'role-gm'      AND p.PermissionCode BETWEEN 1 AND 20)
-    OR (r.RoleID = 'role-asst'    AND p.PermissionCode IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
-    OR (r.RoleID = 'role-manager' AND p.PermissionCode IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20));
-
+-- The roles are in 02-seed.sql
 INSERT INTO Employee (EmployeeID, BusinessID, FirstName, LastName, Email, EmployeeNumber, RoleID)
 VALUES
     ('emp-maya',   @biz, 'Maya',   'Okafor', 'maya@brewbean.example.com',   '10420001', 'role-gm'),
@@ -284,12 +258,12 @@ SELECT CONCAT('itx-rs', r.n, '-', IF(l.LocationID = 'loc-downtown', 'dt', 'cp'),
 -- ---------------------------------------------------------------------------
 -- Customers, loyalty, promotion
 -- ---------------------------------------------------------------------------
-INSERT INTO Customer (CustomerID, BusinessID, FirstName, LastName, Email, Phone)
+INSERT INTO Customer (CustomerID, BusinessID, RoleID, FirstName, LastName, Email, Phone)
 VALUES
-    ('cus-ava',   @biz, 'Ava',   'Nguyen', 'ava@example.com',   NULL),
-    ('cus-ben',   @biz, 'Ben',   'Carter', NULL,                '312-555-0142'),
-    ('cus-chloe', @biz, 'Chloe', 'Moreau', 'chloe@example.com', '312-555-0177'),
-    ('cus-diego', @biz, 'Diego', 'Ramos',  'diego@example.com', NULL);
+    ('cus-ava',   @biz, 'role-customer', 'Ava',   'Nguyen', 'ava@example.com',   NULL),
+    ('cus-ben',   @biz, 'role-customer', 'Ben',   'Carter', NULL,                '312-555-0142'),
+    ('cus-chloe', @biz, 'role-customer', 'Chloe', 'Moreau', 'chloe@example.com', '312-555-0177'),
+    ('cus-diego', @biz, 'role-customer', 'Diego', 'Ramos',  'diego@example.com', NULL);
 
 INSERT INTO MembershipTier (TierID, BusinessID, Name, MinimumPoints)
 VALUES ('tier-bean', @biz, 'Bean', 0), ('tier-gold', @biz, 'Gold', 500);

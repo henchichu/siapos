@@ -59,10 +59,14 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   const [[{ today }]] = await pool.query("SELECT DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', 'America/Chicago'), '%Y-%m-%d') AS today");
   const ended = await lc.call("/promotions", { name: `UI ended ${stamp}`, kind: "percent", value: "10", starts: today, ends: today, productIds: ["prd-latte"] });
   await lc.call(`/promotions/${ended.body.id}/end`, {}); // so "Show ended" has one to show
-  cleanup = async () => removeCatalog({ promotions: [ended.body.id], products: (await lc.call("/products/list")).body.products.filter((p) => p.name.includes(stamp)).map((p) => p.id) });
+  cleanup = async () => {
+    await removeCatalog({ promotions: [ended.body.id], products: (await lc.call("/products/list")).body.products.filter((p) => p.name.includes(stamp)).map((p) => p.id) });
+    await pool.query("DELETE FROM Category WHERE Name LIKE ?", [`Click ${stamp}%`]);
+  };
   const m = await open(base, "10420002", "222222");
   const mrows = () => m.$$("tbody tr").filter((r) => r.querySelectorAll("td").length > 1);
-  check("manager sees the four tabs, Products first", m.$$(".tab").map((t) => t.textContent).join("|") === "Products|Sizes and recipes|Option groups|Promotions" && m.byText(".tab", "Products").getAttribute("aria-pressed") === "true");
+  check("manager sees the five tabs, opening on Categories", m.$$(".tab").map((t) => t.textContent).join("|") === "Categories|Products|Sizes and recipes|Option groups|Promotions" && m.byText(".tab", "Categories").getAttribute("aria-pressed") === "true");
+  await m.click(m.byText(".tab", "Products"), 700);
   check("manager table has cost, margin and actions", m.$$("thead th").map((t) => t.textContent).join("|") === "Product|Category|Price from|Cost|Margin|Actions");
   check("the form column isn't there until an action calls for it", !m.$(".pform"));
   const lr = mrows().find((r) => cells(r)[0] === "Latte");
@@ -142,6 +146,24 @@ const cells = (r) => [...r.querySelectorAll("td")].map((c) => c.textContent.trim
   check("no promotion form until asked for", !m.$(".pform"));
   await m.click(m.byText(".phead .pbtn", "Add promotion"), 300);
   check("promotion form: type toggle, value, dates, products, Save and Clear", /Percent off/.test(m.text()) && /Amount off/.test(m.text()) && m.$$(".pform input[type=date]").length === 2 && !!m.$(".pform details.multi") && !!m.byText(".pform .pbtn", "Save"));
+  await m.click(m.byText(".tab", "Categories"), 800);
+  check("Categories tab lists them with product counts", m.w.location.hash === "" && /Coffee/.test(m.text()) && !m.$(".pside") && mrows().every((r) => /^\d+$/.test(cells(r)[1])));
+  await m.click(m.byText(".phead .pbtn", "Add category"), 300);
+  await m.type(m.$(".pform input.field"), `Click ${stamp}`);
+  await m.click(m.byText(".pform .pbtn", "Save"), 700);
+  check("a new category is added and the form closes", mrows().some((r) => cells(r)[0] === `Click ${stamp}`) && !m.$(".pform"));
+  await m.click(mrows().find((r) => cells(r)[0] === `Click ${stamp}`).querySelector("button.act"), 300);
+  await m.type(m.$(".pform input.field"), `Click ${stamp} renamed`);
+  await m.click(m.byText(".pform .pbtn", "Save"), 700);
+  check("Rename changes it in the list", mrows().some((r) => cells(r)[0] === `Click ${stamp} renamed`));
+  check("the list has an Actions column, buttons grouped in it", m.$$("thead th").map((t) => t.textContent).join("|") === "Category|Products|Actions" && m.$$("td .acts button").length >= 2);
+  await m.click(mrows().find((r) => cells(r)[0].startsWith(`Click ${stamp}`)).querySelector("button.danger"), 700);
+  check("Deactivate hides it from the list", !mrows().some((r) => /Click /.test(r.textContent)));
+  await m.click(m.$("section[aria-label=Categories] .check input"), 300);
+  check("Show deactivated brings it back as inactive, with Reactivate", /inactive/.test(mrows().find((r) => /Click /.test(r.textContent)).textContent) && !!m.byText("button.act", "Reactivate"));
+  await m.click(m.byText(".tab", "Products"), 700);
+  check("the Products tab's category list no longer offers it", ![...(m.$$("select"))].some((sel) => [...sel.options].some((o) => o.textContent.startsWith(`Click ${stamp}`))));
+
   check("manager page: no React warnings", m.w.errors.filter((e) => !/Not implemented/.test(e)).length === 0, m.w.errors.join(" | "));
 
   await cleanup();

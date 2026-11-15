@@ -1,5 +1,5 @@
-const TABS = [["products", "Products"], ["sizes", "Sizes and recipes"], ["options", "Option groups"], ["promotions", "Promotions"]];
-const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "products"; };
+const TABS = [["categories", "Categories"], ["products", "Products"], ["sizes", "Sizes and recipes"], ["options", "Option groups"], ["promotions", "Promotions"]];
+const tabFromHash = () => { const h = window.location.hash.slice(1); return TABS.some(([k]) => k === h) ? h : "categories"; };
 const usd = (n) => (n == null ? "—" : fromDollars(n));
 const picks = (min, max) => (max == null ? (min ? `at least ${min}` : "any number") : min === max ? `exactly ${max}` : min ? `${min} to ${max}` : `up to ${max}`);
 
@@ -348,20 +348,61 @@ function PromotionsTab({ data, reload }) {
   </div>`;
 }
 
+// Categories: what products are listed under. Rename, or deactivate (products in it keep it); the Products tab's lists follow at once.
+function CategoriesTab({ data, reload, reloadProducts }) {
+  const [form, setForm] = useState(null); // { id, name } while the side form is open
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [showOff, setShowOff] = useState(false); // deactivated categories are hidden until asked for
+  const rows = data.categories.filter((c) => showOff || c.active);
+  const close = () => { setForm(null); setMsg(null); };
+  const run = async (fn, closing) => {
+    setBusy(true);
+    try { await fn(); if (closing) close(); await Promise.all([reload(), reloadProducts()]); }
+    catch (e) { setMsg({ kind: "error", text: e.message }); }
+    setBusy(false);
+  };
+  return html`<div className="split">
+    <section className="pview grow" aria-label="Categories">
+      <header className="phead"><h2>Categories</h2>
+        <${Filters} popup active=${showOff ? 1 : 0}><div className="pfilters"><label className="check"><input type="checkbox" checked=${showOff} onChange=${(e) => setShowOff(e.target.checked)} /> Show deactivated</label></div><//>
+        <div className="cardtools"><button className="pbtn" onClick=${() => { setMsg(null); setForm({ id: null, name: "" }); }}>Add category</button><span className="filterslot"></span></div></header>
+      <div className="tscroll"><table className="table mg fit rowcards">
+        <thead><tr><th>Category</th><th className="r">Products</th><th>Actions</th></tr></thead>
+        <tbody>${rows.map((c) => html`<tr key=${c.id} className=${`${c.active ? "" : "off"}${form?.id === c.id ? " sel" : ""}`}>
+          <td>${c.name}${!c.active && html`<span className="tag">inactive</span>`}</td><td className="r">${c.products}</td>
+          <td><div className="acts"><button className="act" disabled=${busy} onClick=${() => { setMsg(null); setForm({ id: c.id, name: c.name }); }}>Rename</button>
+            <button className=${c.active ? "act danger" : "act"} disabled=${busy} onClick=${() => run(() => api(`/categories/${c.id}/active`, { active: !c.active }))}>${c.active ? "Deactivate" : "Reactivate"}</button></div></td></tr>`)}
+          ${!rows.length && html`<tr><td colSpan="3">${data.categories.length ? "No active categories." : "No categories yet."}</td></tr>`}</tbody>
+      </table></div>
+      <p className="sub">Products in a deactivated category keep it. It just isn't offered when choosing a category.</p>
+    </section>
+    ${form && html`<${Sheet} popup title=${form.id ? "Rename category" : "Add category"} onClose=${close}>
+      <h2>${form.id ? "Rename category" : "Add category"}</h2>
+      <label className="pf"><b>Category name</b><input className="field" maxLength="100" value=${form.name} onChange=${(e) => setForm({ ...form, name: e.target.value })} /></label>
+      <${Message} msg=${msg} dashed />
+      <div className="pactions"><button className="pbtn" disabled=${busy} onClick=${() => run(() => api(form.id ? `/categories/${form.id}` : "/categories", { name: form.name }), true)}>Save</button>
+        <button className="pbtn outline" onClick=${close}>Clear</button></div>
+    <//>`}
+  </div>`;
+}
+
 function Manage({ data, reloadProducts }) {
   const [tab, setTab] = useState(tabFromHash);
   const [options, setOptions] = useState(null);
   const [promos, setPromos] = useState(null);
+  const [categories, setCategories] = useState(null);
+  const loadCategories = useCallback(() => api("/categories").then(setCategories), []);
   const loadOptions = useCallback(() => api("/option-groups").then(setOptions), []);
   const loadPromos = useCallback(() => api("/promotions").then(setPromos), []);
 
-  useEffect(() => { if (tab === "options") loadOptions(); if (tab === "promotions") loadPromos(); }, [tab]);
+  useEffect(() => { if (tab === "options") loadOptions(); if (tab === "promotions") loadPromos(); if (tab === "categories") loadCategories(); }, [tab]);
   useEffect(() => { // Back and Forward move between tabs
     const onPop = () => setTab(tabFromHash());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  const go = (k) => { setTab(k); window.history.pushState(null, "", k === "products" ? window.location.pathname : `#${k}`); };
+  const go = (k) => { setTab(k); window.history.pushState(null, "", k === "categories" ? window.location.pathname : `#${k}`); };
 
   return html`<${React.Fragment}>
     <${Tabs} tab=${tab} onTab=${go} />
@@ -369,6 +410,7 @@ function Manage({ data, reloadProducts }) {
     ${tab === "sizes" && html`<${SizesTab} products=${data.products} />`}
     ${tab === "options" && (options ? html`<${OptionsTab} data=${options} reload=${loadOptions} />` : html`<p className="success">Loading…</p>`)}
     ${tab === "promotions" && (promos ? html`<${PromotionsTab} data=${promos} reload=${loadPromos} />` : html`<p className="success">Loading…</p>`)}
+    ${tab === "categories" && (categories ? html`<${CategoriesTab} data=${categories} reload=${loadCategories} reloadProducts=${reloadProducts} />` : html`<p className="success">Loading…</p>`)}
   <//>`;
 }
 

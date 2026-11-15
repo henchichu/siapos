@@ -185,8 +185,8 @@ function App() {
   const reload = useCallback(() => api("/shift").then(setShift).catch(() => {}), []);
   useEffect(() => { reload(); }, [reload]);
 
-  // Managers start on Team timecards; everyone else has only their own shift
-  const start = (canTeam) => (canTeam && tabFromHash() !== "shift" ? "team" : "shift");
+  // Everyone starts on their own shift; a manager reaches Team timecards by its tab or a #team link (Needs attention's Review timecards)
+  const start = (canTeam) => (canTeam && tabFromHash() === "team" ? "team" : "shift");
   useEffect(() => { if (shift && view === null) setView(start(shift.canTeam)); }, [shift]);
   useEffect(() => {
     const onPop = () => shift && setView(start(shift.canTeam));

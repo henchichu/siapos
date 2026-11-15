@@ -132,6 +132,36 @@ router.post("/products/:id", edit, async (req, res) => {
   res.json({ id: req.params.id });
 });
 
+// ---- categories: the groups products are listed under (added back from the old Settings page, for roles that edit products) ----
+
+router.get("/categories", edit, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT c.CategoryID AS id, c.Name AS name, c.Active AS active, (SELECT COUNT(*) FROM Product p WHERE p.CategoryID = c.CategoryID) AS products
+       FROM Category c WHERE c.BusinessID = ? ORDER BY c.Name`, [req.session.businessId]);
+  res.json({ categories: rows.map((r) => ({ ...r, active: !!r.active, products: Number(r.products) })) });
+});
+
+router.post("/categories", edit, async (req, res) => {
+  const id = uuid();
+  await pool.query("INSERT INTO Category (CategoryID, BusinessID, Name) VALUES (?, ?, ?)", [id, req.session.businessId, text(req.body.name, "category name", 100)]);
+  res.json({ id });
+});
+
+router.post("/categories/:id", edit, async (req, res) => {
+  const [r] = await pool.query("UPDATE Category SET Name = ? WHERE CategoryID = ? AND BusinessID = ?",
+    [text(req.body.name, "category name", 100), req.params.id, req.session.businessId]);
+  if (!r.affectedRows) throw new HttpError(404, "Category not found.");
+  res.json({ id: req.params.id });
+});
+
+// Products in a deactivated category keep it; it just isn't offered for new choices
+router.post("/categories/:id/active", edit, async (req, res) => {
+  const [r] = await pool.query("UPDATE Category SET Active = ? WHERE CategoryID = ? AND BusinessID = ?",
+    [req.body.active ? 1 : 0, req.params.id, req.session.businessId]);
+  if (!r.affectedRows) throw new HttpError(404, "Category not found.");
+  res.json({ ok: true });
+});
+
 router.post("/products/:id/active", edit, async (req, res) => {
   const [r] = await pool.query("UPDATE Product SET Active = ? WHERE ProductID = ? AND BusinessID = ?",
     [req.body.active ? 1 : 0, req.params.id, req.session.businessId]);

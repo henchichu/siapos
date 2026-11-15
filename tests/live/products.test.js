@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const { start, client, pool, removeCatalog, creds } = require("./env");
 
 let env, leo, sam, jordan, stamp;
-const created = { products: [], groups: [], promotions: [] }; // removed again at the end
+const created = { products: [], groups: [], promotions: [], categories: [] }; // removed again at the end
 const signIn = async (number, pin) => { const c = client(env.base); const r = await c.call("/login", creds(number)); assert.equal(r.status, 200); return c; };
 const page = (c, path) => fetch(env.base + path, { headers: { cookie: c.cookie() }, redirect: "manual" });
 // smallest valid PNG: the 8-byte signature plus a header, enough for the magic-byte check
@@ -18,7 +18,11 @@ test.before(async () => {
   leo = await signIn("10420002", "222222"); sam = await signIn("10420003", "333333"); jordan = await signIn("10420005", "555555");
   stamp = Date.now().toString(36);
 });
-test.after(async () => { await removeCatalog(created); env.server.close(); await pool.end(); });
+test.after(async () => {
+  await removeCatalog(created);
+  if (created.categories.length) await pool.query("DELETE FROM Category WHERE CategoryID IN (?)", [created.categories]);
+  env.server.close(); await pool.end();
+});
 
 test("who sees which Products view", async () => {
   const server = await sam.call("/products/list");
@@ -41,6 +45,26 @@ test("who sees which Products view", async () => {
   assert.equal(latte.available, true);
   assert.ok(latte.cost > 0 && Number.isInteger(latte.margin));
   assert.ok(latte.skus.length === 2);
+});
+
+test("categories: only roles that edit products manage them; add, rename, deactivate", async () => {
+  assert.equal((await sam.call("/categories")).status, 403, "a server can't see the list");
+  assert.equal((await sam.call("/categories", { name: "x" })).status, 403);
+  const name = `Cat ${stamp}`;
+  const made = await leo.call("/categories", { name });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  created.categories.push(made.body.id);
+  const find = async () => (await leo.call("/categories")).body.categories.find((c) => c.id === made.body.id);
+  assert.deepEqual([(await find()).name, (await find()).active, (await find()).products], [name, true, 0]);
+  assert.equal((await leo.call("/categories", { name })).status, 409, "the same name twice");
+  assert.equal((await leo.call("/categories", { name: "  " })).status, 400);
+  assert.equal((await leo.call(`/categories/${made.body.id}`, { name: `${name} 2` })).status, 200);
+  assert.equal((await find()).name, `${name} 2`);
+  assert.ok((await leo.call("/products/list")).body.categories.some((c) => c.id === made.body.id), "offered to products while active");
+  assert.equal((await leo.call(`/categories/${made.body.id}/active`, { active: false })).status, 200);
+  assert.equal((await find()).active, false);
+  assert.ok(!(await leo.call("/products/list")).body.categories.some((c) => c.id === made.body.id), "not offered once deactivated");
+  assert.equal((await leo.call("/categories/nope", { name: "x" })).status, 404);
 });
 
 test("products: add, edit, deactivate, photo", async () => {

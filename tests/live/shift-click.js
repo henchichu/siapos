@@ -56,9 +56,11 @@ async function open(base, number, pin, hash = "") {
   check("sales cards present", /Today's sales at Brewbean Downtown/.test(b.text()) && /Orders/.test(b.text()) && /Net sales/.test(b.text()) && /Items sold/.test(b.text()));
   check("barista page: no React warnings", b.w.errors.length === 0, b.w.errors.join(" | "));
 
-  // Manager: Team timecards first, with the toggle
+  // Manager: My shift first, with the toggle to Team timecards
   const m = await open(base, "10420001", "111111"); // the general manager, who works at Downtown where the seeded cards are
-  check("manager opens Team timecards", /Timecards/.test(m.text()) && !!m.$(".filters") && m.byText(".tab", "Team timecards").getAttribute("aria-pressed") === "true");
+  check("manager opens My shift, with the Team timecards tab beside it", /Time clock/.test(m.text()) && !m.$(".filters") && m.byText(".tab", "My shift").getAttribute("aria-pressed") === "true");
+  await m.click(m.byText(".tab", "Team timecards"), 700);
+  check("Team timecards tab opens the filters; hash #team", /Timecards/.test(m.text()) && !!m.$(".filters") && m.w.location.hash === "#team");
   check("manager sees all nine menu links", m.$$(".nav a.link").length === 9);
   check("counter text", /\d+ waiting for approval/.test(m.text()));
   const rows = () => m.$$(".cards tbody tr").filter((r) => r.querySelectorAll("td").length > 1);

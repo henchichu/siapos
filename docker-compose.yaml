@@ -1,3 +1,5 @@
+# The demo shop: a fresh database gets sql/dev's data and the known dev sign-ins. For a real business, remove the three lines marked
+# "demo" and follow README "Setting up a business". docker-compose.test.yaml adds host access to the database for tests.
 name: siapos
 
 services:
@@ -11,10 +13,12 @@ services:
       MYSQL_DATABASE: miniworld
       MYSQL_USER: app_user
       MYSQL_PASSWORD_FILE: /run/secrets/app_user_password
+      SIAPOS_DEV: "1"           # demo: 05-dev.sh loads /sql-dev on a fresh volume
     command: --default-time-zone="+00:00"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/init_scripts:/docker-entrypoint-initdb.d:ro
+      - ./sql/dev:/sql-dev:ro   # demo
     secrets:
       - db_root_password
       - app_user_password
@@ -48,6 +52,7 @@ services:
       UPLOAD_DIR: /app/uploads
       COOKIE_SECURE: ${COOKIE_SECURE:-0}   # 1 once the app is served over HTTPS
       TRUST_PROXY: ${TRUST_PROXY:-0}       # 1 when a reverse proxy sits in front
+      MOCK_PAY: "1"                        # demo: Card, Apple Pay and Google Pay go through the mock processor; no money moves
     volumes:
       - uploads:/app/uploads
     secrets:

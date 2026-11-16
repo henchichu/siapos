@@ -1,5 +1,5 @@
 # Local testing only: opens the database to this machine so tests/live and sql/tests can connect.
-#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml -f docker-compose.test.yaml up -d
+#   docker compose -f docker-compose.yaml -f docker-compose.test.yaml up -d
 name: siapos
 
 services:

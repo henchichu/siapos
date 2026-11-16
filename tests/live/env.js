@@ -1,4 +1,4 @@
-// Starts the real app on a free port against the running dev database (docker compose ... docker-compose.dev.yaml).
+// Starts the real app on a free port against the running dev database (docker compose up -d).
 const path = require("path");
 const root = path.resolve(__dirname, "../..");
 process.env.DB_PASSWORD_FILE ??= path.join(root, "sql/secrets/app_user_password.txt");
